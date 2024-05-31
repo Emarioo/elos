@@ -1,0 +1,97 @@
+[org 0x7c00]
+mov bp, 0
+mov sp, bp
+
+diskNum:
+    db 0,0
+
+mov [diskNum], dl ; dl contains current disk number at boot
+
+; mov ah, 0
+; mov al, dl
+; call print_num
+
+; LOADING MORE SECTORS
+; where to load data (es:bx or es*16 + bx)
+; here we load data next to 0x7c00.
+mov ax, 0
+mov es, ax
+mov bx, 0x7e00 ; 0x7c00 + 512 (512 is sector size)
+
+; more required info
+mov ah, 2 ; function request?
+mov al, 1 ; amount of sector
+push ax ; check for error later
+mov ch, 0 ; cylinder
+mov cl, 2 ; sector
+mov dh, 0 ; head
+mov dl, [diskNum] ; disk number
+int 0x13
+
+jc err10 ; checks carry flag
+jmp err1
+err10:
+mov ax, DISC_ERROR_CARRY
+call print_str
+err1:
+
+pop bx
+cmp al, bl
+je err0
+mov ax, DISC_ERROR_SECTORS
+call print_str
+err0:
+
+
+mov ah, 0x0e
+mov al, [0x7e00]
+int 0x10
+
+jmp END
+
+; prints value in ax
+print_num:
+    mov bx, 0 ; char count
+unravel:
+    mov cx, 10
+    mov dx, 0 ; needs to be 0 for div to work, why?
+    div cx ; ax/10 -> ax will have ax/10, bx has remainder
+    inc bx
+    add dx, '0'
+    push dx
+    cmp ax, 0
+    jne unravel
+print_chars:
+    pop ax
+    mov ah, 0x0e
+    int 0x10
+    dec bx
+    cmp bx, 0
+    jne print_chars
+    ret
+
+; prints string in bx, remember null termination 
+print_str:
+    mov ah, 0x0e
+    mov cl, 0
+print_str_loop:
+    cmp [bx], cl ; cl to ensure 8-bit operation
+    je print_str_end
+    mov al, [bx]
+    int 0x10
+    inc bx
+    jmp print_str_loop
+print_str_end:
+    ret
+
+DISC_ERROR_CARRY:
+    db "[ERR DISC] carry flag!",0
+DISC_ERROR_SECTORS:
+    db "[ERR DISC] bad number of sectors!",0
+
+END:
+    jmp $
+    times 510-($-$$) db 0
+    db 0x55, 0xaa
+
+    times 512 db 'A' ; fill sector with A

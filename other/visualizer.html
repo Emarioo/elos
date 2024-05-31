@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script src="UsefulLib.js"></script>
+        <script>
+            var scale = 20;
+            class Rect {
+                constructor(x,y,w,h){
+                    this.x=x;
+                    this.y=y;
+                    this.w=w;
+                    this.h=h;
+                }
+            }
+            var showCells = false;
+            class State{
+                static padding = 6;
+                static paddingCell = 4;
+                constructor(path){
+                    this.rects=[];
+                    this.subs=[];
+                    this.x = 0;
+                    this.y = 0;
+                    this.w = 0;
+                    this.h = 0;
+                    
+                    let data = document.createElement("script");
+                    data.src = path;
+                    document.head.appendChild(data);
+                    data.onload = () => {
+                        let lists = eval(path.split("/")[1].split(".")[0]);
+                        let list = lists[0];
+                        let fn = (rects, list)=>{
+                            let right = this.x + this.w;
+                            let down = this.y + this.h;
+                            for (let i = 0; i < list.length/4; i++) {
+                                rects.push(
+                                    new Rect(list[4 * i],
+                                        list[4 * i + 1],
+                                        list[4 * i + 2],
+                                        list[4 * i + 3],
+                                ));
+                                if(list[4*i + 0] < this.x)
+                                    this.x = list[4*i + 0];
+                                if(list[4*i + 1] < this.y)
+                                    this.y = list[4*i + 1];
+                                if(list[4*i + 0] + list[4*i + 2] > right)
+                                    right = list[4*i + 0] + list[4*i + 2];
+                                if(list[4*i + 1] + list[4*i + 3] > down)
+                                    down = list[4*i + 1] + list[4*i + 3];
+                            }
+                            this.w = right - this.x;
+                            this.h = down - this.y;
+                        };
+                        fn(this.rects,lists[0]);
+                        fn(this.subs,lists[1]);
+                    }
+                }
+                render(x, y){
+                    FillColor("777");
+                    FillRect(x+this.x*scale, y+this.y*scale, this.w*scale, this.h*scale);
+                    FillColor("888");
+                    
+                    if(showCells)
+                        drawcells(x,y,this.x,this.y, this.w, this.h);
+                    let count = 0;
+                    for(let i=0;i<this.subs.length;i++){
+                        count++;
+                        let rect = this.subs[i];
+                        let col = "F77";
+                        let color = Color.FromHex(col);
+                        color.r-=4*16;
+                        color.g-=2*16;
+                        color.b-=3*16;
+                        FillColor(color.toHex());
+                        
+                        FillRect(x+rect.x*scale +State.padding,y + rect.y*scale + State.padding,rect.w*scale-State.padding*2,rect.h*scale-State.padding*2);
+                        FillColor(col);
+                        if(showCells)
+                            drawcells(x,y,rect.x, rect.y, rect.w, rect.h);
+                    }
+                    let c2 = 0;
+                    for(let i=0;i<this.rects.length;i++){
+                        c2++;
+                        let rect = this.rects[i];
+                        let col = "7F7";
+                        let color = Color.FromHex(col);
+                        color.r-=4*16;
+                        color.g-=2*16;
+                        color.b-=3*16;
+                        FillColor(color.toHex());
+                        
+                        FillRect(x+rect.x*scale +State.padding,y + rect.y*scale + State.padding,rect.w*scale-State.padding*2,rect.h*scale-State.padding*2);
+                        FillColor(col);
+                        
+                        if(showCells)
+                            drawcells(x,y,rect.x, rect.y, rect.w, rect.h);
+                    }
+                    // console.log("Subs ",count, "surf ",c2);
+                }
+            }
+            function drawcells(ox, oy, ax,ay,w,h){
+                for(let i = 0; i < w * h;i++){
+                    let x = ax + Math.floor(i % w);
+                    let y = ay + Math.floor(i / w);
+                    FillRect(ox + x*scale + State.paddingCell, oy + y*scale +State.paddingCell, scale-State.paddingCell*2, scale-State.paddingCell*2);
+                }
+            }
+            
+            var states = [];
+            
+            let stateCount=1;
+            for(let i=0;i<stateCount;i++){
+                states.push(new State("states/state"+i+".js"));
+            }
+            
+            // Todo: auto refresh stateX.js with intervals. Create script, load data, delete script, repeat. do it for 5 scripts or so
+            //      to give some breathing room.
+            
+            let currentState=0;
+            
+            function Loop(timestep){
+                let sw=ScreenWidth(),sh=ScreenHeight();
+                
+                let gap = 50;
+                let offset = 0;
+                // let colors = ["7F7","F77"];
+
+                // let w=0,h=0;
+                // for(let i=0;i<states.length;i++){
+                //     if(w<states[i].w)
+                //         w = states[i].w;
+                //     if(h<states[i].h)
+                //         h = states[i].h;
+                // }
+                // FillColor("777");
+                // FillRect(0, 0, w*scale, h*scale);
+                // FillColor("888");
+                // drawcells(0,0,0,0, w, h);
+                    
+                for(let i=0;i<states.length;i++){
+                    states[i].render(0,offset);
+                    offset += states[i].h*scale + gap;
+                }
+                
+                let textSize = 20;
+                // if(currentState>=0&&currentState<states.length){
+                //     FillText(-90, -height*2, "State "+currentState, textSize);
+                //     states[currentState].render(0,-height*2.5,scale,height);
+                // }
+                
+                // for(let i=0;i<200;i++){
+                //     let spot = i*10;
+                //     FillText(spot*scale,0,spot+"", textSize);
+                // }
+                
+                // FillColor("99f");
+                // FillRect(0,0,sw,sh);
+                
+                let zoom = GetWheel();
+                let zoomSpeed = 1.07;
+                if(zoom>0)
+                    GetCamera().zoom*= zoomSpeed;
+                else if(zoom<0)
+                    GetCamera().zoom/= zoomSpeed;
+                    
+                let speed = 15;
+                if(IsKeyDown("shiftleft"))
+                    speed*=2.3;
+                
+                if(IsKeyDown("w"))
+                    GetCamera().y-=speed / GetCamera().zoom;
+                if (IsKeyDown("a"))
+                    GetCamera().x -= speed / GetCamera().zoom;
+                if (IsKeyDown("s"))
+                    GetCamera().y += speed / GetCamera().zoom;
+                if (IsKeyDown("d"))
+                    GetCamera().x += speed / GetCamera().zoom;
+                
+                if (IsKeyPressed("arrowleft"))
+                    currentState = Max(0,currentState-1);
+                if(IsKeyPressed("arrowright"))
+                    currentState = Min(states.length,currentState+1);
+                    
+                // console.log(GetCamera());
+            }
+            StartLoop(Loop,40);
+        </script>
+    </head>
+</html>
