@@ -18,13 +18,17 @@ if !arg!==run (
 
     @REM Create floppy image from C because I am on Windows and don't have other tools.
 
+    @rem We may need to specify 32 bit mode
+    @REM gcc -nostdlib -nostartfiles -nodefaultlibs -fno-builtin -fno-unwind-tables -fno-exceptions -fno-asynchronous-unwind-tables -c src/kernel/kernel.c -o bin/kernel_c.o
+
+    @REM ld -T src/linker.ld -s bin/kernel_c.o -o bin/kernel_tmp.out
+    @REM objcopy -O binary bin/kernel_tmp.out bin/kernel_c.bin
+
 	nasm src/bootloader.asm -f bin -o bin/bootloader.bin
 	nasm src/kernel/main.asm -f bin -o bin/kernel.bin
 
     gcc -g src/other/create_floppy.c -o bin/create_floppy.exe
 	bin\create_floppy
-
-
 
     @REM pushd other
     @REM build.bat

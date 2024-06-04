@@ -1,5 +1,9 @@
 Format specifications
 
+# BIOS
+## Disc
+- Reading disc sectors - https://www.ctyme.com/intr/rb-0607.htm
+
 # File systems
 ## FAT12
 - https://www.eit.lth.se/fileadmin/eit/courses/eitn50/Literature/fat12_description.pdf

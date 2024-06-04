@@ -225,6 +225,7 @@ int main() {
     const char* path_floppy = "bin/floppy.img";
     const char* path_boot = "bin/bootloader.bin";
     const char* path_kernel = "bin/kernel.bin";
+    const char* path_kernelc = "bin/kernel_c.bin";
     FILE* file_floppy = fopen(path_floppy,"wb");
 
     FILE* file_boot = fopen(path_boot, "rb");
@@ -238,17 +239,25 @@ int main() {
     fseek(file_kernel, 0, SEEK_END);
     int file_size_kernel = ftell(file_kernel);
     fseek(file_kernel, 0, SEEK_SET);
+    char* data_kernel = malloc(file_size_kernel);
+    fread(data_kernel, 1, file_size_kernel, file_kernel);
+
+    // FILE* file_kernelc = fopen(path_kernelc, "rb");
+    // Assert(file_kernelc);
+    // fseek(file_kernelc, 0, SEEK_END);
+    // int file_size_kernelc = ftell(file_kernelc);
+    // fseek(file_kernelc, 0, SEEK_SET);
+    // char* data_kernelc = malloc(file_size_kernelc);
+    // fread(data_kernelc, 1, file_size_kernelc, file_kernelc);
 
     int data_size = 1440 * 1024;
     char* data = malloc(data_size);
     memset(data, 0, data_size);
 
-
     fread(data + 0, 1, file_size_boot, file_boot);
     printf("wrote %d bytes of bootloader\n", file_size_boot);
 
-    char* data_kernel = malloc(file_size_kernel);
-    fread(data_kernel, 1, file_size_kernel, file_kernel);
+
 
     fat12_init_table(data);
 
@@ -256,6 +265,9 @@ int main() {
     
     fat12_write_file(data, root_entry_index, 0, data_kernel, file_size_kernel);
     printf("wrote %d bytes of kernel\n", file_size_kernel);
+
+    // int kernelc_root_entry_index = fat12_create_entry(data, "KERNELC.BIN", 0);
+    // fat12_write_file(data, kernelc_root_entry_index, 0, data_kernelc, file_size_kernelc);
 
     fwrite(data, 1, data_size, file_floppy);
 
