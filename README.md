@@ -1,9 +1,8 @@
-My try at kernel/OS development
+My attempt at kernel/OS development
 
 # Building (only Windows)
 
-`build.bat` - To compile
-`build.bat run` - To run QEMU
+`build.py`
 
 # Resources
 - [OS Dev, Wiki](https://wiki.osdev.org/Expanded_Main_Page)

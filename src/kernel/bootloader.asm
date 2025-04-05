@@ -266,7 +266,7 @@ putc:
     ret
 
 msg_loading:        db 'Loading...', 13, 10, 0
-msg_done:           db 'Done', 13, 10, 0
+msg_done:           db 'Loading done.', 13, 10, 0
 msg_read_failed:    db 'Disk read failed', 13, 10, 0
 
 times 510-($-$$) db 0

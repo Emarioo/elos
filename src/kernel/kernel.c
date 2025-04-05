@@ -3,6 +3,6 @@ int get() {
     return 5;
 }
 
-int __attribute__ ((section (".entry"))) start(int x) {
-    return x + get();
+void __attribute__ ((section (".entry"))) start() {
+    // Now we rarely go back to setup?
 }

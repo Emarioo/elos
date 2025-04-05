@@ -9,7 +9,7 @@ DATA_SEG equ data_descriptor - GDT_start
 
 VIDEO_MEMORY equ 0xb8000
 
-main:
+setup:
     [bits 16]
 
     mov ax, 0x0 ; delete
@@ -18,7 +18,7 @@ main:
     mov ss, ax
 
     ; print something
-    mov si, msg_enter_kernel
+    mov si, msg_enter_setup
     call puts16
 
     ; switch to protected mode
@@ -225,5 +225,5 @@ GDT_descriptor:
 msg_hello: db 'Hello world!', 13, 10, 0
 ;  'Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!','Hello world!',0
 
-msg_enter_kernel: db 'Enter kernel',13,10,0
+msg_enter_setup: db 'Enter setup',13, 10, 0
     
