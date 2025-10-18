@@ -17,3 +17,7 @@ Format specifications
 |10-18|File allocation table 2|
 |19-32|Root directory|
 |33-2879|Data|
+
+
+# UEFI
+- https://uefi.org/specifications

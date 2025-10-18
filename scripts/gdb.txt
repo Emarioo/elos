@@ -1,0 +1,7 @@
+set architecture i8086
+set disassembly-flavor intel
+file bin/elos.elf
+target extended-remote :1234
+b *0x7c00
+layout split
+source scripts/skip_int.py

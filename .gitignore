@@ -1,4 +1,19 @@
-bin
-logs
+# intermediate files
 
+bin
+int
+logs
 out
+
+*.out
+*.exe
+*.o
+*.obj
+*.so
+*.a
+*.dll
+*.lib
+*.exp
+
+# IDE stuff
+.vscode

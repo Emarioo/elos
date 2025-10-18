@@ -1,21 +1,89 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
-import os, sys, platform, shutil
+'''
+This script compiles all tools/binaries by default
+
+The following tools/binaries exist:
+- elos.img
+
+'''
+
+
+
+
+
+import os, sys, platform, shutil, shlex
+from dataclasses import dataclass
 
 # TODO: Linux
 
+########################
+#      CONSTANTS
+########################
+
+AS = "as"
+CC = "gcc"
+LD = "ld"
+
+VERBOSE = False
+
+# @dataclass
+# class Options:
+#     verbose: bool
+
 def main():
+    global VERBOSE
+
     # CONFIG
     run = True
+    gdb = False
+
+    # options = Options()
+    
+    argi = 1
+    while argi < len(sys.argv):
+        arg = sys.argv[argi]
+        argi += 1
+
+        if arg == "-h" or arg == "--help":
+            print("cat build.py")
+        elif arg == "-v" or arg == "--verbose":
+            VERBOSE = True
+        elif arg == "run":
+            run = True
+        elif arg == "gdb":
+            run = True
+            gdb = True
+        else:
+            print(f"Unknown argument '{arg}'")
+            exit(1)
 
     # COMPILE
-    shutil.rmtree("bin")
-    compile_kernel()
-    create_floppy()
+    # if os.path.exists("bin"):
+    #     shutil.rmtree("bin")
+
+
+    build_elos("bin/elos.img")
+
+    # create_floppy()
+
+    # compile_kernel()
+
     
     # EXECUTE
     if run:
-        os.system("qemu-system-i386 -fda bin/floppy.img")
+        # os.system("qemu-system-i386 -fda bin/floppy.img")
+        flags = ("-drive format=raw,file=bin/elos.img "
+                 "-boot a "
+                 "-m 64M "
+                 "-no-reboot "
+                 "-serial stdio "
+                 "-monitor none "
+                 "-s "
+                 + ("-S " if gdb else "")
+                #  "-display none "
+        )
+        cmd("qemu-system-i386 " + flags)
         # @REM goto RUN
         # @REM qemu-system-x86_64 -fda bin/floppy.img
         # qemu-system-i386 -fda bin/floppy.img
@@ -30,44 +98,54 @@ def main():
         # @REM     @REM qemu-system-x86_64 bin/boot.bin
         # @REM     qemu-system-x86_64 -fda bin/floppy.img
 
-def compile_kernel():
-    # We may need to specify 32 bit mode
-    FLAGS = "-nostdlib -nostartfiles -nodefaultlibs -fno-builtin -fno-unwind-tables -fno-exceptions -fno-asynchronous-unwind-tables -Wno-builtin-declaration-mismatch"
-    FLAGS += " -Iinclude"
+def build_elos(output: str):
+    os.makedirs("bin", exist_ok=True)
 
-    FILES = ["kernel/kernel.c", "fs/fat12.c", "c/string.c"]
-    OBJS = []
-    for f in FILES:
-        of = f"bin/{f[:-2]}.o"
-        os.makedirs("bin/"+os.path.dirname(f), exist_ok=True)
-        cmd(f"gcc {FLAGS} -c src/{f} -o {of}")
-        print(of)
-        OBJS.append(of)
-    OBJS = " ".join(OBJS)
+    # WARN = "-fno-builtin -fno-unwind-tables -fno-exceptions -fno-asynchronous-unwind-tables -Wno-builtin-declaration-mismatch"
+    # FLAGS = "-nostdlib -nostartfiles -nodefaultlibs -Iinclude"
 
-    LDFLAGS = "-s"
-    cmd(f"ld -T src/kernel/linker.ld {LDFLAGS} {OBJS} -o bin/kernel.bin")
+    # SRC = "src/elos/kernel/kernel.c src/fs/fat.c"
+    # OBJ = ""
+    # for src in SRC:
+    #     obj = f"bin/int/{src[4:-2]}.o"
+    #     os.makedirs(os.path.dirname(obj), exist_ok=True)
+    #     cmd(f"{CC} {FLAGS} {WARN} -c {src} -o {obj}")
+    #     OBJ += obj + " "
 
-    cmd("nasm src/kernel/bootloader.asm -f bin -o bin/bootloader.bin")
-    cmd("nasm src/kernel/setup.asm -f bin -o bin/setup.bin")
+    # cmd(f"{LD} -T src/elos/kernel/linker.ld -s {OBJ} -o bin/elos/kernel.bin")
+
+    os.makedirs("bin/elos", exist_ok=True)
+
+    cmd(f"{AS} -g src/elos/kernel/bootloader.s -o bin/elos/bootloader.o")
+    cmd(f"{AS} -g src/elos/kernel/setup.s -o bin/elos/setup.o")
+    cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/bootloader.o bin/elos/setup.o -o bin/elos.elf") # --oformat=binary
+
+    cmd(f"objcopy -O binary bin/elos.elf {output}")
+    # cmd(f"{LD} -T src/elos/kernel/kernel.ld --oformat=binary -o {output} bin/elos/setup.o bin/elos/bootloader.o")
 
 def create_floppy():
-    FLAGS = "-g -Iinclude -Wno-builtin-declaration-mismatch"
-    FILES = ["floppy/create_floppy.c", "fs/fat12.c"]
-    FILES = " ".join(["src/"+f for f in FILES])
-    cmd(f"gcc {FLAGS} {FILES} -o bin/create_floppy.exe")
-    start("bin/create_floppy")
-
-def start(program, args = ""):
-    if platform.system() == "Windows":
-        program = program.replace('/', "\\")
-        os.system(f"{program} {args}")
-    else:
-        os.system(f"./{program} {args}")
+    FLAGS = "-g -Iinclude -Wno-builtin-declaration-mismatch -Isrc/fs"
+    SRC = "src/fs/fat.c src/fs/make_fat.c src/floppy/create_floppy.c"
+    cmd(f"{CC} {FLAGS} {SRC} -o bin/create_floppy.exe")
+    cmd("bin/create_floppy.exe")
 
 def cmd(c):
-    err = os.system(c)
+    if platform.system() == "Windows":
+        strs = shlex.split(c)
+        if strs[0].startswith("./"):
+            strs[0] = strs[2:]
+        strs[0] = strs[0].replace('/', "\\")
+        c = shlex.join(strs)
+    
+    if VERBOSE:
+        print(c, file=sys.stderr)
+    if platform.system() == "Linux":
+        err = os.system(c) >> 8
+    else:
+        err = os.system(c)
     if err:
+        if not VERBOSE:
+            print(c)
         exit(1)
 
 if __name__ == "__main__":

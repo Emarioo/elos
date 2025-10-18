@@ -1,9 +1,0 @@
-{
-    "files.associations": {
-        "stdio.h": "c",
-        "xiosbase": "c",
-        "time.h": "c",
-        "stdlib.h": "c",
-        "fat12.h": "c"
-    }
-}
