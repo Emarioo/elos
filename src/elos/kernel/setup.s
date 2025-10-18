@@ -3,7 +3,6 @@
 .set KERNEL_ADDR, 0x8000
 
 # specified by linker script
-// .org KERNEL_ADDR
 .section .setup, "ax"
 
 .set CODE_SEG, code_descriptor - GDT_start

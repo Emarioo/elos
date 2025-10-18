@@ -15,10 +15,10 @@ int main() {
 
     // return 0;
 
-    const char* path_out_floppy = "bin/floppy.img";
-    const char* path_boot = "bin/bootloader.bin";
-    const char* path_setup = "bin/setup.bin";
-    const char* path_kernel = "bin/kernel.bin";
+    const char* path_out_floppy = "bin/elos.bin";
+    const char* path_boot = "bin/elos/bootloader.bin";
+    const char* path_setup = "bin/elos/setup.bin";
+    const char* path_kernel = "bin/elos/kernel.bin";
 
     FILE* file_boot = fopen(path_boot, "rb");
     Assert(file_boot);
@@ -29,14 +29,14 @@ int main() {
     FILE* file_setup = fopen(path_setup, "rb");
     Assert(file_setup);
     fseek(file_setup, 0, SEEK_END);
-    int file_size_kernel = ftell(file_setup);
+    int file_size_setup = ftell(file_setup);
     fseek(file_setup, 0, SEEK_SET);
-    char* data_kernel = malloc(file_size_kernel);
-    fread(data_kernel, 1, file_size_kernel, file_setup);
+    char* data_setup = malloc(file_size_setup);
+    fread(data_setup, 1, file_size_setup, file_setup);
 
     int data_size = 1440 * 1024;
     char* data = malloc(data_size);
-    memset(data, 0, data_size);
+    memset(data, 0xCD, data_size);
 
     fread(data + 0, 1, file_size_boot, file_boot);
     printf("wrote %d bytes of bootloader\n", file_size_boot);
@@ -52,12 +52,12 @@ int main() {
     fat12_init_table(data);
 
     int root_entry_index = fat12_create_entry(data, "SETUP.BIN", 0);
+    fat12_write_file(data, root_entry_index, 0, data_setup, file_size_setup);
+    printf("wrote %d bytes of setup\n", file_size_setup);
     
-    fat12_write_file(data, root_entry_index, 0, data_kernel, file_size_kernel);
-    printf("wrote %d bytes of kernel\n", file_size_kernel);
-
     // int kernelc_root_entry_index = fat12_create_entry(data, "KERNELC.BIN", 0);
     // fat12_write_file(data, kernelc_root_entry_index, 0, data_kernelc, file_size_kernelc);
+    // printf("wrote %d bytes of kernel\n", file_size_kernel);
 
     FILE* file_floppy = fopen(path_out_floppy,"wb");
     fwrite(data, 1, data_size, file_floppy);

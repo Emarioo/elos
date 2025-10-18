@@ -1,7 +1,6 @@
 .intel_syntax noprefix
 
 # set by linker
-// .org 0x7c00
 .section .boot, "ax"
 .code16
 
@@ -19,7 +18,7 @@ bdb_reserved_sectors:       .word 1
 bdb_fat_count:              .byte 2        # number file allocation tables
 bdb_dir_entries_count:      .word 0x0E0     # number root directory entries (224)
 bdb_total_sectors:          .word 2880     # 2880 * 512 = 1400 KB
-bdb_media_descriptor_type:  .byte 0x0F0
+bdb_media_descriptor_type:  .byte 0xF0
 bdb_sectors_per_fat:        .word 9
 bdb_sectors_per_track:      .word 18
 bdb_heads:                  .word 2
@@ -70,7 +69,7 @@ start:
     mov ax, 1           # index of physical sector
     mov cl, 1           # sectors to read
     mov bx, FAT_ADDR    # where to load data
-    call disk_read
+    call load_sectors
 
     mov si, FAT_ADDR
     add si, 3 # skip first two entries in FAT (3 because each entry is 12 bits)
@@ -110,7 +109,7 @@ start:
     push cx # save
 
     mov cx, 1              # sectors to read, we do one at a time for simplicity
-    call disk_read
+    call load_sectors
 
     pop cx # load
 
@@ -118,7 +117,7 @@ start:
     inc ax      # move forward physical sector index, once again, we assume kernel code is contiguous
     add bx, 512 # move forward pointer where to load data
 
-    or cx, cx   # Repeat if we have more kernel code?
+    or cx, cx   # Repeat if we have more kernel code
     jnz .loop_disk
 .end_disk:
 
@@ -181,11 +180,11 @@ lba_to_chs:
 
 # Read sectors from disk
 # Arguments:
-#  ax: lba address
-#  cl: sectors to read
+#  ax: sector number
+#  cx: sector count
 #  dl: drive number
 #  es:bx: memory address to store read data
-disk_read:
+load_sectors:
     
     push di
     push dx
@@ -225,6 +224,7 @@ disk_read:
     pop di
 
     ret
+
 
 # Resets disk controller
 # Arguments:

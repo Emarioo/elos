@@ -37,6 +37,7 @@ def main():
     # CONFIG
     run = True
     gdb = False
+    floppy = False
 
     # options = Options()
     
@@ -54,6 +55,9 @@ def main():
         elif arg == "gdb":
             run = True
             gdb = True
+        elif arg == "floppy":
+            floppy = True
+            run = False
         else:
             print(f"Unknown argument '{arg}'")
             exit(1)
@@ -62,8 +66,10 @@ def main():
     # if os.path.exists("bin"):
     #     shutil.rmtree("bin")
 
-
-    build_elos("bin/elos.img")
+    if floppy:
+        build_floppy()
+    else:
+        build_elos("bin/elos.bin")
 
     # create_floppy()
 
@@ -72,13 +78,13 @@ def main():
     
     # EXECUTE
     if run:
-        # os.system("qemu-system-i386 -fda bin/floppy.img")
-        flags = ("-drive format=raw,file=bin/elos.img "
-                 "-boot a "
-                 "-m 64M "
-                 "-no-reboot "
-                 "-serial stdio "
-                 "-monitor none "
+        # flags = ("-drive format=raw,file=bin/elos.bin "
+        flags = ("-drive format=raw,file=bin/elos.bin,if=floppy "
+                #  "-boot a "
+                #  "-m 64M "
+                #  "-no-reboot "
+                #  "-serial stdio "
+                #  "-monitor none "
                  "-s "
                  + ("-S " if gdb else "")
                 #  "-display none "
@@ -118,16 +124,24 @@ def build_elos(output: str):
 
     cmd(f"{AS} -g src/elos/kernel/bootloader.s -o bin/elos/bootloader.o")
     cmd(f"{AS} -g src/elos/kernel/setup.s -o bin/elos/setup.o")
-    cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/bootloader.o bin/elos/setup.o -o bin/elos.elf") # --oformat=binary
+    cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/bootloader.o -o bin/elos/bootloader.elf")
+    cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/setup.o -o bin/elos/setup.elf")
+    cmd(f"objcopy -O binary bin/elos/bootloader.elf bin/elos/bootloader.bin")
+    cmd(f"objcopy -O binary bin/elos/setup.elf bin/elos/setup.bin")
 
-    cmd(f"objcopy -O binary bin/elos.elf {output}")
-    # cmd(f"{LD} -T src/elos/kernel/kernel.ld --oformat=binary -o {output} bin/elos/setup.o bin/elos/bootloader.o")
+    cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/setup.o bin/elos/bootloader.o -o bin/elos.elf")
 
-def create_floppy():
-    FLAGS = "-g -Iinclude -Wno-builtin-declaration-mismatch -Isrc/fs"
-    SRC = "src/fs/fat.c src/fs/make_fat.c src/floppy/create_floppy.c"
-    cmd(f"{CC} {FLAGS} {SRC} -o bin/create_floppy.exe")
+    # cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/bootloader.o bin/elos/setup.o -o bin/elos.elf")
+    # cmd(f"objcopy -O binary bin/elos.elf {output}")
+
+    build_floppy()
     cmd("bin/create_floppy.exe")
+
+
+def build_floppy():
+    FLAGS = "-g -Iinclude -Isrc -Wno-builtin-declaration-mismatch"
+    SRC = "src/fs/fat.c src/tools/make_fat.c src/tools/create_floppy.c"
+    cmd(f"{CC} {FLAGS} {SRC} -o bin/create_floppy.exe")
 
 def cmd(c):
     if platform.system() == "Windows":

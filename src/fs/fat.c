@@ -1,6 +1,6 @@
-#include "fat.h"
+#include "util/fat.h"
 
-#include "string.h"
+#include <string.h>
 
 void FAT32_init_boot_record(FAT32_boot_record* boot_record) {
     FAT_bpb*    bpb  = &boot_record->standard_ebpb;
@@ -46,7 +46,7 @@ void FAT32_init_boot_record(FAT32_boot_record* boot_record) {
 
 void fat12_init_table(fat12* data) {
     char* entries = (uint8_t*)data + 512;
-    int entry_count = 8 * 512 * 8 / 12; // 8 sectors * 512 bytes * 8 bits / 12 bits per entry
+    int entry_count = (8 * 512 * 8) / 12; // 8 sectors * 512 bytes * 8 bits / 12 bits per entry
 
     // clear table
     for (int i=0;i<entry_count;i++) {
@@ -58,6 +58,10 @@ void fat12_init_table(fat12* data) {
     int entries_size = 8 * 512;
     char* entries_mirror = entries + entries_size; // offset to second file allocation table
     memcpy(entries_mirror, entries, entries_size);
+
+    DirectoryEntry* root_entries = (DirectoryEntry*)((uint8_t*)data + 19 * 512); // root starts at sector index 19
+    int entry_counts = (14*512)/32;
+    memset(root_entries, 0, entry_counts * sizeof(DirectoryEntry));
 }
 
 int fat12_create_entry(fat12* data, char* name, bool is_dir) {

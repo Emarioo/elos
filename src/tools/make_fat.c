@@ -1,4 +1,4 @@
-#include "make_fat.h"
+#include "tools/make_fat.h"
 
 #include <stdio.h>
 #include <stdlib.h>

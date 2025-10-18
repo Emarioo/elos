@@ -28,6 +28,24 @@ gdb-multiarch scripts/gdb.txt
 - `scripts` useful developer scripts, like gdb qemu commands
 
 
+# OS layout
+
+```
+|---------------------|
+|   BIOS / FIRMWARE   |
+|---------------------|
+         | |
+|---------------------|
+|     BOOTLOADER      |
+|---------------------|
+|       KERNEL        |
+|---------------------|
+|   Operating System  |
+|---------------------|
+```
+
+
+
 # Resources
 - [OS Dev, Wiki](https://wiki.osdev.org/Expanded_Main_Page)
 - [nanobyte, Youtube](https://www.youtube.com/playlist?list=PLFjM7v6KGMpiH2G-kT781ByCNC_0pKpPN)
