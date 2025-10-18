@@ -1,4 +1,10 @@
-# Goals
+
+# Immediate route
+- [] Use Hard Drive, Master Boot Record, Partition table instead of floppy
+- [] Boot kernel on real hardware, I want to see colored characters written to the screen
+
+
+# Other gGoals
 - [x] Load second bootloader with more than 512 bytes.
 - [ ] Compiler and load kernel in C.
 - [ ] Call assembly functions from C code.

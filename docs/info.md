@@ -4,6 +4,8 @@ Format specifications
 ## Disc
 - Reading disc sectors - https://www.ctyme.com/intr/rb-0607.htm
 
+- Master boot record - https://en.wikipedia.org/wiki/Master_boot_record
+
 # File systems
 ## FAT12
 - https://www.eit.lth.se/fileadmin/eit/courses/eitn50/Literature/fat12_description.pdf

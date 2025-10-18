@@ -38,6 +38,7 @@ def main():
     run = True
     gdb = False
     floppy = False
+    harddrive = False
 
     # options = Options()
     
@@ -58,6 +59,9 @@ def main():
         elif arg == "floppy":
             floppy = True
             run = False
+        elif arg == "harddrive":
+            harddrive = True
+            run = False
         else:
             print(f"Unknown argument '{arg}'")
             exit(1)
@@ -68,8 +72,10 @@ def main():
 
     if floppy:
         build_floppy()
+    elif harddrive:
+        build_floppy()
     else:
-        build_elos("bin/elos.bin")
+        build_elos("bin/elos.img")
 
     # create_floppy()
 
@@ -79,15 +85,17 @@ def main():
     # EXECUTE
     if run:
         # flags = ("-drive format=raw,file=bin/elos.bin "
-        flags = ("-drive format=raw,file=bin/elos.bin,if=floppy "
-                #  "-boot a "
-                #  "-m 64M "
-                #  "-no-reboot "
-                #  "-serial stdio "
-                #  "-monitor none "
-                 "-s "
-                 + ("-S " if gdb else "")
-                #  "-display none "
+        flags = (
+            # f"-drive format=raw,file=bin/elos.bin,if=floppy "
+            f"-drive format=raw,file=bin/elos.img "
+             "-boot c "
+            #  "-m 64M "
+            #  "-no-reboot "
+            #  "-serial stdio "
+            #  "-monitor none "
+                "-s "
+                + ("-S " if gdb else "")
+            #  "-display none "
         )
         cmd("qemu-system-i386 " + flags)
         # @REM goto RUN
@@ -122,26 +130,43 @@ def build_elos(output: str):
 
     os.makedirs("bin/elos", exist_ok=True)
 
-    cmd(f"{AS} -g src/elos/kernel/bootloader.s -o bin/elos/bootloader.o")
-    cmd(f"{AS} -g src/elos/kernel/setup.s -o bin/elos/setup.o")
-    cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/bootloader.o -o bin/elos/bootloader.elf")
-    cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/setup.o -o bin/elos/setup.elf")
-    cmd(f"objcopy -O binary bin/elos/bootloader.elf bin/elos/bootloader.bin")
-    cmd(f"objcopy -O binary bin/elos/setup.elf bin/elos/setup.bin")
+    # cmd(f"{AS} -g src/elos/kernel/bootloader.s -o bin/elos/bootloader.o")
+    # cmd(f"{AS} -g src/elos/kernel/setup.s -o bin/elos/setup.o")
 
-    cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/setup.o bin/elos/bootloader.o -o bin/elos.elf")
+    # cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/bootloader.o -o bin/elos/bootloader.elf")
+    # cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/setup.o -o bin/elos/setup.elf")
+    # cmd(f"objcopy -O binary bin/elos/bootloader.elf bin/elos/bootloader.bin")
+    # cmd(f"objcopy -O binary bin/elos/setup.elf bin/elos/setup.bin")
+
+    # cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/setup.o bin/elos/bootloader.o -o bin/elos.elf")
+
+    cmd(f"{AS} -g src/elos/kernel/mbr_bootloader.s -o bin/elos/mbr_bootloader.o")
+    cmd(f"{AS} -g src/elos/kernel/setup.s -o bin/elos/setup.o")
+    cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/mbr_bootloader.o -o bin/elos/mbr_bootloader.elf")
+    cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/setup.o -o bin/elos/setup.elf")
+    cmd(f"objcopy -O binary bin/elos/mbr_bootloader.elf bin/elos/mbr_bootloader.bin")
+    cmd(f"objcopy -O binary bin/elos/setup.elf bin/elos/setup.bin")
+    cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/setup.o bin/elos/mbr_bootloader.o -o bin/elos.elf")
 
     # cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/bootloader.o bin/elos/setup.o -o bin/elos.elf")
     # cmd(f"objcopy -O binary bin/elos.elf {output}")
 
-    build_floppy()
-    cmd("bin/create_floppy.exe")
+    # build_floppy()
+    # cmd("bin/create_floppy.exe")
+    build_harddrive()
+    cmd("bin/create_harddrive.exe") # output is hardcoded
 
 
 def build_floppy():
     FLAGS = "-g -Iinclude -Isrc -Wno-builtin-declaration-mismatch"
     SRC = "src/fs/fat.c src/tools/make_fat.c src/tools/create_floppy.c"
     cmd(f"{CC} {FLAGS} {SRC} -o bin/create_floppy.exe")
+
+def build_harddrive():
+    FLAGS = "-g -Iinclude -Isrc -Wno-builtin-declaration-mismatch"
+    SRC = "src/fs/fat.c src/tools/make_fat.c src/tools/create_harddrive.c"
+    cmd(f"{CC} {FLAGS} {SRC} -o bin/create_harddrive.exe")
+
 
 def cmd(c):
     if platform.system() == "Windows":
