@@ -8,10 +8,6 @@ The following tools/binaries exist:
 
 '''
 
-
-
-
-
 import os, sys, platform, shutil, shlex
 from dataclasses import dataclass
 
@@ -27,21 +23,15 @@ LD = "ld"
 
 VERBOSE = False
 
-# @dataclass
-# class Options:
-#     verbose: bool
-
 def main():
     global VERBOSE
 
     # CONFIG
-    run = True
-    gdb = False
-    floppy = False
-    harddrive = False
+    run       = False
+    gdb       = False
+    vbox      = False
+    usb       = False
 
-    # options = Options()
-    
     argi = 1
     while argi < len(sys.argv):
         arg = sys.argv[argi]
@@ -56,33 +46,31 @@ def main():
         elif arg == "gdb":
             run = True
             gdb = True
-        elif arg == "floppy":
-            floppy = True
+        elif arg == "vbox":
             run = False
-        elif arg == "harddrive":
-            harddrive = True
+            vbox = True
+        elif arg == "usb":
             run = False
+            usb = True
         else:
             print(f"Unknown argument '{arg}'")
             exit(1)
 
-    # COMPILE
-    # if os.path.exists("bin"):
-    #     shutil.rmtree("bin")
+    if len(sys.argv) <= 1:
+        run = True
 
-    if floppy:
-        build_floppy()
-    elif harddrive:
-        build_floppy()
+    if vbox:
+        build_elos("bin/elos.img")
+        cmd("dd if=bin/elos.img of=bin/elos_padded.img bs=1M count=64 conv=sync")
+        vdi_path = "/mnt/d/vms/elos.vdi"
+        cmd(f"rm -f {vdi_path}")
+        cmd(f"VBoxManage convertfromraw bin/elos_padded.img {vdi_path} --format VDI")
+    elif usb:
+        build_elos("bin/elos.img")
+        # cmd("dd if=bin/elos.img of=bin/elos_padded.img bs=1M count=64 conv=sync")
     else:
         build_elos("bin/elos.img")
 
-    # create_floppy()
-
-    # compile_kernel()
-
-    
-    # EXECUTE
     if run:
         # flags = ("-drive format=raw,file=bin/elos.bin "
         flags = (
@@ -98,19 +86,6 @@ def main():
             #  "-display none "
         )
         cmd("qemu-system-i386 " + flags)
-        # @REM goto RUN
-        # @REM qemu-system-x86_64 -fda bin/floppy.img
-        # qemu-system-i386 -fda bin/floppy.img
-
-        # @REM Debugging
-        # @REM qemu-system-i386 -s -S -fda bin/floppy.img
-        # @REM gdb -ex "
-        # @REM target remote localhost:1234
-        # @REM " -ex "set architecture i8086" -ex "break *0x7c00" -ex "continue"
-        # @REM set disassembly-flavor intel
-
-        # @REM     @REM qemu-system-x86_64 bin/boot.bin
-        # @REM     qemu-system-x86_64 -fda bin/floppy.img
 
 def build_elos(output: str):
     os.makedirs("bin", exist_ok=True)
@@ -151,21 +126,14 @@ def build_elos(output: str):
     # cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/bootloader.o bin/elos/setup.o -o bin/elos.elf")
     # cmd(f"objcopy -O binary bin/elos.elf {output}")
 
-    # build_floppy()
-    # cmd("bin/create_floppy.exe")
-    build_harddrive()
-    cmd("bin/create_harddrive.exe") # output is hardcoded
+    build_image()
+    cmd(f"bin/create_image.exe {output}")
 
 
-def build_floppy():
+def build_image():
     FLAGS = "-g -Iinclude -Isrc -Wno-builtin-declaration-mismatch"
-    SRC = "src/fs/fat.c src/tools/make_fat.c src/tools/create_floppy.c"
-    cmd(f"{CC} {FLAGS} {SRC} -o bin/create_floppy.exe")
-
-def build_harddrive():
-    FLAGS = "-g -Iinclude -Isrc -Wno-builtin-declaration-mismatch"
-    SRC = "src/fs/fat.c src/tools/make_fat.c src/tools/create_harddrive.c"
-    cmd(f"{CC} {FLAGS} {SRC} -o bin/create_harddrive.exe")
+    SRC = "src/fs/fat.c src/tools/make_fat.c src/tools/create_image.c"
+    cmd(f"{CC} {FLAGS} {SRC} -o bin/create_image.exe")
 
 
 def cmd(c):

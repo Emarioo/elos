@@ -16,28 +16,29 @@ bdb_bytes_per_sector:       .word 512
 bdb_sectors_per_cluster:    .byte 1
 bdb_reserved_sectors:       .word 1
 bdb_fat_count:              .byte 2        # number file allocation tables
-bdb_dir_entries_count:      .word 0x0E0     # number root directory entries (224)
+bdb_dir_entries_count:      .word 0x00E0     # number root directory entries (224)
 bdb_total_sectors:          .word 2880     # 2880 * 512 = 1400 KB
 bdb_media_descriptor_type:  .byte 0xF0
 bdb_sectors_per_fat:        .word 9
 bdb_sectors_per_track:      .word 18 # These two are updated by load_drive_parameters
 bdb_heads:                  .word 2
 bdb_hidden_sectors:         .long 0
-bdb_large_sector_count:     .long 0
+bdb_total_sectors_32:       .long 0
 
 # extended boot record
 ebr_drive_number:           .byte 0
                             .byte 0    # reserved
 ebr_signature:              .byte 0x29
 ebr_volume_id:              .byte 0x12, 0x34, 0x56, 0x78    # serial number
-ebr_volume_label:           .ascii "FAT12      "        # 11 bytes, space padding
-ebr_system_id:              .ascii "FAT12   "           # 8 bytes
+ebr_volume_label:           .ascii "FAT16      "        # 11 bytes, space padding
+ebr_system_id:              .ascii "FAT16   "           # 8 bytes
 
 .set FAT_ADDR, 0x7e00
 
 .set KERNEL_ADDR, 0x8000
 
 .set LAST_CLUSTER_MIN, 0xFF8
+.set FAT16_LAST_CLUSTER_MIN, 0xFFF8
 
 
 start:
@@ -70,11 +71,13 @@ start:
     # Read file allocation table
     mov ax, 1           # 0 is master boot record, 1 is fat boot sector in first partition, 2 is File allocation table (specified by create_harddrive.c)
     mov cl, 1           # sectors to read
+    // mov dl, dl       # drive number already set
     mov bx, FAT_ADDR    # where to load data
     call load_sectors
 
     mov si, FAT_ADDR
-    add si, 3 # skip first two entries in FAT (3 because each entry is 12 bits)
+    add si, 4 # skip first two entries in FAT16
+    // add si, 3 # skip first two entries in FAT (3 because each entry is 12 bits)
     mov cx, 1 # number of clusters, start with one
 
     # Read entries in file allocation table.
@@ -83,20 +86,25 @@ start:
 .loop:
     mov ax, [si] # load entry from FAT
 
-    # Extract the next cluster number, a little complex because each entry is 12 bits
-    test cx, 1
-    jnz .even
-.odd:
-    shr ax, 4
+    # simple with fat16
     add si, 2
-    jmp .end_even
-.even:
-    and ax, 0xFFF
-    add si, 1
-.end_even:
+
+#     # hard with fat 32
+#     # Extract the next cluster number, a little complex because each entry is 12 bits
+#     test cx, 1
+#     jnz .even
+# .odd:
+#     shr ax, 4
+#     add si, 2
+#     jmp .end_even
+# .even:
+#     and ax, 0xFFF
+#     add si, 1
+# .end_even:
 
     # Is the cluster number we read the end, if so then we can stop counting.
-    cmp ax, LAST_CLUSTER_MIN
+    // cmp ax, LAST_CLUSTER_MIN
+    cmp ax, FAT16_LAST_CLUSTER_MIN
     jz .end
     cmp ax, 0
     jz .end
@@ -105,7 +113,7 @@ start:
     jmp .loop
 .end:
 
-    mov ax, 33             # MBR is 0, The first cluster in FAT12 is 33 (cluster same size as sector in our case)
+    mov ax, 33             # MBR is 0, The first cluster in FAT12/16 is 33 (cluster same size as sector in our case)
     mov bx, KERNEL_ADDR    # where to load data
 .loop_disk:
     push cx # save

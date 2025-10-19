@@ -103,7 +103,15 @@ void FAT32_init_boot_record(FAT32_boot_record* boot_record);
 #define LAST_CLUSTER_MIN 0xFF8
 #define LAST_CLUSTER_MAX 0xFFF
 
+#define FAT16_UNUSED_CLUSTER 0x0000
+#define FAT16_RESERVED_CLUSTER_MIN 0xFFF0
+#define FAT16_RESERVED_CLUSTER_MAX 0xFFF6
+#define FAT16_BAD_CLUSTER 0xFFF7
+#define FAT16_LAST_CLUSTER_MIN 0xFFF8
+#define FAT16_LAST_CLUSTER_MAX 0xFFFF
+
 typedef void fat12;
+typedef void fat16;
 
 enum DirectoryAttributes {
     READ_ONLY=0x01,
@@ -149,7 +157,6 @@ typedef struct {
 
 
 void fat12_init_table(fat12* data);
-void fat12_init_bootsector(fat12* data, uint8_t* buffer, int size);
 
 void fat12_write_file(fat12* data, int entry_index, int offset, char* buffer, int size);
 
@@ -159,4 +166,18 @@ int fat12_read_table_entry(char* entries, int entry_index);
 char* fat12_get_cluster_memory(fat12* data, int cluster);
 // returns logical cluster number
 int fat12_alloc_cluster(fat12* data);
+
+
+
+void fat16_init_table(fat16* data);
+void fat16_mirror_fat(fat16* data);
+
+void fat16_write_file(fat16* data, int entry_index, int offset, char* buffer, int size);
+
+int fat16_create_entry(fat16* data, char* name, bool is_dir);
+void fat16_write_table_entry(char* entries, int entry_index, int value);
+int fat16_read_table_entry(char* entries, int entry_index);
+char* fat16_get_cluster_memory(fat16* data, int cluster);
+// returns logical cluster number
+int fat16_alloc_cluster(fat16* data);
 
