@@ -3,6 +3,26 @@ My attempt at kernel/OS development
 This project uses GNU tools and MinGW GNU linker isn't a fan of turning PE/COFF to binaries
 which is why you need Linux or Windows Subsystem for Linux for this project.
 
+
+# Dependencies
+
+**Always needed:**
+- Python 3.11
+- GNU gcc, as, ld
+- GNU-EFI
+
+**Running in QEMU**
+- `sudo apt install qemu-kvm`
+
+**Installing**
+- Rufus on windows. It can blit ISO to USB drive.
+- `dd` command on Linux where you blit the raw image file to USB drive.
+
+
+For testing
+- 
+
+
 # Building and running
 
 ```bash

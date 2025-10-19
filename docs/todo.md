@@ -16,6 +16,10 @@
 - [ ] Terminal user interface.
 - [ ] Terminal text editor.
 
+## Minimum for booting on real hardware (just UEFI for now)
+
+
+
 ## Loading kernel
 I have C code
 I have assembly code

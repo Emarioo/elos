@@ -24,3 +24,4 @@ Format specifications
 
 # UEFI
 - https://uefi.org/specifications
+- https://en.wikipedia.org/wiki/GUID_Partition_Table
