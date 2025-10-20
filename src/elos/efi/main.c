@@ -32,6 +32,22 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
        event instead if you like */
     while ((Status = ST->ConIn->ReadKeyStroke(ST->ConIn, &Key)) == EFI_NOT_READY) ;
 
+    
+    UINTN map_size = 4;
+    EFI_MEMORY_DESCRIPTOR map;
+    UINTN mapkey;
+    UINTN desc_size;
+    UINT32 desc_version;
+
+    Status = ST->BootServices->GetMemoryMap(&map_size, &map, &mapkey, &desc_size, &desc_version);
+    if (EFI_ERROR(Status))
+        return Status;
+
+    Status = ST->BootServices->ExitBootServices(ImageHandle, mapkey);
+    if (EFI_ERROR(Status))
+        return Status;
+
+    
+
     return Status;
-    return EFI_SUCCESS;
 }

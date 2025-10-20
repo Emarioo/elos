@@ -1,13 +1,18 @@
 
-# Rules for project
-- NO bash or batch scripts. How you interract with the project on Windows is the same as on Linux. Use python for scripts (there will be some `if platform.system() == "Windows/Linux"`).
-- NO Makefiles. Use python. Makefiles don't consistently work on both Linux and Windows.
-- NO MSVC because project should work on Linux and Windows. Use MinGW on Windows.
-- All intermediate files are placed in `bin` (object files, binaries)
+# Overall behaviour
+- Avoid shell scripts, they are very specific to an operating system (Windows vs Linux). Use python (there will be some `if platform.system() == "Windows/Linux"`).
+- Avoid makefiles also OS specific.
+- Try to use tools available on Linux and Windows (difficult but we can try).
+- All intermediate files are placed in `bin/int` (object files, images, binaries)
+- All intermediate files are placed in `bin/int` (object files, images, binaries)
 - Write tests. Any test is fine, just write them, at least one when implementing something and integrate it with all tests so you can test them all and know if something broke which worked before.
 
-# Rules when writing code
-- You shall document all assembly
-- You shall write documentation for all code.
-- DO NOT write prototypes or experimental code and leave it as good enough. Finish each component thoroughly before moving on. (implmenting a full feature is not required but do not leave code half done)
-- Complex code (file system, multiprocess management) shall be documented in techincal detail. (shell parsing is just needs a guide on syntax, technincal details not so important)
+# Branches
+- `main` release branch, always well tested and works as expected.
+- `dev` ongoing development, some things may not work, features are merged in here.
+
+# When writing code
+- Assembly should have comments
+- Do not write half assed code. A feature should be implemented in a complete condition. Finish software components thoroughly before moving on. A secondary part of the component may be left for later for example
+  implementhing FAT12, FAT16, FAT32 all at once isn't necessary. Reading and writing to a FAT file system isn't necessary. Reading would be enough but limitations and usage should be clear in the function API.
+- Document complicated code.

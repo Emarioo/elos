@@ -70,25 +70,39 @@ def main():
         build_image("bin/elos.img")
         # cmd("dd if=bin/elos.img of=bin/elos_padded.img bs=1M count=64 conv=sync")
     else:
-        build_elos("bin/out_elos")
-        # build_image("bin/elos", "bin/elos.img")
-        build_iso("bin/out_elos", "bin/elos.iso")
+        build_elos("bin/elos")
+        build_image("bin/elos", "bin/elos.img")
+        # build_iso("bin/elos", "bin/elos.iso")
 
-    if run and False:
+    if run:
+        # QEMU FAT16
         # flags = ("-drive format=raw,file=bin/elos.bin "
+        # flags = (
+        #     # f"-drive format=raw,file=bin/elos.bin,if=floppy "
+        #     # f"-drive format=raw,file=bin/elos.img "
+        #     f"-drive format=raw,file=bin/elos.img "
+        #      "-boot c "
+        #     #  "-m 64M "
+        #     #  "-no-reboot "
+        #     #  "-serial stdio "
+        #     #  "-monitor none "
+        #         "-s "
+        #         + ("-S " if gdb else "")
+        #     #  "-display none "
+        # )
+        # cmd("qemu-system-i386 " + flags)
+
+        # TODO: DON'T HARDCODE PATHS
+        ovmf_dir = "/usr/share/ovmf"
+        shutil.copy(f"{ovmf_dir}/OVMF.fd", "bin/OVMF.fd")
         flags = (
-            # f"-drive format=raw,file=bin/elos.bin,if=floppy "
-            f"-drive format=raw,file=bin/elos.img "
-             "-boot c "
-            #  "-m 64M "
-            #  "-no-reboot "
-            #  "-serial stdio "
-            #  "-monitor none "
-                "-s "
-                + ("-S " if gdb else "")
-            #  "-display none "
+            f"-L {ovmf_dir}/ "
+            f"-drive format=raw,file=bin/OVMF.fd,if=pflash "   # -pflash (but without warnings)
+            f"-drive format=raw,file=bin/elos.img "            # -hda
+             "-s "
+            + ("-S " if gdb else "")
         )
-        cmd("qemu-system-i386 " + flags)
+        cmd("qemu-system-x86_64 " + flags)
 
 def build_elos(output: str):
     os.makedirs("bin", exist_ok=True)
@@ -122,7 +136,7 @@ def build_elos(output: str):
     ##############
     #    UEFI
     ##############
-    INT_DIR     = "bin/elos_int"
+    INT_DIR     = "bin/int"
     INC_EFI_DIR = "/usr/include/efi"
     shutil.rmtree(output)
     os.makedirs(f"{output}/EFI/BOOT", exist_ok=True)
@@ -154,23 +168,34 @@ def build_elos(output: str):
     # cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/bootloader.o bin/elos/setup.o -o bin/elos.elf")
     # cmd(f"objcopy -O binary bin/elos.elf {output}")
 
-def build_image(os_dir, path):
-    FLAGS = "-g -Iinclude -Isrc -Wno-builtin-declaration-mismatch"
-    SRC = "src/fs/fat.c src/tools/make_fat.c src/tools/create_image.c"
-    cmd(f"{CC} {FLAGS} {SRC} -o bin/create_image.exe")
-    cmd(f"bin/create_image -o {path} {os_dir}")
+def build_image(os_dir, img_path):
+    # FLAGS = "-g -Iinclude -Isrc -Wno-builtin-declaration-mismatch"
+    # SRC = "src/fs/fat.c src/tools/make_fat.c src/tools/create_image.c"
+    # cmd(f"{CC} {FLAGS} {SRC} -o bin/create_image.exe")
+    # cmd(f"bin/create_image -o {path} {os_dir}")
+
+    # NOTE: Image does not have MBR or GPT
+    #   We need to build mkgpt or make our own create_gpt.c
+
+    FAT_PATH = "bin/int/fat.img"
+
+    # TODO: Dynamically increase size (currently 1.4M)
+    cmd(f"dd if=/dev/zero of={FAT_PATH} bs=1k count=1440 conv=fsync")
+    cmd(f"mformat -i {FAT_PATH} -f 1440 ::")
+    cmd(f"mmd -i {FAT_PATH} ::/EFI")
+    cmd(f"mmd -i {FAT_PATH} ::/EFI/BOOT")
+    cmd(f"mcopy -i {FAT_PATH} {os_dir}/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT")
+    cmd(f"mkgpt -o {img_path} --image-size 4096 --part {FAT_PATH} --type system")
 
 def build_iso(os_dir, path):
-    # cmd(f"genisoimage -o {path} {os_dir}")
-    FAT_PATH = "bin/elos_int/fat.img"
+    FAT_PATH = "bin/int/fat.img"
     cmd(f"dd if=/dev/zero of={FAT_PATH} bs=1k count=1440 conv=fsync")
     cmd(f"mformat -i {FAT_PATH} -f 1440 ::")
     cmd(f"mmd -i {FAT_PATH} ::/EFI")
     cmd(f"mmd -i {FAT_PATH} ::/EFI/BOOT")
     cmd(f"mcopy -i {FAT_PATH} {os_dir}/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT")
     shutil.copy(FAT_PATH, f"{os_dir}/fat.img")
-    # cmd(f"mkisofs -o {path} -eltorito-alt-boot -e fat.img -no-emul-boot -boot-load-size 4 -boot-info-table {os_dir}")
-    cmd(f"xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o bin/elos.iso {os_dir}")
+    cmd(f"xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o {path} {os_dir}")
 
 def cmd(c):
     if platform.system() == "Windows":

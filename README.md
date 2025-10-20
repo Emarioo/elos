@@ -13,6 +13,7 @@ which is why you need Linux or Windows Subsystem for Linux for this project.
 
 **Running in QEMU**
 - `sudo apt install qemu-kvm`
+- mkgpt (you have to build it)
 
 **Installing**
 - Rufus on windows. It can blit ISO to USB drive.

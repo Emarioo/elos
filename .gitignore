@@ -20,3 +20,6 @@ out
 
 # IDE stuff
 .vscode
+
+# vendor files (like headers for vscode on windows)
+extern
