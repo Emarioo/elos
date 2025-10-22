@@ -30,7 +30,7 @@ def main():
     run       = False
     gdb       = False
     vbox      = False
-    usb       = False
+    iso       = False
 
     argi = 1
     while argi < len(sys.argv):
@@ -49,9 +49,11 @@ def main():
         elif arg == "vbox":
             run = False
             vbox = True
-        elif arg == "usb":
-            run = False
-            usb = True
+        # elif arg == "usb":
+        #     run = False
+        #     usb = True
+        elif arg == "iso":
+            iso = True
         else:
             print(f"Unknown argument '{arg}'")
             exit(1)
@@ -65,14 +67,14 @@ def main():
         vdi_path = "/mnt/d/vms/elos.vdi"
         cmd(f"rm -f {vdi_path}")
         cmd(f"VBoxManage convertfromraw bin/elos_padded.img {vdi_path} --format VDI")
-    elif usb:
-        build_elos("bin/elos")
-        build_image("bin/elos.img")
+    # elif usb:
+    #     build_elos("bin/elos")
+    #     build_image("bin/elos.img")
         # cmd("dd if=bin/elos.img of=bin/elos_padded.img bs=1M count=64 conv=sync")
     else:
         build_elos("bin/elos")
         build_image("bin/elos", "bin/elos.img")
-        # build_iso("bin/elos", "bin/elos.iso")
+        build_iso("bin/elos", "bin/elos.iso")
 
     if run:
         # QEMU FAT16
@@ -99,6 +101,7 @@ def main():
             f"-L {ovmf_dir}/ "
             f"-drive format=raw,file=bin/OVMF.fd,if=pflash "   # -pflash (but without warnings)
             f"-drive format=raw,file=bin/elos.img "            # -hda
+            # f"-nographic "
              "-s "
             + ("-S " if gdb else "")
         )
@@ -143,11 +146,28 @@ def build_elos(output: str):
     os.makedirs(INT_DIR, exist_ok=True)
 
     CC = "x86_64-w64-mingw32-gcc"
-    OBJS = f"{INT_DIR}/main.o {INT_DIR}/data.o"
-    CFLAGS = f"-ffreestanding -I{INC_EFI_DIR} -I{INC_EFI_DIR}/x86_64 -I{INC_EFI_DIR}/protocol -Isrc/elos/efi"
-    cmd(f"{CC} {CFLAGS} -c -o {INT_DIR}/main.o src/elos/efi/main.c")
-    cmd(f"{CC} {CFLAGS} -c -o {INT_DIR}/data.o src/elos/efi/data.c")
-    cmd(f"{CC} -nostdlib -Wl,-dll -shared -Wl,--subsystem,10 -e efi_main -o {output}/EFI/BOOT/BOOTX64.EFI {OBJS}")
+    LD = "x86_64-w64-mingw32-ld"
+    sources = [
+        "src/elos/efi/main.c",
+        "src/elos/efi/data.c",
+
+        "src/elos/kernel/kernel.c",
+        "src/elos/kernel/frame/frame.c",
+    ]
+    objects = [ f"{INT_DIR}/{os.path.basename(s)}" for s in sources ]
+        
+    CFLAGS = f"-ggdb -ffreestanding -fno-asynchronous-unwind-tables -fno-exceptions -I{INC_EFI_DIR} -I{INC_EFI_DIR}/x86_64 -I{INC_EFI_DIR}/protocol -Isrc/elos/efi -Isrc"
+    CFLAGS += f" -Wall -Werror"
+    CFLAGS += f" -Wno-unused-variable"
+
+    for s,o in zip(sources,objects):
+        cmd(f"{CC} {CFLAGS} -c -o {o} {s}")
+
+    OBJS = " ".join(objects)
+
+    cmd(f"{LD} -nostdlib --dll --image-base=0  -shared --subsystem 10 -e efi_main -o {output}/EFI/BOOT/BOOTX64.EFI {OBJS}")
+    shutil.copy(f"{output}/EFI/BOOT/BOOTX64.EFI", "bin/elos.elf")
+    cmd(f"objcopy --only-keep-debug bin/elos.elf")
 
 
     #########################################

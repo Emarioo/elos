@@ -1,0 +1,6 @@
+set disassembly-flavor intel
+target remote :1234
+watch *(unsigned long long*)0x10000 == 0xDEADCE11
+c
+set $base = *(unsigned long long*)0x10008
+add-symbol-file bin/elos.elf -o $base
