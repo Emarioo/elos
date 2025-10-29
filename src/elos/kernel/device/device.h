@@ -5,6 +5,7 @@
     - Can be null.
     - Will be untouched on success.
 */
+#pragma once
 
 #include "elos/kernel/common/types.h"
 

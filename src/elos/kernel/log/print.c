@@ -1,11 +1,7 @@
 
 #include "elos/kernel/common/types.h"
 
-int strlen(const char* ptr) {
-    const char* base = ptr;
-    while(*(ptr++)) ;
-    return (u64)ptr - (u64)base;
-}
+
 
 
 

@@ -25,6 +25,9 @@ typedef struct string {
     u32  max;
 } string;
 
+
+
+
 typedef struct bytearray {
     char* ptr;
     u64  len;
@@ -32,4 +35,6 @@ typedef struct bytearray {
 
 #define false 0
 #define true 1
-#define NULL 0
+#ifndef NULL
+    #define NULL 0
+#endif

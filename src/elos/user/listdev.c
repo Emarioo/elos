@@ -6,9 +6,9 @@
 #include "elos/kernel/device/device.h"
 #include "elos/kernel/log/print.h"
 
-void print() {
+// static void print() {
 
-}
+// }
 
 void main() {
     kernel__DeviceError error;
@@ -20,7 +20,7 @@ void main() {
     result = kernel__list_devices(KERNEL__DEVICE_TYPE_ALL, &devices, &devices_len, &error);
 
     if(!result) {
-        print(error.message);
+        // print(error.message);
     }
 
 }

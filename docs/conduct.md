@@ -16,3 +16,11 @@
 - Do not write half assed code. A feature should be implemented in a complete condition. Finish software components thoroughly before moving on. A secondary part of the component may be left for later for example
   implementhing FAT12, FAT16, FAT32 all at once isn't necessary. Reading and writing to a FAT file system isn't necessary. Reading would be enough but limitations and usage should be clear in the function API.
 - Document complicated code.
+
+
+# Markers
+- `@NOTTESTED` Code was written but not tested.
+- `@TODO` Should be fixes in the future.
+- `@NOTE` Extra information
+- `@IMPORTANT` Essential information when programming. Read this before adding or modifying code near this marker.
+- `@nocheckin` Left in code that is unfinished. They should be resolved before commiting work.

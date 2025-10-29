@@ -67,6 +67,9 @@ def main():
         vdi_path = "/mnt/d/vms/elos.vdi"
         cmd(f"rm -f {vdi_path}")
         cmd(f"VBoxManage convertfromraw bin/elos_padded.img {vdi_path} --format VDI")
+    elif iso:
+        build_elos("bin/elos")
+        build_iso("bin/elos", "bin/elos.iso")
     # elif usb:
     #     build_elos("bin/elos")
     #     build_image("bin/elos.img")
@@ -74,7 +77,7 @@ def main():
     else:
         build_elos("bin/elos")
         build_image("bin/elos", "bin/elos.img")
-        build_iso("bin/elos", "bin/elos.iso")
+        # build_iso("bin/elos", "bin/elos.iso")
 
     if run:
         # QEMU FAT16
@@ -135,12 +138,14 @@ def build_elos(output: str):
 
     # cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/setup.o bin/elos/bootloader.o -o bin/elos.elf")
 
+    build_bitmap()
+
 
     ##############
     #    UEFI
     ##############
     INT_DIR     = "bin/int"
-    INC_EFI_DIR = "/usr/include/efi"
+    INC_EFI_DIR = "extern/efi"
     shutil.rmtree(output)
     os.makedirs(f"{output}/EFI/BOOT", exist_ok=True)
     os.makedirs(INT_DIR, exist_ok=True)
@@ -153,12 +158,18 @@ def build_elos(output: str):
 
         "src/elos/kernel/kernel.c",
         "src/elos/kernel/frame/frame.c",
+        "src/elos/kernel/frame/font/font.c",
+        "src/elos/kernel/frame/font/psf.c",
+        "src/elos/kernel/common/string.c",
+        "src/elos/kernel/memory/memory_mapper.c",
+
+        "res/ascii_bitmap.c", # temporary
     ]
     objects = [ f"{INT_DIR}/{os.path.basename(s)}" for s in sources ]
         
     CFLAGS = f"-ggdb -ffreestanding -fno-asynchronous-unwind-tables -fno-exceptions -I{INC_EFI_DIR} -I{INC_EFI_DIR}/x86_64 -I{INC_EFI_DIR}/protocol -Isrc/elos/efi -Isrc"
-    CFLAGS += f" -Wall -Werror"
-    CFLAGS += f" -Wno-unused-variable"
+    CFLAGS += f" -Wall -Werror -fshort-wchar -Werror=implicit-function-declaration"
+    CFLAGS += f" -Wno-unused-variable -Wno-unused-function -Wno-multichar"
 
     for s,o in zip(sources,objects):
         cmd(f"{CC} {CFLAGS} -c -o {o} {s}")
@@ -169,6 +180,11 @@ def build_elos(output: str):
     shutil.copy(f"{output}/EFI/BOOT/BOOTX64.EFI", "bin/elos.elf")
     cmd(f"objcopy --only-keep-debug bin/elos.elf")
 
+    os.makedirs(f"{output}/RES", exist_ok=True)
+    shutil.copy(f"res/PixelOperator.ttf", f"{output}/RES/PIXELOP.TTF")
+    shutil.copy(f"res/Lat2-Terminus16.psf", f"{output}/RES/STDFONT.PSF")
+    # shutil.copy(f"res/PixelOperator.ttf", f"{output}/PIXELOP.TTF")
+    # shutil.copy(f"res/PixelOperator.ttf", f"{output}/RES/PIXELOP.TTF")
 
     #########################################
     #    LEGACY BIOS MBR FAT16 QEMU VBOX
@@ -199,23 +215,34 @@ def build_image(os_dir, img_path):
 
     FAT_PATH = "bin/int/fat.img"
 
+    # TODO: Auto pick files to include and reuse image for ISO
+
     # TODO: Dynamically increase size (currently 1.4M)
     cmd(f"dd if=/dev/zero of={FAT_PATH} bs=1k count=1440 conv=fsync")
     cmd(f"mformat -i {FAT_PATH} -f 1440 ::")
     cmd(f"mmd -i {FAT_PATH} ::/EFI")
     cmd(f"mmd -i {FAT_PATH} ::/EFI/BOOT")
-    cmd(f"mcopy -i {FAT_PATH} {os_dir}/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT")
+    cmd(f"mmd -i {FAT_PATH} ::/RES")
+    cmd(f"mcopy -i {FAT_PATH} {os_dir}/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT/")
+    cmd(f"mcopy -i {FAT_PATH} {os_dir}/RES/PIXELOP.TTF ::/RES/")
+    cmd(f"mcopy -i {FAT_PATH} {os_dir}/RES/STDFONT.PSF ::/RES/")
     cmd(f"mkgpt -o {img_path} --image-size 4096 --part {FAT_PATH} --type system")
 
 def build_iso(os_dir, path):
+    assert False, "is this code up to date with build_image, missing some fonts or other files maybe?"
     FAT_PATH = "bin/int/fat.img"
     cmd(f"dd if=/dev/zero of={FAT_PATH} bs=1k count=1440 conv=fsync")
     cmd(f"mformat -i {FAT_PATH} -f 1440 ::")
     cmd(f"mmd -i {FAT_PATH} ::/EFI")
     cmd(f"mmd -i {FAT_PATH} ::/EFI/BOOT")
-    cmd(f"mcopy -i {FAT_PATH} {os_dir}/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT")
+    cmd(f"mmd -i {FAT_PATH} ::/RES")
+    cmd(f"mcopy -i {FAT_PATH} {os_dir}/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT/")
     shutil.copy(FAT_PATH, f"{os_dir}/fat.img")
     cmd(f"xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o {path} {os_dir}")
+
+def build_bitmap():
+    cmd("gcc -o bin/create_bitmap src/tools/create_bitmap.c -Iinclude/vendor -lm")
+    cmd("bin/create_bitmap")
 
 def cmd(c):
     if platform.system() == "Windows":

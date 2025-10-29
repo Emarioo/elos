@@ -18,6 +18,7 @@ Categories are standardized in singular and lower case.
 ## @bug
 
 ## @feature
+- [ ] Kernel logger. Logs actions in the OS. Files open, written to. Apps started stopped.
 
 ## @project
 - [ ] Clearly state dependencies of this project. Do fresh Ubuntu install in VirtualBox and compile this project, see what you need.
