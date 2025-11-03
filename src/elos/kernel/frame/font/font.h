@@ -49,7 +49,8 @@ typedef struct Glyph {
 
 typedef struct Font {
     FontFormat format;
-    
+    int glyphWidth;
+    int glyphHeight;
     // TODO: Hash map of codepoints
     Glyph* glyphs;
     u32 glyphs_len;

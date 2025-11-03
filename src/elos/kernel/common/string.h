@@ -3,8 +3,8 @@
 #include <stdarg.h>
 #include "elos/kernel/common/types.h"
 
-int snprintf(char* buffer, int size, char* format, ...);
-int vsnprintf(char* buffer, int size, char* format, va_list va);
+int snprintf(char* buffer, int size, const char* format, ...);
+int vsnprintf(char* buffer, int size, const char* format, va_list va);
 
 static inline int strlen(const char* ptr) {
     const char* base = ptr;
@@ -12,14 +12,37 @@ static inline int strlen(const char* ptr) {
     return (u64)ptr - (u64)base - 1;
 }
 static inline void memcpy(void* dst, const void* src, int size) {
-    // char* d = dst;
-    // const char* s = src;
-    // char* e = d + size;
-    // while (d != e) {
-    //     *(d++) = *(s++);
-    // }
+    if (dst == src)
+        return;
     for (int i=0;i<size;i++) {
         ((char*)dst)[i] = ((char*)src)[i];
+    }
+}
+static inline void memmove(void* dst, const void* src, int size) {
+    if (dst == src)
+        return;
+    
+    if ((u64)dst % 8 == 0 && (u64)src % 8 == 0 && size % 8 == 0) {
+        // aligned
+        if (dst < src) {
+            for (int i=0;i<size/8;i++) {
+                ((u64*)dst)[i] = ((u64*)src)[i];
+            }
+        } else {
+            for (int i=size/8-1;i>=0;i--) {
+                ((u64*)dst)[i] = ((u64*)src)[i];
+            }
+        }
+    } else {
+        if (dst < src) {
+            for (int i=0;i<size;i++) {
+                ((char*)dst)[i] = ((char*)src)[i];
+            }
+        } else {
+            for (int i=size-1;i>=0;i--) {
+                ((char*)dst)[i] = ((char*)src)[i];
+            }
+        }
     }
 }
 

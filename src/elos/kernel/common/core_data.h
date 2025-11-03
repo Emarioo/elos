@@ -4,7 +4,7 @@
 #include <efilib.h>
 
 typedef struct kernel__CoreData {
-    int exited_bootservices;
+    int inside_uefi;
     EFI_GRAPHICS_OUTPUT_PROTOCOL* graphics_output;
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* simple_file_system;
 } kernel__CoreData;

@@ -4,6 +4,7 @@
 
 #include "elos/kernel/frame/frame.h"
 #include "elos/kernel/common/types.h"
+#include "elos/kernel/common/string.h"
 #include "elos/kernel/common/core_data.h"
 
 
@@ -88,12 +89,13 @@ void draw_char_bcolor(int x, int y, int height, char c, u32 color, u32 back_colo
 }
 
 
-int draw_text_width(cstring text, int height) {
-    return text.len * ((7+height) / 8) * 8;
+int draw_text_width(cstring text, int height, Font* font) {
+    return (text.len * font->glyphWidth * height) / font->glyphHeight;
 }
 
+static Font g_tempFont = { .format = FONT_FORMAT_NONE, .glyphWidth = 8, .glyphHeight = 8, .glyphs_len = 0, .glyphs = NULL };
 void draw_text_bcolor(int x, int y, int h, cstring text, u32 color, u32 back_color) {
-    int w = draw_text_width(text, h);
+    int w = draw_text_width(text, h, &g_tempFont);
     for(int i=0;i<text.len;i++) {
         draw_char_bcolor(x + w/text.len * i, y, h, text.ptr[i], color, back_color);
     }
@@ -150,10 +152,34 @@ void draw_refresh() {
     //   We then blit it to EFI GRAPHICS OUTPUT protocol?
 }
 
+void draw_shift_frame(int x, int y, u32 fill_color) {
+    EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE* const mode = kernel__core_data->graphics_output->Mode;
+    u32* const pixels           = (u32*)mode->FrameBufferBase;
+    u32  const pixels_per_line  = mode->Info->PixelsPerScanLine;
+
+    // NOTE: Horizontal shift not implemented. This function is mainly for simple scrolling where pixels are lost.
+
+    int abs_y = (y < 0 ? -y : y);
+
+    int total_size = 4 * pixels_per_line * mode->Info->VerticalResolution;
+    int shift_size = total_size - 4 * pixels_per_line * abs_y;
+
+    if (y < 0) {
+        memmove(pixels, pixels + pixels_per_line * abs_y, shift_size);
+        if (fill_color & 0xFF000000) {
+            draw_rect(0, mode->Info->VerticalResolution - abs_y, pixels_per_line, abs_y, fill_color);
+        }
+    } else {
+        memmove(pixels + pixels_per_line * abs_y, pixels, shift_size);
+        if (fill_color & 0xFF000000) {
+            draw_rect(0, 0, pixels_per_line, abs_y, fill_color);
+        }
+    }
+}
 
 void draw_glyphs_from_text_bcolor(int x, int y, int height, const cstring text, const Font* font, u32 color, u32 back_color) {
     EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE* const mode = kernel__core_data->graphics_output->Mode;
-    const int pixel_count = mode->Info->HorizontalResolution * mode->Info->VerticalResolution;
+    const int pixel_count = mode->Info->PixelsPerScanLine * mode->Info->VerticalResolution;
     int monospace_width  = 1; // determines aspect ratio, we use width and height to avoid floats
     int monospace_height = 2;
 
@@ -227,3 +253,4 @@ void draw_glyphs_from_text_bcolor(int x, int y, int height, const cstring text, 
         }
     }
 }
+

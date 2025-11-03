@@ -38,3 +38,6 @@ typedef struct bytearray {
 #ifndef NULL
     #define NULL 0
 #endif
+
+void kernel_bug();
+

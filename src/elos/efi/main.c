@@ -4,8 +4,10 @@
 
 #include "elos/kernel/common/core_data.h"
 #include "elos/kernel/common/string.h"
-#include "elos/kernel/memory/memory_mapper.h"
+#include "elos/kernel/memory/phys_allocator.h"
 #include "elos/kernel/frame/font/font.h"
+#include "elos/kernel/log/print.h"
+#include "elos/kernel/debug/debug.h"
 
 extern void kernel_entry();
 
@@ -14,25 +16,6 @@ EFI_STATUS init_protocols();
 // Put breakpoint here
 void catch_bad_status() {  }
 
-
-EFI_STATUS printf(char* format, ...) {
-    char buffer[256];
-    unsigned short w_buffer[256];
-
-    va_list va;
-    va_start(va, format);
-    const int len = vsnprintf(buffer, sizeof(buffer), format, va);
-    va_end(va);
-
-    for (int i=0;i<len+1;i++) {
-        w_buffer[i] = buffer[i];
-    }
-
-    EFI_STATUS status = ST->ConOut->OutputString(ST->ConOut, w_buffer);
-    if(EFI_ERROR(status))
-        catch_bad_status();
-    return status;
-}
 
 const char* efi_memory_type_names[EfiMaxMemoryType] = {
     "EfiReservedMemoryType",
@@ -122,6 +105,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     // InitializeLib(imageHandle, systemTable);
     // Print(L"Hello world!\n");
 
+
     EFI_STATUS Status;
     EFI_INPUT_KEY Key;
 
@@ -129,7 +113,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     ST = SystemTable;
 
     BS = ST->BootServices;
-    kernel__core_data->exited_bootservices = false;
+    kernel__core_data->inside_uefi = true;
 
     EFI_LOADED_IMAGE_PROTOCOL *loaded_image;
     // Define the GUID variable (cannot pass macro directly)
@@ -213,6 +197,10 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
         printf("ExitBootServices failed\r\n");
         return Status;
     }
+
+    serial_printf("UEFI - Exit boot services\n");
+
+    kernel__core_data->inside_uefi = false;
 
     bool yes = kernel_init_memory_mapper();
     if (!yes)

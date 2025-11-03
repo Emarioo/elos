@@ -2,7 +2,7 @@
 
 #include "elos/kernel/frame/font/psf.h"
 
-#include "elos/kernel/memory/memory_mapper.h"
+#include "elos/kernel/memory/phys_allocator.h"
 #include "elos/kernel/common/string.h"
 
 // @TODO: Temporary, needed to print using UEFI
@@ -67,6 +67,10 @@ typedef struct {
 bool font_psf__load_from_bytes(const u8* data, u32 size, Font** out_font) {
     if (size < 4)  return false;
 
+    // @TODO: Fields in Glyph uses unsigned 8-bit integers.
+    //   The PSF format may specify characters with larger width and height.
+    //   We need to check that and return error if so.
+
     bool psf2_format;
     int numGlyphs;
     int glyphWidth;
@@ -79,18 +83,18 @@ bool font_psf__load_from_bytes(const u8* data, u32 size, Font** out_font) {
     if (*(u32*)data == PSF2_FONT_MAGIC) {
         
         if (size < sizeof(PSF2_header))
-        return false;
+            return false;
         
         const PSF2_header* header = (PSF2_header*)data;
         
         psf2_format   = true;
         numGlyphs     = header->numglyph;
         glyphWidth    = header->width;
-        glyphHeight   = header->headersize;
+        glyphHeight   = header->height;
         bytesPerGlyph = header->bytesperglyph;
         glyph_data    = data + header->headersize;
         
-        if (size < sizeof(PSF1_header) + numGlyphs * bytesPerGlyph)
+        if (size < header->headersize + numGlyphs * bytesPerGlyph)
             return false;
 
         if (header->flags & PSF2_HAS_unicodeTable) {
@@ -150,6 +154,8 @@ bool font_psf__load_from_bytes(const u8* data, u32 size, Font** out_font) {
     
     font->format = FONT_FORMAT_GLYPH;
     font->glyphs_len = numGlyphsInFont;
+    font->glyphWidth = glyphWidth;
+    font->glyphHeight = glyphHeight;
     font->glyphs = (Glyph*)(memory + head_data);
     head_data += numGlyphsInFont * sizeof(Glyph);
     
@@ -211,6 +217,7 @@ bool font_psf__load_from_bytes(const u8* data, u32 size, Font** out_font) {
         glyph->format = GLYPH_FORMAT_GRAYMAP;
         glyph->width = glyphWidth;
         glyph->height = glyphHeight;
+        glyph->full_width = glyphWidth;
         glyph->full_height = glyphHeight;
         glyph->bearingX = 0;
         glyph->bearingY = 0;

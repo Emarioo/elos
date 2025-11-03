@@ -27,7 +27,18 @@ bool kernel_init_memory_mapper();
 
 void kernel_compress_regions();
 
-void* kernel_alloc(u64 size, void* ptr);
+void* kernel_alloc(u64 bytes, void* ptr);
+
+/*
+    Flags specify write/read/execute access and other flags (zero initialized or 0x9D initialized)
+    Address and bytes must be page-aligned
+*/
+bool kernel_vmap(void* requested_virtual_addr, u64 bytes, int flags);
+
+/*
+    Address and bytes must be page-aligned
+*/
+bool kernel_vunmap(void* requested_virtual_addr, u64 bytes);
 
 
 /*
@@ -43,3 +54,10 @@ void* kernel_alloc(u64 size, void* ptr);
 
 */
 void* kerneL_alloc_pages(u64 size, void* ptr, u32 flags);
+
+
+/*
+    Does no memory mapping
+    Memory is uninitialized
+*/
+void* kerneL_alloc_phys_pages(u64 requested_pages);

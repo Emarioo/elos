@@ -103,8 +103,12 @@ def main():
         flags = (
             f"-L {ovmf_dir}/ "
             f"-drive format=raw,file=bin/OVMF.fd,if=pflash "   # -pflash (but without warnings)
-            f"-drive format=raw,file=bin/elos.img "            # -hda
+            f"-drive format=raw,file=bin/elos.img,if=ide,media=disk,cache=writeback "            # -hda
+            # f"-drive if=none,id=disk0,format=raw,file=bin/elos.img "            # -hda
+            # f"-device ahci,id=ahci "
+            # f"-device ide-drive,drive=disk0,bus=ahci.0 "
             # f"-nographic "
+            "-serial file:kernel.log "
              "-s "
             + ("-S " if gdb else "")
         )
@@ -160,16 +164,22 @@ def build_elos(output: str):
         "src/elos/kernel/frame/frame.c",
         "src/elos/kernel/frame/font/font.c",
         "src/elos/kernel/frame/font/psf.c",
+        "src/elos/kernel/log/print.c",
+        "src/elos/kernel/driver/pata.c",
+        "src/elos/kernel/driver/pci.c",
         "src/elos/kernel/common/string.c",
-        "src/elos/kernel/memory/memory_mapper.c",
+        "src/elos/kernel/memory/phys_allocator.c",
+        "src/elos/kernel/memory/paging.c",
+        "src/elos/kernel/debug/debug.c",
 
         "res/ascii_bitmap.c", # temporary
     ]
     objects = [ f"{INT_DIR}/{os.path.basename(s)}" for s in sources ]
         
-    CFLAGS = f"-ggdb -ffreestanding -fno-asynchronous-unwind-tables -fno-exceptions -I{INC_EFI_DIR} -I{INC_EFI_DIR}/x86_64 -I{INC_EFI_DIR}/protocol -Isrc/elos/efi -Isrc"
+    CFLAGS = f"-ggdb -ffreestanding -fno-asynchronous-unwind-tables -fno-exceptions -I{INC_EFI_DIR} -Iinclude -I{INC_EFI_DIR}/x86_64 -I{INC_EFI_DIR}/protocol -Isrc/elos/efi -Isrc"
     CFLAGS += f" -Wall -Werror -fshort-wchar -Werror=implicit-function-declaration"
-    CFLAGS += f" -Wno-unused-variable -Wno-unused-function -Wno-multichar"
+    CFLAGS += f" -Wno-multichar"
+    CFLAGS += f" -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable"
 
     for s,o in zip(sources,objects):
         cmd(f"{CC} {CFLAGS} -c -o {o} {s}")
@@ -229,7 +239,7 @@ def build_image(os_dir, img_path):
     cmd(f"mkgpt -o {img_path} --image-size 4096 --part {FAT_PATH} --type system")
 
 def build_iso(os_dir, path):
-    assert False, "is this code up to date with build_image, missing some fonts or other files maybe?"
+    # assert False, "is this code up to date with build_image, missing some fonts or other files maybe?"
     FAT_PATH = "bin/int/fat.img"
     cmd(f"dd if=/dev/zero of={FAT_PATH} bs=1k count=1440 conv=fsync")
     cmd(f"mformat -i {FAT_PATH} -f 1440 ::")
@@ -237,6 +247,8 @@ def build_iso(os_dir, path):
     cmd(f"mmd -i {FAT_PATH} ::/EFI/BOOT")
     cmd(f"mmd -i {FAT_PATH} ::/RES")
     cmd(f"mcopy -i {FAT_PATH} {os_dir}/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT/")
+    cmd(f"mcopy -i {FAT_PATH} {os_dir}/RES/PIXELOP.TTF ::/RES/")
+    cmd(f"mcopy -i {FAT_PATH} {os_dir}/RES/STDFONT.PSF ::/RES/")
     shutil.copy(FAT_PATH, f"{os_dir}/fat.img")
     cmd(f"xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o {path} {os_dir}")
 

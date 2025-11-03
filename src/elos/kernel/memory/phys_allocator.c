@@ -1,29 +1,34 @@
 /*
     This is a simple slow implementation
 
+    Physical memory allocator
+
     TODO: Implementation assumes we won't reach MAX_REGIONS
       which we must fix.
 
     At the moment a "Region" is the same as an "Allocation"
 */
 
-#include "elos/kernel/memory/memory_mapper.h"
+#include "elos/kernel/memory/phys_allocator.h"
+#include "elos/kernel/memory/paging.h"
 #include "elos/kernel/common/string.h"
 #include "elos/kernel/common/core_data.h"
+#include "elos/kernel/debug/debug.h"
 
 #undef PAGE_SIZE
 #define PAGE_SIZE 4096
 
 
-#define MAX_REGIONS 100000
+#define MAX_REGIONS 1000
 
 #define FLAG_FREE 0x1
 #define FLAG_USED 0x2
+#define FLAG_VIRTUALLY_MAPPED 0x4
 // TODO: This flag could add 1 extra page on each side of the allocation
 //   where it's filled with 0xDC bytes. If you wrote to it when you shouldn't
 //   have we'll know. Maybe this is more of a standard library or higher OS level
 //   feature and not kernel?
-#define FLAG_TRASH_BOUNDARY 0x4
+#define FLAG_TRASH_BOUNDARY 0x8
 
 
 MemoryMapper g_memory_mapper;
@@ -32,7 +37,7 @@ typedef struct Region {
     u64 physicalStart;
     u64 virtualStart; // unused at the moment (same as physical)
     u64 pageCount;
-    u32 flags; // READ,WRITE,EXECUTABLE
+    u32 flags; // READ,WRITE,EXECUTABLE,MEMORY MAPPED, whether virtualStart is valid
 } Region;
 
 
@@ -58,8 +63,8 @@ static void* find_free_descriptor(int size) {
         
         desc->NumberOfPages -= requested_pages;
         desc->PhysicalStart += requested_pages;
-        desc->VirtualStart  += requested_pages;
 
+        // YOO! We might need to memory map this?
         return (char*)desc->PhysicalStart;
     }
     return NULL;
@@ -67,11 +72,21 @@ static void* find_free_descriptor(int size) {
 
 bool kernel_init_memory_mapper() {
     g_free_regions = find_free_descriptor(MAX_REGIONS*sizeof(Region));
-    if (!g_free_regions)
+    if (!g_free_regions) {
+        serial_printf("phys: Can't allocate free regions\n");
         return false;
+    }
+    serial_printf("phys: Allocated free regions ptr: %x, size: %d\n", g_free_regions, MAX_REGIONS*sizeof(Region));
+    
     g_used_regions = find_free_descriptor(MAX_REGIONS*sizeof(Region));
-    if (!g_used_regions)
+    if (!g_used_regions) {
+        serial_printf("phys: Can't allocate used regions\n");
         return false;
+    }
+    serial_printf("phys: Allocated used regions ptr: %x, size: %d\n", g_used_regions, MAX_REGIONS*sizeof(Region));
+
+    memset(g_free_regions, 0x9D, MAX_REGIONS * sizeof(Region));
+    memset(g_used_regions, 0x9D, MAX_REGIONS * sizeof(Region));
 
     const int desc_count = g_memory_mapper.total_size_of_descriptors/g_memory_mapper.descriptor_size;
     for (int i = 0; i < desc_count; i++) {
@@ -83,13 +98,16 @@ bool kernel_init_memory_mapper() {
 
         // TODO: Do something with attributes?
 
+        if(g_num_free_regions >= MAX_REGIONS)
+            break;
+
         Region* alloc = &g_free_regions[g_num_free_regions];
         g_num_free_regions++;
 
         alloc->flags = FLAG_FREE;
         alloc->pageCount = desc->NumberOfPages;
         alloc->physicalStart = desc->PhysicalStart;
-        alloc->virtualStart = desc->VirtualStart;
+        alloc->virtualStart = 0;
     }
     return true;
 }
@@ -108,7 +126,7 @@ void* kernel_alloc(const u64 size, void* const ptr) {
 
     // @TODO: Temporary, when we're in BootServices we do this. (we are when loading font when reading files)
     //   Can't read files after BootServices yet.
-    if (!kernel__core_data->exited_bootservices) {
+    if (kernel__core_data->inside_uefi) {
         if (size && !old_virtual_address) {
             void* new_addr;
             EFI_STATUS status = ST->BootServices->AllocatePages(AllocateAnyPages, EfiLoaderData, requested_pages, (EFI_PHYSICAL_ADDRESS*)&new_addr);
@@ -207,6 +225,15 @@ void* kernel_alloc(const u64 size, void* const ptr) {
             g_num_free_regions = found_free_index + 1;
         }
 
+        for (int i = 0; i < requested_pages; i++) {
+            void* addr = (char*)old_virtual_address + used_alloc->pageCount * PAGE_SIZE;
+            bool yes = unmap_page(addr);
+            if (!yes) {
+                // Bug in kernel if this doesn't work
+                return NULL;
+            }
+        }
+
         return NULL; // we return NULL on success when freeing
 
     } else /* if (size) */ {
@@ -218,7 +245,7 @@ void* kernel_alloc(const u64 size, void* const ptr) {
             if ((alloc->flags & FLAG_FREE) == 0)
                 continue;
 
-            if (requested_pages < alloc->pageCount)
+            if (requested_pages >= alloc->pageCount)
                 continue;
             
             found_free_index = i;
@@ -249,7 +276,7 @@ void* kernel_alloc(const u64 size, void* const ptr) {
         used_alloc->physicalStart = free_alloc->physicalStart;
         used_alloc->virtualStart  = free_alloc->physicalStart;
         used_alloc->pageCount     = requested_pages;
-        used_alloc->flags         = FLAG_USED;
+        used_alloc->flags         = FLAG_USED | FLAG_VIRTUALLY_MAPPED;
 
         free_alloc->pageCount     -= requested_pages;
         free_alloc->physicalStart += requested_pages;
@@ -264,8 +291,19 @@ void* kernel_alloc(const u64 size, void* const ptr) {
         void* const new_ptr    = (void*)(used_alloc->virtualStart * PAGE_SIZE);
         const u64 aligned_size = ((size + PAGE_SIZE-1) / PAGE_SIZE) * PAGE_SIZE;
 
+        // Safe to assume regions/pages from UEFI is mapped mostly?
+        // Otherwise we need this:
+        // for (int i = 0; i < requested_pages; i++) {
+        //     void* addr = (char*)new_ptr + i * PAGE_SIZE;
+        //     bool yes = map_page(addr, addr);
+        //     if (!yes) {
+        //         // Bug in kernel if this doesn't work
+        //         return NULL;
+        //     }
+        // }
+
         // Always initialize memory. Malicious program should not be able to read freed memory from other programs.
-        memset(new_ptr, 0xDC, aligned_size);
+        memset(new_ptr, 0x9D, aligned_size);
 
         return new_ptr;
     }
@@ -362,3 +400,62 @@ void kernel_compress_regions() {
 }
 
 
+
+
+void* kerneL_alloc_phys_pages(u64 requested_pages) {
+    if (requested_pages <= 0)
+        return NULL;
+
+    int found_free_index = -1;
+    for (int i = 0; i < g_num_free_regions; i++) {
+        Region* alloc = &g_free_regions[i];
+        if ((alloc->flags & FLAG_FREE) == 0)
+            continue;
+
+        if (requested_pages < alloc->pageCount)
+            continue;
+        
+        found_free_index = i;
+        break;
+    }
+
+    if (found_free_index == -1) {
+        return NULL;
+    }
+
+    int found_used_index = -1;
+    for (int i = 0; i < g_num_used_regions + 1; i++) {
+        Region* alloc = &g_used_regions[i];
+        if ((alloc->flags & FLAG_USED) != 0)
+            continue;
+
+        found_used_index = i;
+        break;
+    }
+
+    if (found_used_index == -1) {
+        return NULL;
+    }
+
+    Region* free_alloc = &g_free_regions[found_free_index];
+    Region* used_alloc = &g_used_regions[found_used_index];
+
+    // TODO: Describe that this region isn't memory mapped
+    used_alloc->physicalStart = free_alloc->physicalStart;
+    used_alloc->virtualStart  = 0;
+    used_alloc->pageCount     = requested_pages;
+    used_alloc->flags         = FLAG_USED;
+
+    free_alloc->pageCount     -= requested_pages;
+    free_alloc->physicalStart += requested_pages;
+    if (free_alloc->pageCount == 0) {
+        free_alloc->flags = 0; // clear region
+    }
+
+    if (found_used_index >= g_num_used_regions) {
+        g_num_used_regions = found_used_index + 1;
+    }
+
+    void* new_ptr = (void*)(used_alloc->physicalStart * PAGE_SIZE);
+    return new_ptr;
+}

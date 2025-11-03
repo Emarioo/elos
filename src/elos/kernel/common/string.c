@@ -1,9 +1,9 @@
 #include "elos/kernel/common/string.h"
 #include "elos/kernel/common/types.h"
 
-#include "stdarg.h"
+#include <stdarg.h>
 
-static int parse_int(char* buffer, int size, int value) {
+static int output_int(char* buffer, int size, int value) {
     if (!buffer || !size)
         return 0;
 
@@ -47,7 +47,46 @@ static int parse_int(char* buffer, int size, int value) {
     #undef CHECK
 }
 
-int vsnprintf(char* buffer, int size, char* format, va_list va) {
+static int output_hex(char* buffer, int size, u32 value, int width) {
+    if (!buffer || !size)
+        return 0;
+
+    int head = 0;
+    u32 acc = value;
+
+    #define CHECK if (head-1 >= size) { buffer[head] = '\0'; return head; }
+
+    CHECK
+
+    int digits = 0;
+    do {
+        acc = acc / 16;
+        digits++;
+    } while (acc);
+    
+    for (int i = 0; i < width - digits; i++) {
+        buffer[head] = '0';
+        head++;
+        CHECK
+    }
+
+    acc = value;
+    
+    do {
+        u32 val = (acc % 16);
+        buffer[head+digits-1] = val < 10 ? val + '0' : val - 10 + 'a';
+        digits-=2;
+        head++;
+        CHECK
+        acc = acc / 16;
+    } while (acc);
+
+    buffer[head] = '\0';
+    return head;
+    #undef CHECK
+}
+
+int vsnprintf(char* buffer, int size, const char* format, va_list va) {
     if(!buffer || !size)
         return 0;
 
@@ -67,6 +106,15 @@ int vsnprintf(char* buffer, int size, char* format, va_list va) {
             continue;
         }
         i++;
+        if (i >= format_len)
+            break;        
+
+        int width = 0;
+
+        if (format[i] >= '0' && format[i] <= '9') {
+            width = format[i] - '0';
+            i++;
+        }
 
         if (i >= format_len)
             break;
@@ -75,7 +123,7 @@ int vsnprintf(char* buffer, int size, char* format, va_list va) {
             i++;
 
             int value = va_arg(va, int);
-            int len = parse_int(buffer + head, size - head, value);
+            int len = output_int(buffer + head, size - head, value);
             head += len;
             CHECK
         } else if (format[i] == 'c') {
@@ -84,6 +132,30 @@ int vsnprintf(char* buffer, int size, char* format, va_list va) {
             char value = va_arg(va, int);
             buffer[head] = value;
             head += 1;
+            CHECK
+        } else if (format[i] == 'x') {
+            i++;
+
+            int value = va_arg(va, int);
+
+            // if (width > 0) {
+            //     int num_leading_zero_bits;
+
+            //     // asm("lzcnt %1, %0"
+            //     //     : "=r"(num_leading_zero_bits)
+            //     //     : "r"(value));
+                
+            //     int padding = width > (32-num_leading_zero_bits) / 4 ? width - (32-num_leading_zero_bits) / 4 : 0;
+
+            //     for (int i = 0; i < padding; i++) {
+            //         buffer[head] = '0';
+            //         head++;
+            //         CHECK
+            //     }
+            // }
+
+            int len = output_hex(buffer + head, size - head, value, width);
+            head += len;
             CHECK
         } else if (format[i] == 's') {
             i++;
@@ -106,7 +178,7 @@ int vsnprintf(char* buffer, int size, char* format, va_list va) {
     return head;
 }
 
-int snprintf(char* buffer, int size, char* format, ...) {
+int snprintf(char* buffer, int size, const char* format, ...) {
     va_list va;
     va_start(va, format);
     const int res = vsnprintf(buffer, size, format, va);

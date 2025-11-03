@@ -5,7 +5,7 @@ c
 set $base = *(unsigned long long*)0x10008
 add-symbol-file bin/elos.elf -o $base
 b catch_bad_status
-b draw_glyphs_from_text_bcolor
-b psf.c:245
+b kernel_bug
+b ata_read_sector
 c
 la src
