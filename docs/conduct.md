@@ -19,8 +19,11 @@
 
 
 # Markers
-- `@NOTTESTED` Code was written but not tested.
-- `@TODO` Should be fixes in the future.
+- `@NOTTESTED` Code was written but not tested (rarely used but may when laying out a foundation for a module/API).
+- `@TODO` Should be fixed in the future.
 - `@NOTE` Extra information
 - `@IMPORTANT` Essential information when programming. Read this before adding or modifying code near this marker.
-- `@nocheckin` Left in code that is unfinished. They should be resolved before commiting work.
+- `@NOCHECKIN` Left in code that is unfinished. They should be resolved before committing work.
+
+## Markers related to specific work
+- `@USER_MODE` Implement when adding user programs.

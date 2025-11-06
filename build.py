@@ -8,7 +8,7 @@ The following tools/binaries exist:
 
 '''
 
-import os, sys, platform, shutil, shlex
+import os, sys, platform, shutil, shlex, glob, math
 from dataclasses import dataclass
 
 # TODO: Linux
@@ -142,7 +142,7 @@ def build_elos(output: str):
 
     # cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/setup.o bin/elos/bootloader.o -o bin/elos.elf")
 
-    build_bitmap()
+    # build_bitmap()
 
 
     ##############
@@ -151,7 +151,7 @@ def build_elos(output: str):
     INT_DIR     = "bin/int"
     INC_EFI_DIR = "extern/efi"
     shutil.rmtree(output)
-    os.makedirs(f"{output}/EFI/BOOT", exist_ok=True)
+    # os.makedirs(f"{output}/EFI/BOOT", exist_ok=True)
     os.makedirs(INT_DIR, exist_ok=True)
 
     CC = "x86_64-w64-mingw32-gcc"
@@ -181,18 +181,22 @@ def build_elos(output: str):
     CFLAGS += f" -Wno-multichar"
     CFLAGS += f" -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable"
 
+    # TODO: Multiple threads
     for s,o in zip(sources,objects):
         cmd(f"{CC} {CFLAGS} -c -o {o} {s}")
 
     OBJS = " ".join(objects)
 
-    cmd(f"{LD} -nostdlib --dll --image-base=0  -shared --subsystem 10 -e efi_main -o {output}/EFI/BOOT/BOOTX64.EFI {OBJS}")
-    shutil.copy(f"{output}/EFI/BOOT/BOOTX64.EFI", "bin/elos.elf")
+    EFI_PATH = "bin/bootx64.efi"
+
+    cmd(f"{LD} -nostdlib --dll --image-base=0  -shared --subsystem 10 -e efi_main -o {EFI_PATH} {OBJS}")
+    # cmd(f"{LD} -nostdlib --dll --image-base=0  -shared --subsystem 10 -e efi_main -o {output}/EFI/BOOT/BOOTX64.EFI {OBJS}")
+    shutil.copy(EFI_PATH, "bin/elos.elf")
     cmd(f"objcopy --only-keep-debug bin/elos.elf")
 
-    os.makedirs(f"{output}/RES", exist_ok=True)
-    shutil.copy(f"res/PixelOperator.ttf", f"{output}/RES/PIXELOP.TTF")
-    shutil.copy(f"res/Lat2-Terminus16.psf", f"{output}/RES/STDFONT.PSF")
+    # os.makedirs(f"{output}/RES", exist_ok=True)
+    # shutil.copy(f"res/PixelOperator.ttf", f"{output}/RES/PIXELOP.TTF")
+    # shutil.copy(f"res/Lat2-Terminus16.psf", f"{output}/RES/STDFONT.PSF")
     # shutil.copy(f"res/PixelOperator.ttf", f"{output}/PIXELOP.TTF")
     # shutil.copy(f"res/PixelOperator.ttf", f"{output}/RES/PIXELOP.TTF")
 
@@ -214,6 +218,64 @@ def build_elos(output: str):
     # cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/bootloader.o bin/elos/setup.o -o bin/elos.elf")
     # cmd(f"objcopy -O binary bin/elos.elf {output}")
 
+# Returns size in kb
+def build_fat(FAT_PATH):
+
+    INT_DIR = "bin/image"
+    
+    # Collect dependencies
+    DEPS_SPEC: list[tuple[str,str]] = [
+        ("res/Lat2-Terminus16.psf", "RES/STDFONT.PSF"),
+        ("bin/bootx64.efi", "EFI/BOOT/BOOTX64.EFI"),
+    ]
+
+    DEPS = []
+    for d in DEPS_SPEC:
+        if d[0].find("*") == -1:
+            # File
+            os.makedirs(os.path.dirname(d[1]), exist_ok=True)
+            DEPS.append(d)
+        else:
+            # Wild card directory
+            for f in glob.glob(d[0], recursive=True):
+                outf = os.path.join(d[1], os.path.basename(f))
+                os.makedirs(d[1], exist_ok=True)
+                DEPS.append((f, outf))
+
+    # Compute file size
+    totalSize = 0
+    for src, dst in DEPS:
+        totalSize += os.path.getsize(src)
+
+    fatSize_kb = math.ceil(math.ceil(totalSize * 1.25) / 1024 / 1024) * 1024
+    if fatSize_kb < 4096:
+        fatSize_kb = 4096
+
+    print(totalSize, fatSize_kb)
+
+    # Format FAT image
+    cmd(f"dd if=/dev/zero of={FAT_PATH} bs=1k count={fatSize_kb} conv=fsync")
+    cmd(f"mformat -i {FAT_PATH} ::")
+    # cmd(f"mformat -i {FAT_PATH} -f {fatSize_kb} ::") # -f with floppy image size calculation
+
+    # Copy files
+    for src, dst in DEPS:
+        assert dst[0] != '/', f"{src} -> {dst}"
+        
+        split = os.path.dirname(dst).split("/")
+        acc = ""
+        for s in split:
+            acc = os.path.join(acc, s)
+            cmd(f"mmd -D o -i {FAT_PATH} ::/{acc}")
+
+        cmd(f"mcopy -D o -i {FAT_PATH} {src} ::/{dst}")
+
+        int_dst = os.path.join(INT_DIR, dst)
+        os.makedirs(os.path.dirname(int_dst), exist_ok=True)
+        shutil.copy(src, int_dst)
+
+    return fatSize_kb
+
 def build_image(os_dir, img_path):
     # FLAGS = "-g -Iinclude -Isrc -Wno-builtin-declaration-mismatch"
     # SRC = "src/fs/fat.c src/tools/make_fat.c src/tools/create_image.c"
@@ -225,32 +287,43 @@ def build_image(os_dir, img_path):
 
     FAT_PATH = "bin/int/fat.img"
 
-    # TODO: Auto pick files to include and reuse image for ISO
 
-    # TODO: Dynamically increase size (currently 1.4M)
-    cmd(f"dd if=/dev/zero of={FAT_PATH} bs=1k count=1440 conv=fsync")
-    cmd(f"mformat -i {FAT_PATH} -f 1440 ::")
-    cmd(f"mmd -i {FAT_PATH} ::/EFI")
-    cmd(f"mmd -i {FAT_PATH} ::/EFI/BOOT")
-    cmd(f"mmd -i {FAT_PATH} ::/RES")
-    cmd(f"mcopy -i {FAT_PATH} {os_dir}/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT/")
-    cmd(f"mcopy -i {FAT_PATH} {os_dir}/RES/PIXELOP.TTF ::/RES/")
-    cmd(f"mcopy -i {FAT_PATH} {os_dir}/RES/STDFONT.PSF ::/RES/")
-    cmd(f"mkgpt -o {img_path} --image-size 4096 --part {FAT_PATH} --type system")
+    # cmd(f"dd if=/dev/zero of={FAT_PATH} bs=1k count=1440 conv=fsync")
+    # cmd(f"mformat -i {FAT_PATH} -f 1440 ::")
+    # cmd(f"mmd -i {FAT_PATH} ::/EFI")
+    # cmd(f"mmd -i {FAT_PATH} ::/EFI/BOOT")
+    # cmd(f"mmd -i {FAT_PATH} ::/RES")
+    # cmd(f"mcopy -i {FAT_PATH} {os_dir}/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT/")
+    # cmd(f"mcopy -i {FAT_PATH} {os_dir}/RES/PIXELOP.TTF ::/RES/")
+    # cmd(f"mcopy -i {FAT_PATH} {os_dir}/RES/STDFONT.PSF ::/RES/")
+    # cmd(f"mkgpt -o {img_path} --image-size 4096 --part {FAT_PATH} --type system")
+
+    size_kb = build_fat(FAT_PATH) + 8192
+    cmd(f"mkgpt -o {img_path} --image-size {size_kb} --part {FAT_PATH} --type system")
 
 def build_iso(os_dir, path):
     # assert False, "is this code up to date with build_image, missing some fonts or other files maybe?"
     FAT_PATH = "bin/int/fat.img"
-    cmd(f"dd if=/dev/zero of={FAT_PATH} bs=1k count=1440 conv=fsync")
-    cmd(f"mformat -i {FAT_PATH} -f 1440 ::")
-    cmd(f"mmd -i {FAT_PATH} ::/EFI")
-    cmd(f"mmd -i {FAT_PATH} ::/EFI/BOOT")
-    cmd(f"mmd -i {FAT_PATH} ::/RES")
-    cmd(f"mcopy -i {FAT_PATH} {os_dir}/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT/")
-    cmd(f"mcopy -i {FAT_PATH} {os_dir}/RES/PIXELOP.TTF ::/RES/")
-    cmd(f"mcopy -i {FAT_PATH} {os_dir}/RES/STDFONT.PSF ::/RES/")
-    shutil.copy(FAT_PATH, f"{os_dir}/fat.img")
-    cmd(f"xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o {path} {os_dir}")
+    # cmd(f"dd if=/dev/zero of={FAT_PATH} bs=1k count=1440 conv=fsync")
+    # cmd(f"mformat -i {FAT_PATH} -f 1440 ::")
+    # cmd(f"mmd -i {FAT_PATH} ::/EFI")
+    # cmd(f"mmd -i {FAT_PATH} ::/EFI/BOOT")
+    # cmd(f"mmd -i {FAT_PATH} ::/RES")
+    # cmd(f"mcopy -i {FAT_PATH} {os_dir}/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT/")
+    # cmd(f"mcopy -i {FAT_PATH} {os_dir}/RES/PIXELOP.TTF ::/RES/")
+    # cmd(f"mcopy -i {FAT_PATH} {os_dir}/RES/STDFONT.PSF ::/RES/")
+    # shutil.copy(FAT_PATH, f"{os_dir}/fat.img")
+    # cmd(f"xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o {path} {os_dir}")
+
+    print("WARNING: iso in Virtual Box is not working at the moment")
+
+    INT_DIR = "bin/image"
+    size_kb = build_fat(FAT_PATH)
+    cmd(f"xorriso -as mkisofs -R -f -o {path} {INT_DIR}")
+
+    # cmd(f"xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o {path} {os_dir}")
+
+    # cmd(f"mkgpt -o {img_path} --image-size {size_kb} --part {FAT_PATH} --type system")
 
 def build_bitmap():
     cmd("gcc -o bin/create_bitmap src/tools/create_bitmap.c -Iinclude/vendor -lm")

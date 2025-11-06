@@ -44,10 +44,10 @@ int ata_wait_drq() {
             return 0;
         }
 
-        // if (attempts <= 0) {
-        //     printf("ata_wait_drq: To many attempts, status: %d\n", (int) status);
-        //     return -1;
-        // }
+        if (attempts <= 0) {
+            printf("ata_wait_drq: To many attempts, status: %d\n", (int) status);
+            return -1;
+        }
 
         attempts--;
     }
@@ -57,7 +57,7 @@ int ata_wait_drq() {
 void ata_soft_reset() {
     outb(IO_PRIMARY_CONTROL, 0x4); // SRST
     sleep_ns(5000); // 5 us
-    outb(IO_PRIMARY_CONTROL, 0x2);
+    outb(IO_PRIMARY_CONTROL, 0);
 }
 
 enum Okay {
@@ -77,8 +77,6 @@ int detect_devtype ()
 	unsigned cl=inb(IO_PRIMARY_BASE + 4);	/* get the "signature bytes" */
 	unsigned ch=inb(IO_PRIMARY_BASE + 5);
 
-    outb(IO_PRIMARY_CONTROL, 0x2);
-
 	/* differentiate ATA, ATAPI, SATA and SATAPI */
 	if (cl==0x14 && ch==0xEB) return ATADEV_PATAPI;
 	if (cl==0x69 && ch==0x96) return ATADEV_SATAPI;
@@ -91,11 +89,12 @@ void init_pata() {
     // https://wiki.osdev.org/ATA_PIO_Mode
     printf("Initializing PATA\n");
     
+    u16 identify_data[256];
+
     int dev = detect_devtype();
     printf("Device type %d\n", dev);
 
     outb(IO_PRIMARY_BASE + 6, device0);
-    // outb(IO_PRIMARY_BASE + 6, 0xB0);
     outb(IO_PRIMARY_BASE + 2, 0); // sector count
     outb(IO_PRIMARY_BASE + 3, 0); // LBA low
     outb(IO_PRIMARY_BASE + 4, 0); // LBA mid
@@ -103,11 +102,8 @@ void init_pata() {
     outb(IO_PRIMARY_BASE + 7, 0xEC); // identify command
     
     u8 status = inb(IO_PRIMARY_BASE + 7);
-    printf("Status: %d\n", (int)status);
-
-    u8 drive_address = inb(IO_PRIMARY_CONTROL+1);
     
-    printf("Drive address: %d\n", (int)drive_address);
+    printf("Status: %d\n", (int)status);
     
     if (!status) {
         printf("No device0 from primary bus\n");
@@ -142,10 +138,25 @@ void init_pata() {
             break;
         }
     }
+
+    u16* ptr = (u16*)identify_data;
+    int count = 256;
+    asm (
+        "mov $0, %%eax\n"
+        "mov %%eax, %%es\n"
+        "rep insw\n"
+        : "+D" (ptr), "+c" (count)
+        : "d" (IO_PRIMARY_BASE)
+        : "memory", "eax"
+    );
+
+    printf("48bit mode: %d\n", (int) (identify_data[83] >> 10) & 1);
+    printf("28bit max lba: %d\n", (int) *(u32*)&identify_data[60]);
+    printf("48bit max lba: %d\n", (int) *(u64*)&identify_data[100]);
 }
 
 
-int ata_read_sector(void* buffer, u32 lba) {
+int ata_read_sectors(void* buffer, u64 lba, u64 sectors) {
     // Assumes device is ready to be read
 
     int attempts = 0;
@@ -164,27 +175,11 @@ start:
     }
     
     outb(IO_PRIMARY_BASE + 6, 0xE0 | ((lba >> 24) & 0x0F)); // drive + LBA bits 24–27
-    // outb(IO_PRIMARY_BASE + 6, 0xF0 | ((lba >> 24) & 0x0F)); // drive + LBA bits 24–27
     outb(IO_PRIMARY_BASE + 1, 0);
     outb(IO_PRIMARY_BASE + 2, 1); // sector count
     outb(IO_PRIMARY_BASE + 3, lba & 0xFF);
     outb(IO_PRIMARY_BASE + 4, (lba >> 8) & 0xFF);
     outb(IO_PRIMARY_BASE + 5, (lba >> 16) & 0xFF);
-    
-    // int val0 = inb(IO_PRIMARY_BASE + 6);
-    // int val1 = inb(IO_PRIMARY_BASE + 1);
-    // int val2 = inb(IO_PRIMARY_BASE + 2);
-    // int val3 = inb(IO_PRIMARY_BASE + 3);
-    // int val4 = inb(IO_PRIMARY_BASE + 4);
-    // int val5 = inb(IO_PRIMARY_BASE + 5);
-    
-    // printf("Val0: %d\n", (int)val0);
-    // printf("Val1: %d\n", (int)val1);
-    // printf("Val2: %d\n", (int)val2);
-    // printf("Val3: %d\n", (int)val3);
-    // printf("Val4: %d\n", (int)val4);
-    // printf("Val5: %d\n", (int)val5);
-
     outb(IO_PRIMARY_BASE + 7, 0x20); // READ SECTORS command
     
     status = ata_wait_bsy();
@@ -220,7 +215,7 @@ start:
     return 0;
 }
 
-int ata_write_sector(void* buffer, u32 lba) {
+int ata_write_sectors(void* buffer, u64 lba, u64 sectors) {
     // Assumes device is ready to be read
 
     int status = ata_wait_bsy();

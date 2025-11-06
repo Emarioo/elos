@@ -19,9 +19,9 @@ which is why you need Linux or Windows Subsystem for Linux for this project.
 - Rufus on windows. It can blit ISO to USB drive.
 - `dd` command on Linux where you blit the raw image file to USB drive.
 
-
-For testing
-- 
+**EFI headers**
+You need to copy them into `elos-repo/extern/efi`.
+You can find them on linux system in `/usr/include/efi`
 
 
 # Building and running
@@ -45,6 +45,8 @@ gdb-multiarch scripts/gdb.txt
 - `src/c` standard library used in ELOS
 - `src/fs` file system implementation, used by `tools` and `elos`
 - `src/tools` tools for creating kernel images, testing and what not
+- `res` resources of type texture and font.
+- `image` content for the OS image and ISO, text files, textures, fonts currently included.
 - `tests` has tests
 - `scripts` useful developer scripts, like gdb qemu commands
 

@@ -5,6 +5,8 @@
 #include "elos/kernel/common/intrinsics.h"
 #include "elos/kernel/debug/debug.h"
 
+#include "elos/kernel/driver/pata.h"
+
 typedef enum PCI_ClassCode {
     PCI_CLASSCODE__UNCLASSIFIED = 0x0,
     PCI_CLASSCODE__MASS_STORAGE_CONTROLLER = 0x1,
@@ -237,7 +239,7 @@ typedef struct PCI_ConfigSpace {
             u8  interrupt_pin;
             u8  min_grant;
             u8  max_latency;
-        } ht0;
+        } header0;
         
         // Header Type 0x1 (PCI-to-PCI bridge)
         struct {
@@ -264,12 +266,12 @@ typedef struct PCI_ConfigSpace {
             u16 bridge_control;
             u8  interrupt_pin;
             u8  interrupt_line;
-        } ht1;
+        } header1;
 
           // Header Type 0x2 (PCI-to-CardBus bridge)
-          struct {
-            u32 cardbus_socket_exca_base_address;
-        } ht2;
+        //   struct {
+        //     u32 cardbus_socket_exca_base_address;
+        // } header2;
     };
 } PCI_ConfigSpace;
 
@@ -333,13 +335,40 @@ void trace_config_space(PCI_ConfigSpace* config) {
     serial_printf("%s", buffer);
 }
 
-void pci_checkFunction(int bus, int device, int function) {
+u8 pci_readHeaderType(int bus, int device, int function) {
+    return 0xFF & pciConfig_readw(bus, device, function, 14);
+}
+u16 pci_readVendorID(int bus, int device, int function) {
+    return pciConfig_readw(bus, device, function, 2);
+}
+
+void pci_scan_bus(int bus);
+
+void pci_scan_function(int bus, int device, int function) {
     PCI_ConfigSpace config = {};
     pci_read_config_space(&config, bus, device, function);
     trace_config_space(&config);
+
+    if ((config.headerType & 0x7F) == 1 && config.classCode == PCI_CLASSCODE__BRIDGE_CONTROLLER && config.subclass == PCI_SUBCLASS__PCI_TO_PCI_BRIDGE) {
+        pci_scan_bus(config.header1.secondary_bus_number);
+    } else {
+        switch (config.classCode) {
+            case PCI_CLASSCODE__MASS_STORAGE_CONTROLLER: {
+                if (config.subclass == PCI_SUBCLASS__IDE_CONTROLLER) {
+                    // for each drive and bus we create a device if we can communicate with it
+
+                    // If we did a scan previously then we want to update the devices we already made instead of
+                    // overwriting or creating new ones.
+                }
+            } break;
+            default: {
+
+            } break;
+        }
+    }
 }
 
-void pci_checkDevice(int bus, int device) {
+void pci_scan_device(int bus, int device) {
     int function = 0;
     int vendor, headerType;
 
@@ -347,7 +376,7 @@ void pci_checkDevice(int bus, int device) {
     if (vendor == 0xFFFF)
         return;
     
-    pci_checkFunction(bus, device, function);
+    pci_scan_function(bus, device, function);
     
     headerType = 0xFF & pciConfig_readw(bus, device, function, 14);
     
@@ -360,22 +389,26 @@ void pci_checkDevice(int bus, int device) {
         if (vendor == 0xFFFF)
             continue;
         
-        pci_checkFunction(bus, device, function);
+        pci_scan_function(bus, device, function);
     }
 }
 
-void pci_check_buses() {
-    int bus, device;
-    for (bus = 0; bus < 256; bus++) {
-        for (device = 0; device < 32; device++) {
-            pci_checkDevice(bus, device);
+void pci_scan_bus(int bus) {
+    for (int dev=0;dev<32;dev++) {
+        pci_scan_device(bus, dev);
+    }
+}
+
+void pci_scan_buses() {
+
+    int header = pci_readHeaderType(0, 0, 0);
+    if ((header & 80) == 0) {
+        pci_scan_bus(0);
+    } else {
+        for (int function=0;function<8;function++) {
+            int vendor = pci_readVendorID(0, 0, function);
+            if (vendor == 0xFFFF) continue;
+            pci_scan_bus(function);
         }
     }
-}
-
-void init_pci() {
-    pci_check_buses();
-
-
-
 }
