@@ -6,6 +6,6 @@ set $base = *(unsigned long long*)0x10008
 add-symbol-file bin/elos.elf -o $base
 b catch_bad_status
 b kernel_bug
-b init_pata
+b load_font
 c
 la src

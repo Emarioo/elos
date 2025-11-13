@@ -27,8 +27,8 @@
 #include <stdbool.h>
 
 
-typedef int (*read_sectors_fn) (const void* buffer, uint64_t lba, uint64_t count, void* user_data);
-typedef int (*write_sectors_fn)(const void* buffer, uint64_t lba, uint64_t count, void* user_data);
+typedef int (*gpt__read_sectors_fn) (void* buffer, uint64_t lba, uint64_t count, void* user_data);
+typedef int (*gpt__write_sectors_fn)(const void* buffer, uint64_t lba, uint64_t count, void* user_data);
 
 
 typedef struct gpt__GUID {
@@ -39,10 +39,12 @@ typedef struct gpt__GUID {
     uint8_t  data4[6];
 } gpt__GUID;
 
+
+
 typedef struct gpt__Context {
     // Input parameters
-    read_sectors_fn read_sectors;
-    write_sectors_fn write_sectors;
+    gpt__read_sectors_fn read_sectors;
+    gpt__write_sectors_fn write_sectors;
     void* user_data;
     char* working_memory;
     int working_memory_len;
@@ -51,6 +53,8 @@ typedef struct gpt__Context {
     // Modified by API functions
     int working_memory_head; // Should be initialized to zero 
 } gpt__Context;
+
+
 
 // Look up implementation for what the errors mean.
 typedef enum gpt__Error {
@@ -72,11 +76,26 @@ typedef enum gpt__Error {
     gpt__ERROR_MAX,
 } gpt__Error;
 
+
+
 typedef enum gpt__PartitionFlags {
     gpt_FLAG_REQUIRED_PARTITION   = 0x1, // Can indicate important boot/recovery partition
     gpt_FLAG_NO_BLOCK_IO_PROTOCOL = 0x2, // EFI firmware should ignore this partition
     gpt_FLAG_LEGACY_BIOS_BOOTABLE = 0x3, // Not important, read UEFI GPT spec for info
 } gpt__PartitionFlags;
+
+
+
+typedef struct gpt__Partition {
+    gpt__GUID type;
+    gpt__GUID unique;
+    uint64_t start_lba;
+    uint64_t end_lba; // inclusive
+    uint64_t attributes;
+    uint16_t partition_name[36]; // UTF-16
+} gpt__Partition;
+
+
 
 /*
     Creates an empty valid GUID Partition Table.
@@ -104,12 +123,24 @@ int gpt__overwrite_header(gpt__Context* context, uint64_t total_sectors, int max
     
     @param attributes Set based on gpt__PartitionFlags
 */
-int gpt__create_partition(gpt__Context* context, gpt__GUID* type_guid, gpt__GUID* unique_guid, uint64_t start_lba, uint64_t end_lba, const char* name, uint64_t attributes);
+int gpt__create_partition(gpt__Context* context, const gpt__GUID* type_guid, const gpt__GUID* unique_guid, uint64_t start_lba, uint64_t end_lba, const char* name, uint64_t attributes);
+
+
+
+/*
+    Copies memory. Not ideal? maybe fine?
+*/
+int gpt__get_partition_by_index(gpt__Context* context, int index, gpt__Partition* out_partition);
+
+
 
 /*
     The uniqueness is questionable.
 */
 void gpt__generate_unique_guid(gpt__GUID* out_guid);
+
+
+
 
 
 extern const gpt__GUID gpt__GUID_EMPTY;
@@ -121,14 +152,14 @@ const gpt__GUID gpt__GUID_EMPTY = { 0 };
 const gpt__GUID gpt__GUID_EFI_SYSTEM_PARTITION = { 0x28732AC1, 0x1FF8, 0xD211, 0x4BBA, { 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B } }; // C12A7328-F81F-11D2-BA4B-00A0C93EC93B
 
 
-static void gpt__memzero(uint64_t* addr, int size) {
+static void gpt__memzero(void* addr, int size) {
     for(int i=0;i<size/8;i++) {
-        addr[i] = 0;
+        ((uint64_t*)addr)[i] = 0;
     }
 }
-static void gpt__memcpy(uint32_t* dst, uint32_t* src, int size) {
+static void gpt__memcpy(void* dst, const void* src, int size) {
     for(int i=0;i<size/4;i++) {
-        dst[i] = src[i];
+        ((uint32_t*)dst)[i] = ((uint32_t*)src)[i];
     }
 }
 static int gpt__strlen(const char* str) {
@@ -156,14 +187,6 @@ typedef struct gpt__Header {
     uint32_t  entries_crc32;
 } gpt__Header;
 
-typedef struct gpt__Partition {
-    gpt__GUID type;
-    gpt__GUID unique;
-    uint64_t start_lba;
-    uint64_t end_lba;
-    uint64_t attributes;
-    uint16_t partition_name[36]; // UTF-16
-} gpt__Partition;
 
 int gpt__compute_crc32(gpt__Context* context);
 
@@ -181,14 +204,9 @@ int gpt__overwrite_header(gpt__Context* context, uint64_t total_sectors, int max
         return gpt__ERROR_MISSING_WORKING_MEMORY;
     if (context->working_memory_len < 0x10000) // 64 KiB
         return gpt__ERROR_TOO_SMALL_WORKING_MEMORY;
-    if (context->working_memory_head)
-        return gpt__ERROR_WORKING_MEMORY_HEAD_IS_NON_ZERO;
+    context->working_memory_head = 0;
     
-    int num_ones=0;
-    for(int i=0;i<32;i++)
-        num_ones += (context->sector_size>>i) & 1;
-
-    if (context->sector_size < 512 || num_ones != 1)
+    if (context->sector_size < 512 || (context->sector_size & (context->sector_size - 1)) != 0)
         return gpt__ERROR_INVALD_SECTOR_SIZE;
 
     const int MIN_BYTES_PARTITION_ARRAY = 16384; // Specified by UEFI
@@ -267,16 +285,18 @@ int gpt__overwrite_header(gpt__Context* context, uint64_t total_sectors, int max
     if (res)
         return res;
 
+    context->working_memory_head = 0;
+
     return gpt__ERROR_SUCCESS;
 }
 
 
-int gpt__create_partition(gpt__Context* context, gpt__GUID* type_guid, gpt__GUID* unique_guid, uint64_t start_lba, uint64_t end_lba, const char* name, uint64_t flags) {
+int gpt__create_partition(gpt__Context* context, const gpt__GUID* type_guid, const gpt__GUID* unique_guid, uint64_t start_lba, uint64_t end_lba, const char* name, uint64_t flags) {
     int res;
 
     int name_len = gpt__strlen(name);
 
-    if(name)
+    if(!name)
         return gpt__ERROR_MISSING_NAME;
     if(name_len >= 36)
         return gpt__ERROR_TOO_LONG_NAME;
@@ -287,9 +307,9 @@ int gpt__create_partition(gpt__Context* context, gpt__GUID* type_guid, gpt__GUID
     res = context->read_sectors(header, 1, 1, context->user_data);
     if (res) return res;
 
-    if (header->first_lba <= start_lba)
+    if (start_lba < header->first_lba)
         return gpt__ERROR_LBA_RANGE_OUTSIDE_VALID_PARTITION_SPACE;
-    if (header->last_lba >= start_lba)
+    if (start_lba > header->last_lba)
         return gpt__ERROR_LBA_RANGE_OUTSIDE_VALID_PARTITION_SPACE;
 
 
@@ -298,7 +318,7 @@ int gpt__create_partition(gpt__Context* context, gpt__GUID* type_guid, gpt__GUID
     context->working_memory_head += batch_size;
 
     int batch_head = 0;
-    int array_lba_index = header->start_lba_entries;
+    int array_lba_index = 0;
     int remaining_entries = header->num_entries;
 
     gpt__Partition* partition = NULL;
@@ -315,10 +335,11 @@ int gpt__create_partition(gpt__Context* context, gpt__GUID* type_guid, gpt__GUID
         }
 
         gpt__Partition* partition = (gpt__Partition*)(batch + batch_head);
-        if (((uint64_t*)&partition->type)[0] == 0 && ((uint64_t*)&partition->type)[1]) {
+        if (((uint64_t*)&partition->type)[0] == 0 && ((uint64_t*)&partition->type)[1] == 0) {
             // empty partition
             if(!unused_partition) {
                 unused_partition = partition;
+                break;
             }
         } else {
             if (start_lba <= partition->end_lba && end_lba >= partition->start_lba) 
@@ -333,8 +354,10 @@ int gpt__create_partition(gpt__Context* context, gpt__GUID* type_guid, gpt__GUID
         }
     }
 
-    if (!partition)
+    if (!unused_partition)
         return gpt__ERROR_PARTITION_ARRAY_FULL;
+
+    partition = unused_partition;
 
     partition->type = *type_guid;
     partition->unique = *unique_guid;
@@ -342,24 +365,55 @@ int gpt__create_partition(gpt__Context* context, gpt__GUID* type_guid, gpt__GUID
     partition->end_lba = end_lba;
     partition->attributes = flags;
     gpt__memzero(&partition->partition_name, 72);
-    for (int i=0;i<name_len;i++) {
-        partition->partition_name[i] = name[i];
-    }
+    gpt__memcpy(partition->partition_name, name, name_len);
 
-    context->write_sectors(batch, header->start_lba_entries + array_lba_index, batch_size / context->sector_size, context->user_data);
+    res = context->write_sectors(batch, header->start_lba_entries + array_lba_index, batch_size / context->sector_size, context->user_data);
+    if (res) return res;
 
     // While we might not need to read the backup to get the backup partition entry array,
     // it might be best to do so just to be sure.
     gpt__Header* alt_header = (gpt__Header*)((char*)context->working_memory + context->working_memory_head);
     context->working_memory_head += context->sector_size;
-    res = context->read_sectors(alt_header, 1, 1, context->user_data);
+    res = context->read_sectors(alt_header, header->backup_lba, 1, context->user_data);
     if (res) return res;
 
-    context->write_sectors(batch, alt_header->start_lba_entries + array_lba_index, batch_size / context->sector_size, context->user_data);
-
+    res = context->write_sectors(batch, alt_header->start_lba_entries + array_lba_index, batch_size / context->sector_size, context->user_data);
+    if (res) return res;
 
     res = gpt__compute_crc32(context);
     if (res) return res;
+
+    context->working_memory_head = 0;
+
+    return gpt__ERROR_SUCCESS;
+}
+
+
+int gpt__get_partition_by_index(gpt__Context* context, int index, gpt__Partition* out_partition) {
+    int res;
+
+    gpt__Header* header = (gpt__Header*)((char*)context->working_memory + context->working_memory_head);
+    context->working_memory_head += context->sector_size;
+    res = context->read_sectors(header, 1, 1, context->user_data);
+    if (res) return res;
+
+    // @TODO Verify GPT header
+
+    char* temp_sector = (char*)context->working_memory + context->working_memory_head;
+    context->working_memory_head += context->sector_size;
+
+    int array_lba_index = header->start_lba_entries;
+
+    int sector_offset = header->start_lba_entries + (index * sizeof(gpt__Partition)) / context->sector_size;
+    int part_index    = index % (context->sector_size / sizeof(gpt__Partition));
+
+    // @TODO Check that sector index is less than
+    res = context->read_sectors(temp_sector, sector_offset, 1, context->user_data);
+    if (res) return res;
+
+    gpt__Partition* partition = (gpt__Partition*)temp_sector + part_index;
+
+    gpt__memcpy(out_partition, partition, sizeof(gpt__Partition));
 
     return gpt__ERROR_SUCCESS;
 }
@@ -399,12 +453,8 @@ int gpt__compute_crc32(gpt__Context* context) {
         return gpt__ERROR_TOO_SMALL_WORKING_MEMORY;
     if (context->working_memory_len < 0x10000) // 64 KiB
         return gpt__ERROR_TOO_SMALL_WORKING_MEMORY;
-    
-    int num_ones=0;
-    for(int i=0;i<32;i++)
-        num_ones += (context->sector_size>>i) & 1;
 
-    if (context->sector_size < 512 || num_ones != 1)
+    if (context->sector_size < 512 || (context->sector_size & (context->sector_size - 1)) != 0)
         return gpt__ERROR_INVALD_SECTOR_SIZE;
 
     // When calling compute_crc32 we expect the state of GPT table to be incorrect.
@@ -415,10 +465,10 @@ int gpt__compute_crc32(gpt__Context* context) {
     // A header size larger than sector size is not a sane value.
     // @TODO: Add header sanity function, needed since we use entry_size and header_size to compute crc32
 
-    gpt__Header* header = (gpt__Header*)context->working_memory;
+    gpt__Header* header = (gpt__Header*)(context->working_memory + context->working_memory_head);
     context->working_memory_head += context->sector_size;
 
-    res = context->read_sectors(context->working_memory, 1, 1, context->user_data);
+    res = context->read_sectors(header, 1, 1, context->user_data);
     if (res) return res;
     res = gpt__compute_table_crc32(context, header);
     if(res) return res;

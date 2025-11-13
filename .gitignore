@@ -4,6 +4,7 @@ bin
 int
 logs
 out
+*.log
 
 *.out
 *.exe

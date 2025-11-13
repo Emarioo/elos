@@ -31,6 +31,7 @@ def main():
     gdb       = False
     vbox      = False
     iso       = False
+    efi       = False
 
     argi = 1
     while argi < len(sys.argv):
@@ -49,6 +50,8 @@ def main():
         elif arg == "vbox":
             run = False
             vbox = True
+        elif arg == "efi":
+            efi = True
         # elif arg == "usb":
         #     run = False
         #     usb = True
@@ -70,11 +73,17 @@ def main():
     elif iso:
         build_elos("bin/elos")
         build_iso("bin/elos", "bin/elos.iso")
+    elif efi:
+        build_create_efi()
+        cmd("bin/elos-img")
+
     # elif usb:
     #     build_elos("bin/elos")
     #     build_image("bin/elos.img")
         # cmd("dd if=bin/elos.img of=bin/elos_padded.img bs=1M count=64 conv=sync")
     else:
+        build_create_efi()
+
         build_elos("bin/elos")
         build_image("bin/elos", "bin/elos.img")
         # build_iso("bin/elos", "bin/elos.iso")
@@ -115,7 +124,6 @@ def main():
         cmd("qemu-system-x86_64 " + flags)
 
 def build_elos(output: str):
-    os.makedirs("bin", exist_ok=True)
 
     # WARN = "-fno-builtin -fno-unwind-tables -fno-exceptions -fno-asynchronous-unwind-tables -Wno-builtin-declaration-mismatch"
     # FLAGS = "-nostdlib -nostartfiles -nodefaultlibs -Iinclude"
@@ -130,7 +138,6 @@ def build_elos(output: str):
 
     # cmd(f"{LD} -T src/elos/kernel/linker.ld -s {OBJ} -o bin/elos/kernel.bin")
 
-    os.makedirs(output, exist_ok=True)
 
     # cmd(f"{AS} -g src/elos/kernel/bootloader.s -o bin/elos/bootloader.o")
     # cmd(f"{AS} -g src/elos/kernel/setup.s -o bin/elos/setup.o")
@@ -150,9 +157,11 @@ def build_elos(output: str):
     ##############
     INT_DIR     = "bin/int"
     INC_EFI_DIR = "extern/efi"
-    shutil.rmtree(output)
+    # os.remove(output)
     # os.makedirs(f"{output}/EFI/BOOT", exist_ok=True)
     os.makedirs(INT_DIR, exist_ok=True)
+    # os.makedirs(output, exist_ok=True)
+    os.makedirs("bin", exist_ok=True)
 
     CC = "x86_64-w64-mingw32-gcc"
     LD = "x86_64-w64-mingw32-ld"
@@ -174,7 +183,7 @@ def build_elos(output: str):
 
         "res/ascii_bitmap.c", # temporary
     ]
-    objects = [ f"{INT_DIR}/{os.path.basename(s)}" for s in sources ]
+    objects = [ f"{INT_DIR}/{os.path.basename(s)}".replace(".c",".o") for s in sources ]
         
     CFLAGS = f"-ggdb -ffreestanding -fno-asynchronous-unwind-tables -fno-exceptions -I{INC_EFI_DIR} -Iinclude -I{INC_EFI_DIR}/x86_64 -I{INC_EFI_DIR}/protocol -Isrc/elos/efi -Isrc"
     CFLAGS += f" -Wall -Werror -fshort-wchar -Werror=implicit-function-declaration"
@@ -225,8 +234,8 @@ def build_fat(FAT_PATH):
     
     # Collect dependencies
     DEPS_SPEC: list[tuple[str,str]] = [
-        ("res/Lat2-Terminus16.psf", "RES/STDFONT.PSF"),
         ("bin/bootx64.efi", "EFI/BOOT/BOOTX64.EFI"),
+        ("res/Lat2-Terminus16.psf", "RES/STDFONT.PSF"),
     ]
 
     DEPS = []
@@ -245,15 +254,34 @@ def build_fat(FAT_PATH):
     # Compute file size
     totalSize = 0
     for src, dst in DEPS:
-        totalSize += os.path.getsize(src)
+        s = os.path.getsize(src)
+        totalSize += s
+        print(f"{src:15} {math.ceil(s/1024)}KB")
 
     fatSize_kb = math.ceil(math.ceil(totalSize * 1.25) / 1024 / 1024) * 1024
     if fatSize_kb < 4096:
-        fatSize_kb = 4096
+        fatSize_kb = 4200
 
     print(totalSize, fatSize_kb)
 
     # Format FAT image
+    use_custom = True
+    # use_custom = False
+
+    # if use_custom:
+    if os.path.exists(FAT_PATH):
+        os.remove(FAT_PATH)
+    cmd(f"bin/elos-img --file {FAT_PATH} --fat-init {fatSize_kb}K")
+
+    # Copy files
+    for src, dst in DEPS:
+        cmd(f"bin/elos-img --file {FAT_PATH} --fat-copy-file {src} /{dst}")
+    
+        int_dst = os.path.join(INT_DIR, dst)
+        os.makedirs(os.path.dirname(int_dst), exist_ok=True)
+        shutil.copy(src, int_dst)    
+    # else:
+    FAT_PATH = FAT_PATH + "2"
     cmd(f"dd if=/dev/zero of={FAT_PATH} bs=1k count={fatSize_kb} conv=fsync")
     cmd(f"mformat -i {FAT_PATH} ::")
     # cmd(f"mformat -i {FAT_PATH} -f {fatSize_kb} ::") # -f with floppy image size calculation
@@ -326,23 +354,20 @@ def build_iso(os_dir, path):
     # cmd(f"mkgpt -o {img_path} --image-size {size_kb} --part {FAT_PATH} --type system")
 
 def build_bitmap():
-    cmd("gcc -o bin/create_bitmap src/tools/create_bitmap.c -Iinclude/vendor -lm")
+    cmd("gcc -g -o bin/create_bitmap src/tools/create_bitmap.c -Iinclude/vendor -lm")
     cmd("bin/create_bitmap")
+
+def build_create_efi():
+    os.makedirs("bin", exist_ok=True)
+    cmd("gcc -g -o bin/elos-img src/tools/create_efi.c -DELOS_DEBUG -Iinclude/vendor -Isrc -lm")
 
 def cmd(c):
     if platform.system() == "Windows":
-        strs = shlex.split(c)
-        if strs[0].startswith("./"):
-            strs[0] = strs[2:]
-        strs[0] = strs[0].replace('/', "\\")
-        c = shlex.join(strs)
+        c = c.replace('/', "\\")
     
     if VERBOSE:
         print(c, file=sys.stderr)
-    if platform.system() == "Linux":
-        err = os.system(c) >> 8
-    else:
-        err = os.system(c)
+    err = os.system(c)
     if err:
         if not VERBOSE:
             print("ERR",c)

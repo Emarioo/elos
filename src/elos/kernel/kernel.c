@@ -12,7 +12,7 @@
 #include "elos/kernel/debug/debug.h"
 #include "elos/kernel/memory/phys_allocator.h"
 #include "elos/kernel/memory/paging.h"
-#include "util/fat.h"
+#include "fs/fat.h"
 
 
 u32 make_color(u8 r, u8 g, u8 b) {
@@ -107,7 +107,7 @@ void kernel_entry() {
         sector[i] = i;
     }
 
-    int res = ata_read_sectors(sector, 36, 1);
+    int res = ata_read_sectors(sector, 1, 1);
 
 
     // ata_write_sector(sector, 0);
