@@ -23,247 +23,244 @@ Region 9, phys: 24641536, pages: 9205, virt: 0
   type EfiConventionalMemory, attr: 15
 Region 10, phys: 62345216, pages: 32, virt: 0
   type EfiBootServicesData, attr: 15
-Region 11, phys: 62476288, pages: 9891, virt: 0
+Region 11, phys: 62476288, pages: 8755, virt: 0
   type EfiConventionalMemory, attr: 15
-Region 12, phys: 102989824, pages: 63, virt: 0
+Region 12, phys: 98336768, pages: 63, virt: 0
   type EfiLoaderCode, attr: 15
-Region 13, phys: 103247872, pages: 49, virt: 0
+Region 13, phys: 98594816, pages: 51, virt: 0
   type EfiConventionalMemory, attr: 15
-Region 14, phys: 103448576, pages: 2, virt: 0
+Region 14, phys: 98803712, pages: 667, virt: 0
+  type EfiBootServicesData, attr: 15
+Region 15, phys: 101535744, pages: 2, virt: 0
   type EfiLoaderData, attr: 15
-Region 15, phys: 103456768, pages: 740, virt: 0
+Region 16, phys: 101543936, pages: 1202, virt: 0
   type EfiBootServicesData, attr: 15
-Region 16, phys: 106487808, pages: 180, virt: 0
+Region 17, phys: 106467328, pages: 180, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 17, phys: 107225088, pages: 48, virt: 0
+Region 18, phys: 107204608, pages: 48, virt: 0
   type EfiBootServicesData, attr: 15
-Region 18, phys: 107421696, pages: 225, virt: 0
+Region 19, phys: 107401216, pages: 225, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 19, phys: 108343296, pages: 101, virt: 0
+Region 20, phys: 108322816, pages: 108, virt: 0
   type EfiBootServicesData, attr: 15
-Region 20, phys: 108756992, pages: 9, virt: 0
+Region 21, phys: 108765184, pages: 9, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 21, phys: 108793856, pages: 5, virt: 0
+Region 22, phys: 108802048, pages: 5, virt: 0
   type EfiBootServicesData, attr: 15
-Region 22, phys: 108814336, pages: 32, virt: 0
+Region 23, phys: 108822528, pages: 63, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 23, phys: 108945408, pages: 2, virt: 0
+Region 24, phys: 109080576, pages: 3, virt: 0
   type EfiBootServicesData, attr: 15
-Region 24, phys: 108953600, pages: 10, virt: 0
+Region 25, phys: 109092864, pages: 3, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 25, phys: 108994560, pages: 1, virt: 0
+Region 26, phys: 109105152, pages: 7, virt: 0
   type EfiBootServicesData, attr: 15
-Region 26, phys: 108998656, pages: 8, virt: 0
+Region 27, phys: 109133824, pages: 18, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 27, phys: 109031424, pages: 1, virt: 0
+Region 28, phys: 109207552, pages: 1, virt: 0
   type EfiBootServicesData, attr: 15
-Region 28, phys: 109035520, pages: 16, virt: 0
+Region 29, phys: 109211648, pages: 3, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 29, phys: 109101056, pages: 3, virt: 0
+Region 30, phys: 109223936, pages: 5, virt: 0
   type EfiBootServicesData, attr: 15
-Region 30, phys: 109113344, pages: 3, virt: 0
+Region 31, phys: 109244416, pages: 14, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 31, phys: 109125632, pages: 7, virt: 0
+Region 32, phys: 109301760, pages: 15, virt: 0
   type EfiBootServicesData, attr: 15
-Region 32, phys: 109154304, pages: 18, virt: 0
+Region 33, phys: 109363200, pages: 11, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 33, phys: 109228032, pages: 9, virt: 0
+Region 34, phys: 109408256, pages: 11, virt: 0
   type EfiBootServicesData, attr: 15
-Region 34, phys: 109264896, pages: 14, virt: 0
+Region 35, phys: 109453312, pages: 22, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 35, phys: 109322240, pages: 15, virt: 0
+Region 36, phys: 109543424, pages: 9, virt: 0
   type EfiBootServicesData, attr: 15
-Region 36, phys: 109383680, pages: 11, virt: 0
+Region 37, phys: 109580288, pages: 36, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 37, phys: 109428736, pages: 11, virt: 0
+Region 38, phys: 109727744, pages: 3, virt: 0
   type EfiBootServicesData, attr: 15
-Region 38, phys: 109473792, pages: 22, virt: 0
+Region 39, phys: 109740032, pages: 20, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 39, phys: 109563904, pages: 9, virt: 0
+Region 40, phys: 109821952, pages: 7, virt: 0
   type EfiBootServicesData, attr: 15
-Region 40, phys: 109600768, pages: 36, virt: 0
+Region 41, phys: 109850624, pages: 6, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 41, phys: 109748224, pages: 3, virt: 0
+Region 42, phys: 109875200, pages: 3, virt: 0
   type EfiBootServicesData, attr: 15
-Region 42, phys: 109760512, pages: 20, virt: 0
+Region 43, phys: 109887488, pages: 14, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 43, phys: 109842432, pages: 7, virt: 0
+Region 44, phys: 109944832, pages: 1, virt: 0
   type EfiBootServicesData, attr: 15
-Region 44, phys: 109871104, pages: 25, virt: 0
+Region 45, phys: 109948928, pages: 11, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 45, phys: 109973504, pages: 3, virt: 0
+Region 46, phys: 109993984, pages: 2, virt: 0
   type EfiBootServicesData, attr: 15
-Region 46, phys: 109985792, pages: 6, virt: 0
+Region 47, phys: 110002176, pages: 13, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 47, phys: 110010368, pages: 2, virt: 0
+Region 48, phys: 110055424, pages: 5, virt: 0
   type EfiBootServicesData, attr: 15
-Region 48, phys: 110018560, pages: 19, virt: 0
+Region 49, phys: 110075904, pages: 13, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 49, phys: 110096384, pages: 5, virt: 0
+Region 50, phys: 110129152, pages: 3, virt: 0
   type EfiBootServicesData, attr: 15
-Region 50, phys: 110116864, pages: 22, virt: 0
+Region 51, phys: 110141440, pages: 12, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 51, phys: 110206976, pages: 2, virt: 0
+Region 52, phys: 110190592, pages: 1, virt: 0
   type EfiBootServicesData, attr: 15
-Region 52, phys: 110215168, pages: 13, virt: 0
+Region 53, phys: 110194688, pages: 3, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 53, phys: 110268416, pages: 3, virt: 0
+Region 54, phys: 110206976, pages: 2, virt: 0
   type EfiBootServicesData, attr: 15
-Region 54, phys: 110280704, pages: 6, virt: 0
+Region 55, phys: 110215168, pages: 13, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 55, phys: 110305280, pages: 2, virt: 0
+Region 56, phys: 110268416, pages: 3, virt: 0
   type EfiBootServicesData, attr: 15
-Region 56, phys: 110313472, pages: 1, virt: 0
+Region 57, phys: 110280704, pages: 1, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 57, phys: 110317568, pages: 1, virt: 0
+Region 58, phys: 110284800, pages: 3, virt: 0
   type EfiBootServicesData, attr: 15
-Region 58, phys: 110321664, pages: 5, virt: 0
+Region 59, phys: 110297088, pages: 9, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 59, phys: 110342144, pages: 5, virt: 0
+Region 60, phys: 110333952, pages: 1, virt: 0
   type EfiBootServicesData, attr: 15
-Region 60, phys: 110362624, pages: 12, virt: 0
+Region 61, phys: 110338048, pages: 2, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 61, phys: 110411776, pages: 2, virt: 0
+Region 62, phys: 110346240, pages: 2, virt: 0
   type EfiBootServicesData, attr: 15
-Region 62, phys: 110419968, pages: 29, virt: 0
+Region 63, phys: 110354432, pages: 15, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 63, phys: 110538752, pages: 1, virt: 0
+Region 64, phys: 110415872, pages: 2, virt: 0
   type EfiBootServicesData, attr: 15
-Region 64, phys: 110542848, pages: 10, virt: 0
+Region 65, phys: 110424064, pages: 29, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 65, phys: 110583808, pages: 1, virt: 0
+Region 66, phys: 110542848, pages: 1, virt: 0
   type EfiBootServicesData, attr: 15
-Region 66, phys: 110587904, pages: 1, virt: 0
+Region 67, phys: 110546944, pages: 3, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 67, phys: 110592000, pages: 2, virt: 0
+Region 68, phys: 110559232, pages: 3, virt: 0
   type EfiBootServicesData, attr: 15
-Region 68, phys: 110600192, pages: 21, virt: 0
+Region 69, phys: 110571520, pages: 5, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 69, phys: 110686208, pages: 3, virt: 0
+Region 70, phys: 110592000, pages: 3, virt: 0
   type EfiBootServicesData, attr: 15
-Region 70, phys: 110698496, pages: 2, virt: 0
+Region 71, phys: 110604288, pages: 21, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 71, phys: 110706688, pages: 2, virt: 0
+Region 72, phys: 110690304, pages: 2, virt: 0
   type EfiBootServicesData, attr: 15
-Region 72, phys: 110714880, pages: 7, virt: 0
+Region 73, phys: 110698496, pages: 2, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 73, phys: 110743552, pages: 7, virt: 0
+Region 74, phys: 110706688, pages: 3, virt: 0
   type EfiBootServicesData, attr: 15
-Region 74, phys: 110772224, pages: 4, virt: 0
+Region 75, phys: 110718976, pages: 7, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 75, phys: 110788608, pages: 6, virt: 0
+Region 76, phys: 110747648, pages: 7, virt: 0
   type EfiBootServicesData, attr: 15
-Region 76, phys: 110813184, pages: 4, virt: 0
+Region 77, phys: 110776320, pages: 4, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 77, phys: 110829568, pages: 2, virt: 0
+Region 78, phys: 110792704, pages: 4, virt: 0
   type EfiBootServicesData, attr: 15
-Region 78, phys: 110837760, pages: 59, virt: 0
+Region 79, phys: 110809088, pages: 31, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 79, phys: 111079424, pages: 2, virt: 0
+Region 80, phys: 110936064, pages: 2, virt: 0
   type EfiBootServicesData, attr: 15
-Region 80, phys: 111087616, pages: 4, virt: 0
+Region 81, phys: 110944256, pages: 11, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 81, phys: 111104000, pages: 8, virt: 0
+Region 82, phys: 110989312, pages: 5, virt: 0
   type EfiBootServicesData, attr: 15
-Region 82, phys: 111136768, pages: 3, virt: 0
+Region 83, phys: 111009792, pages: 17, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 83, phys: 111149056, pages: 514, virt: 0
+Region 84, phys: 111079424, pages: 1, virt: 0
   type EfiBootServicesData, attr: 15
-Region 84, phys: 113254400, pages: 8, virt: 0
+Region 85, phys: 111083520, pages: 8, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 85, phys: 113287168, pages: 5, virt: 0
+Region 86, phys: 111116288, pages: 520, virt: 0
   type EfiBootServicesData, attr: 15
-Region 86, phys: 113307648, pages: 193, virt: 0
+Region 87, phys: 113246208, pages: 11, virt: 0
+  type EfiBootServicesCode, attr: 15
+Region 88, phys: 113291264, pages: 5, virt: 0
+  type EfiBootServicesData, attr: 15
+Region 89, phys: 113311744, pages: 193, virt: 0
   type EfiRuntimeServicesData, attr: 15
-Region 87, phys: 114098176, pages: 21, virt: 0
+Region 90, phys: 114102272, pages: 25, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 88, phys: 114184192, pages: 1, virt: 0
+Region 91, phys: 114204672, pages: 3, virt: 0
   type EfiBootServicesData, attr: 15
-Region 89, phys: 114188288, pages: 4, virt: 0
+Region 92, phys: 114216960, pages: 9, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 90, phys: 114204672, pages: 3, virt: 0
+Region 93, phys: 114253824, pages: 2, virt: 0
   type EfiBootServicesData, attr: 15
-Region 91, phys: 114216960, pages: 9, virt: 0
+Region 94, phys: 114262016, pages: 1, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 92, phys: 114253824, pages: 1, virt: 0
+Region 95, phys: 114266112, pages: 2, virt: 0
   type EfiBootServicesData, attr: 15
-Region 93, phys: 114257920, pages: 1, virt: 0
+Region 96, phys: 114274304, pages: 3, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 94, phys: 114262016, pages: 2, virt: 0
-  type EfiBootServicesData, attr: 15
-Region 95, phys: 114270208, pages: 3, virt: 0
-  type EfiBootServicesCode, attr: 15
-Region 96, phys: 114282496, pages: 1, virt: 0
-  type EfiBootServicesData, attr: 15
 Region 97, phys: 114286592, pages: 1, virt: 0
-  type EfiBootServicesCode, attr: 15
+  type EfiBootServicesData, attr: 15
 Region 98, phys: 114290688, pages: 1, virt: 0
-  type EfiBootServicesData, attr: 15
-Region 99, phys: 114294784, pages: 22, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 100, phys: 114384896, pages: 1, virt: 0
+Region 99, phys: 114294784, pages: 1, virt: 0
   type EfiBootServicesData, attr: 15
-Region 101, phys: 114388992, pages: 2, virt: 0
+Region 100, phys: 114298880, pages: 22, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 102, phys: 114397184, pages: 19, virt: 0
+Region 101, phys: 114388992, pages: 1, virt: 0
   type EfiBootServicesData, attr: 15
-Region 103, phys: 114475008, pages: 2, virt: 0
+Region 102, phys: 114393088, pages: 2, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 104, phys: 114483200, pages: 1024, virt: 0
+Region 103, phys: 114401280, pages: 19, virt: 0
   type EfiBootServicesData, attr: 15
-Region 105, phys: 118677504, pages: 4, virt: 0
+Region 104, phys: 114479104, pages: 2, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 106, phys: 118693888, pages: 1, virt: 0
+Region 105, phys: 114487296, pages: 1024, virt: 0
   type EfiBootServicesData, attr: 15
-Region 107, phys: 118697984, pages: 4, virt: 0
+Region 106, phys: 118681600, pages: 8, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 108, phys: 118714368, pages: 6, virt: 0
+Region 107, phys: 118714368, pages: 6, virt: 0
   type EfiBootServicesData, attr: 15
-Region 109, phys: 118738944, pages: 10, virt: 0
+Region 108, phys: 118738944, pages: 10, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 110, phys: 118779904, pages: 1, virt: 0
+Region 109, phys: 118779904, pages: 1, virt: 0
   type EfiBootServicesData, attr: 15
-Region 111, phys: 118784000, pages: 5, virt: 0
+Region 110, phys: 118784000, pages: 5, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 112, phys: 118804480, pages: 928, virt: 0
+Region 111, phys: 118804480, pages: 928, virt: 0
   type EfiBootServicesData, attr: 15
-Region 113, phys: 122605568, pages: 256, virt: 0
+Region 112, phys: 122605568, pages: 256, virt: 0
   type EfiRuntimeServicesData, attr: 15
-Region 114, phys: 123654144, pages: 256, virt: 0
+Region 113, phys: 123654144, pages: 256, virt: 0
   type EfiRuntimeServicesCode, attr: 15
-Region 115, phys: 124702720, pages: 128, virt: 0
+Region 114, phys: 124702720, pages: 128, virt: 0
   type EfiReservedMemoryType, attr: 15
-Region 116, phys: 125227008, pages: 18, virt: 0
+Region 115, phys: 125227008, pages: 18, virt: 0
   type EfiACPIReclaimMemory, attr: 15
-Region 117, phys: 125300736, pages: 128, virt: 0
+Region 116, phys: 125300736, pages: 128, virt: 0
   type EfiACPIMemoryNVS, attr: 15
-Region 118, phys: 125825024, pages: 1537, virt: 0
+Region 117, phys: 125825024, pages: 1537, virt: 0
   type EfiBootServicesData, attr: 15
-Region 119, phys: 132120576, pages: 119, virt: 0
+Region 118, phys: 132120576, pages: 119, virt: 0
   type EfiConventionalMemory, attr: 15
-Region 120, phys: 132608000, pages: 32, virt: 0
+Region 119, phys: 132608000, pages: 32, virt: 0
   type EfiBootServicesData, attr: 15
-Region 121, phys: 132739072, pages: 51, virt: 0
+Region 120, phys: 132739072, pages: 51, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 122, phys: 132947968, pages: 17, virt: 0
+Region 121, phys: 132947968, pages: 17, virt: 0
   type EfiBootServicesData, attr: 15
-Region 123, phys: 133017600, pages: 25, virt: 0
+Region 122, phys: 133017600, pages: 25, virt: 0
   type EfiBootServicesCode, attr: 15
-Region 124, phys: 133120000, pages: 132, virt: 0
+Region 123, phys: 133120000, pages: 132, virt: 0
   type EfiRuntimeServicesData, attr: 15
-Region 125, phys: 133660672, pages: 136, virt: 0
+Region 124, phys: 133660672, pages: 136, virt: 0
   type EfiACPIMemoryNVS, attr: 15
-Region 126, phys: -4194304, pages: 1024, virt: 0
-  type EfiMemoryMappedIO, attr: 1
-Region 127, phys: 0, pages: 3145728, virt: 0
+Region 125, phys: 0, pages: 3145728, virt: 0
   type EfiReservedMemoryType, attr: 0
-Reserved pages: 3158202
-Free pages: 21222
-RES
- STDFONT.PSF 5666
+Reserved pages: 3158312
+Free pages: 20088
 EFI
  BOOT
   BOOTX64.EFI 207215
+RES
+ STDFONT.PSF 5666
+NvVars 11435
 UEFI - Exit boot services
 phys: Allocated free regions ptr: 1008, size: 32000
 phys: Allocated used regions ptr: 1010, size: 32000

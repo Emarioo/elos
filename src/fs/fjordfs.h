@@ -38,10 +38,6 @@ typedef struct fjord__NodeMetadata {
     uint32_t byte_size;
     uint8_t flags; // IS_DIRECTORY
     uint8_t flags; // PERMISIONS
-    uint8_t reserved[4]; // optional short jump
-    uint8_t magic[4];
-    uint16_t fs_version;
-    uint16_t sector_per_cluster;
 
     // fill out sector with zeros.
     // last 2 bytes may be 0x55 0xAA to indicate boot sector

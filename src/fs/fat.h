@@ -7,14 +7,17 @@
 #ifdef ELOS_DEBUG
     #include <stdio.h>
 
+    #undef log
     #define log(...) printf(__VA_ARGS__)
 
     int _hits;
-    void trigger_break() {
+    void fat__trigger_break() {
         _hits++;
     }
 #else
+    #undef log
     #define log(...)
+    #define fat__trigger_break(...)
 #endif
 
 typedef int (*fat__read_sectors_fn) (void* buffer, uint64_t lba, uint64_t count, void* user_data);
@@ -48,13 +51,14 @@ typedef enum fat__Error {
 
 
 typedef enum fat__DirectoryAttributes {
-    fat__READ_ONLY=0x01,
-    fat__HIDDEN=0x02,
-    fat__SYSTEM=0x04,
-    fat__VOLUME_ID=0x08,
-    fat__DIRECTORY=0x10,
-    fat__ARCHIVE=0x20,
-    fat__LFN=fat__READ_ONLY|fat__HIDDEN|fat__SYSTEM|fat__VOLUME_ID,
+    fat__READ_ONLY  = 0x01,
+    fat__HIDDEN     = 0x02,
+    fat__SYSTEM     = 0x04,
+    fat__VOLUME_ID  = 0x08,
+    fat__DIRECTORY  = 0x10,
+    fat__ARCHIVE    = 0x20,
+    fat__LFN        = fat__READ_ONLY | fat__HIDDEN | fat__SYSTEM | fat__VOLUME_ID,
+    fat__LFN_MASK   = fat__READ_ONLY | fat__HIDDEN | fat__SYSTEM | fat__VOLUME_ID | fat__DIRECTORY | fat__ARCHIVE,
 } fat__DirectoryAttributes;
 
 
@@ -167,14 +171,14 @@ typedef struct fat__DirectoryEntry {
 
 #pragma pack(push,1)
 typedef struct {
-    uint8_t order;
-    uint16_t file_name5[5];
-    uint8_t attributes;
-    uint8_t zero;
-    uint8_t checksum;
+    uint8_t  order;
+    uint16_t file_name0[5];
+    uint8_t  attributes;
+    uint8_t  _zero0;
+    uint8_t  checksum;
     uint16_t file_name6[6];
-    uint16_t zero2;
-    uint16_t file_name2[6];
+    uint16_t _zero1;
+    uint16_t file_name2[2];
 } LongNameEntry;
 #pragma pack(pop)
 
@@ -882,7 +886,7 @@ uint32_t fat__read_fat(fat__InternalContext* internal, int cluster) {
     uint32_t value = -1;
     if (cluster <= 1) {
         log("Cluster is invalid/reserved value: %d\n", cluster);
-        trigger_break();
+        fat__trigger_break();
     }
 
     if (internal->fat_version == fat__FAT16 || internal->fat_version == fat__FAT32) {
@@ -990,7 +994,7 @@ int fat__write_fat(fat__InternalContext* internal, int cluster, uint32_t value) 
         uint32_t written_value = fat__read_fat(internal, cluster);
         if (written_value != value && !(written_value == fat__END_OF_FILE && value == 0xFFF)) {
             log("Read did not return written FAT, %u != %u\n", value, written_value);
-            trigger_break();
+            fat__trigger_break();
         }
     }
 

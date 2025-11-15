@@ -76,6 +76,9 @@ int write_sectors(const void* buffer, uint64_t lba, uint64_t count, void* user_d
 #define CHECK\
     if (res) { printf("ERROR: %d\n", res); return 1; }
 
+#define CHECK_GPT\
+    if (res) { printf("ERROR: %d, %s\n", res, GPT__IS_KNOWN_ERROR(res) ? gpt__error_strings[res] : ""); return 1; }
+
 int copy_file(fat__Context* context, const char* src_path, const char* dst_path) {
     int res;
     res = fat__create_entry(context, dst_path, 0);
@@ -114,11 +117,15 @@ void print_usage() {
         "  --gpt-init <size>    Formats file with GPT\n"
         "  --gpt-partition-init <index> <start> <end>\n"
         "      Overwrites partition 'index'\n"
+        "  --gpt-partition-init-from-file <index> <start> <end> <file>  Creates partition with file content\n"
         "  --partition <index>  Picks partition to work on\n"
         "\n"
         "  --fat-init <size>     Formats file or partition in file with FAT\n"
         "  --fat-add-dir <dst>   Add directory\n"
         "  --fat-copy-file <src> <dst>  Copies file into FAT\n"
+        "\n"
+        "  --fat-print           Print header information\n"
+        "  --gpt-print           Print header information\n"
         "\n"
         "Example:\n"
         "  "TOOL_NAME" --file os.img --gpt-init 16M\n"
@@ -129,11 +136,17 @@ void print_usage() {
     );
 }
 
-#define CMD_GPT_INIT 1
-#define CMD_GPT_PARTITION_INIT 2
-#define CMD_FAT_INIT 3
-#define CMD_FAT_ADD_DIR 4
-#define CMD_FAT_COPY_FILE 5
+enum CMDKind {
+    CMD_NONE,
+    CMD_GPT_INIT,
+    CMD_GPT_PARTITION_INIT,
+    CMD_GPT_PARTITION_INIT_COPY_FILE,
+    CMD_FAT_INIT,
+    CMD_FAT_ADD_DIR,
+    CMD_FAT_COPY_FILE,
+    CMD_FAT_PRINT,
+    CMD_GPT_PRINT,
+};
 
 typedef struct Options {
     int          operation;
@@ -145,6 +158,7 @@ typedef struct Options {
     uint64_t     end;
     const char*  dst;
     const char*  src;
+    const char*  copy_path;
 } Options;
 
 uint64_t multiplier(char chr) {
@@ -157,12 +171,33 @@ uint64_t multiplier(char chr) {
     return 1;
 }
 
+static int _string_buffer_head;
+static char _string_buffer[4096];
+
+const char* replace_backslash(const char* path) {
+    int len = strlen(path);
+
+    if (_string_buffer_head + len + 1 > sizeof(_string_buffer)) {
+        return NULL;
+    }
+
+    char* ptr = _string_buffer + _string_buffer_head;
+    _string_buffer_head += len + 1;
+    memcpy(ptr, path, len);
+    ptr[len] = '\0';
+    for (int i=0;i<len;i++) {
+        if (ptr[i] == '\\')
+            ptr[i] = '/';
+    }
+    return ptr;
+}
+
 int parse_arguments(int argc, const char* argv[], Options* out_options) {
     memset(out_options, 0, sizeof(Options));
     out_options->work_partition = -1;
     out_options->index = -1;
 
-    int argi = 0;
+    int argi = 1;
     while (argi < argc) {
         const char* arg = argv[argi];
         argi++;
@@ -175,7 +210,7 @@ int parse_arguments(int argc, const char* argv[], Options* out_options) {
                 printf("Missing argument for '%s'\n", arg);
                 return 1;
             }
-            out_options->work_file = argv[argi];
+            out_options->work_file = replace_backslash(argv[argi]);
             argi++;
         } else if (strcmp(arg, "--partition") == 0) {
             if (argi >= argc) {
@@ -211,6 +246,23 @@ int parse_arguments(int argc, const char* argv[], Options* out_options) {
             out_options->end = strtoul(argv[argi], &endptr, 10);
             out_options->end *= multiplier(*endptr);
             argi++;
+        } else if (strcmp(arg, "--gpt-partition-init-from-file") == 0) {
+            if (argi + 3 >= argc) {
+                printf("Missing arguments for '%s'\n", arg);
+                return 1;
+            }
+            out_options->operation = CMD_GPT_PARTITION_INIT_COPY_FILE;
+            out_options->index = atol(argv[argi]);
+            argi++;
+            char* endptr;
+            out_options->start = strtoul(argv[argi], &endptr, 10);
+            out_options->start *= multiplier(*endptr);
+            argi++;
+            out_options->end = strtoul(argv[argi], &endptr, 10);
+            out_options->end *= multiplier(*endptr);
+            argi++;
+            out_options->copy_path = replace_backslash(argv[argi]);
+            argi++;
         } else if (strcmp(arg, "--fat-init") == 0) {
             if (argi >= argc) {
                 printf("Missing argument for '%s'\n", arg);
@@ -227,7 +279,7 @@ int parse_arguments(int argc, const char* argv[], Options* out_options) {
                 return 1;
             }
             out_options->operation = CMD_FAT_ADD_DIR;
-            out_options->dst = argv[argi];
+            out_options->dst = replace_backslash(argv[argi]);
             argi++;
         } else if (strcmp(arg, "--fat-copy-file") == 0) {
             if (argi + 1 >= argc) {
@@ -235,10 +287,17 @@ int parse_arguments(int argc, const char* argv[], Options* out_options) {
                 return 1;
             }
             out_options->operation = CMD_FAT_COPY_FILE;
-            out_options->src = argv[argi];
+            out_options->src = replace_backslash(argv[argi]);
             argi++;
-            out_options->dst = argv[argi];
+            out_options->dst = replace_backslash(argv[argi]);
             argi++;
+        } else if (strcmp(arg, "--fat-print") == 0) {
+            out_options->operation = CMD_FAT_PRINT;
+        } else if (strcmp(arg, "--gpt-print") == 0) {
+            out_options->operation = CMD_GPT_PRINT;
+        } else {
+            fprintf(stderr, "Unknown argument '%s', use a flag first, see --help\n", arg);
+            return 1;
         }
     }
     return 0;
@@ -317,7 +376,12 @@ int main(int argc, const char* argv[]) {
         .lba_end = lba_end,
     };
 
-    
+
+    /*
+        What's wrong:
+            crc32 calculations are wrong, print headers and see.
+            use my crc32 calculations on gpt from mtools
+    */
 
 
     switch(options.operation) {
@@ -326,7 +390,7 @@ int main(int argc, const char* argv[]) {
             gpt__generate_unique_guid(&tmp);
             
             res = gpt__overwrite_header(&gpt_context, options.size/SECTOR_SIZE, 32, &tmp);
-            CHECK
+            CHECK_GPT
         } break;
         case CMD_GPT_PARTITION_INIT: {
             gpt__GUID tmp;
@@ -339,7 +403,44 @@ int main(int argc, const char* argv[]) {
             //    Otherwise we need to work with GUID on the command line instead of index which is annoying.
 
             res = gpt__create_partition(&gpt_context, &gpt__GUID_EFI_SYSTEM_PARTITION, &tmp, lba_start, lba_end-1, "EFI Boot System", 0);
+            CHECK_GPT
+        } break;
+        case CMD_GPT_PARTITION_INIT_COPY_FILE: {
+            gpt__GUID tmp;
+            gpt__generate_unique_guid(&tmp);
+
+            uint64_t lba_start = options.start;
+            uint64_t lba_end = options.end;
+
+            // @TODO gpt__create_partition should let you specify index.
+            //    Otherwise we need to work with GUID on the command line instead of index which is annoying.
+
+            res = gpt__create_partition(&gpt_context, &gpt__GUID_EFI_SYSTEM_PARTITION, &tmp, lba_start, lba_end-1, "EFI Boot System", 0);
+            CHECK_GPT
+
+            int res;
+
+            FILE* file = fopen(options.copy_path, "rb");
+            assert(file);
+
+            fseek(file, 0, SEEK_END);
+            size_t file_size = ftell(file);
+            fseek(file, 0, SEEK_SET);
+
+            if (file_size > gpt_context.sector_size * (lba_end - lba_start)) {
+                fprintf(stderr, "LBA start end too small (%lu .. %lu, %lu bytes), file size is %lu bytes.\n", lba_start, lba_end, 512*(lba_end - lba_start), file_size);
+                return 1;
+            }
+
+            void* file_data = calloc(file_size + gpt_context.sector_size, 1);
+            assert(file_data);
+            fread(file_data, 1, file_size, file);
+            fclose(file);
+
+            res = write_sectors(file_data, lba_start, file_size / gpt_context.sector_size, gpt_context.user_data);
             CHECK
+
+            free(file_data);
         } break;
         case CMD_FAT_INIT: {
             if (!options.work_file) {
@@ -369,76 +470,83 @@ int main(int argc, const char* argv[]) {
             res = copy_file(&fat_context, options.src, options.dst);
             CHECK
         } break;
+        case CMD_FAT_PRINT: {
+            res = fat__print_header(&fat_context);
+            CHECK
+        } break;
+        case CMD_GPT_PRINT: {
+            res = gpt__print_header(&gpt_context);
+            CHECK_GPT
+        } break;
         default:
             print_usage();
     }
     
     fclose(context.file);
 
-    // print();
     return 0;
 }
 
-#ifdef ELOS_DEBUG
+// #ifdef ELOS_DEBUG
 
-int print() {
-    int res;
+// int print() {
+//     int res;
 
-    // gpt__Context gpt_context = {
-    //     .read_sectors = read_sectors,
-    //     .write_sectors = write_sectors,
-    //     .user_data = &context,
-    //     .sector_size = SECTOR_SIZE,
-    //     .working_memory = malloc(0x10000),
-    //     .working_memory_len = 0x10000,
-    //     .working_memory_head = 0,
-    // };
-    #define MiB 0x100000
-    // // Count file size
-    int total_size = 8 * MiB;
+//     // gpt__Context gpt_context = {
+//     //     .read_sectors = read_sectors,
+//     //     .write_sectors = write_sectors,
+//     //     .user_data = &context,
+//     //     .sector_size = SECTOR_SIZE,
+//     //     .working_memory = malloc(0x10000),
+//     //     .working_memory_len = 0x10000,
+//     //     .working_memory_head = 0,
+//     // };
+//     #define MiB 0x100000
+//     // // Count file size
+//     int total_size = 8 * MiB;
 
     
-    Context context = { 0 };
-    // context.out_path = "bin/int/fat.img";
-    context.out_path = "gpt.img";
-    context.file = fopen(context.out_path, "r");
+//     Context context = { 0 };
+//     // context.out_path = "bin/int/fat.img";
+//     context.out_path = "gpt.img";
+//     context.file = fopen(context.out_path, "r");
 
-    assert(context.file);
+//     assert(context.file);
 
-    // printf("Things to fix?\n");
-    // printf("  Missing . .. entries, probably fine though\n");
-    // printf("  Creation access times are zero, might not like that?\n");
-    // printf("  fat12/fat16 calculation is wrong, we use fat16 when linux detects it as fat12?\n");
-    // return;
+//     // printf("Things to fix?\n");
+//     // printf("  Missing . .. entries, probably fine though\n");
+//     // printf("  Creation access times are zero, might not like that?\n");
+//     // printf("  fat12/fat16 calculation is wrong, we use fat16 when linux detects it as fat12?\n");
+//     // return;
 
 
-    fseek(context.file, 0, SEEK_END);
-    uint64_t file_size = ftell(context.file);
-    fseek(context.file, 0, SEEK_SET);
+//     fseek(context.file, 0, SEEK_END);
+//     uint64_t file_size = ftell(context.file);
+//     fseek(context.file, 0, SEEK_SET);
     
-    uint64_t lba_start = 0;
-    uint64_t lba_end = lba_start + (file_size)/SECTOR_SIZE;
+//     uint64_t lba_start = 0;
+//     uint64_t lba_end = lba_start + (file_size)/SECTOR_SIZE;
 
-    fat__Context fat_context = {
-        .read_sectors = read_sectors,
-        .write_sectors = write_sectors,
-        .user_data = &context,
-        .sector_size = SECTOR_SIZE,
-        .working_memory = malloc(0x10000),
-        .working_memory_len = 0x10000,
-        .working_memory_head = 0,
+//     fat__Context fat_context = {
+//         .read_sectors = read_sectors,
+//         .write_sectors = write_sectors,
+//         .user_data = &context,
+//         .sector_size = SECTOR_SIZE,
+//         .working_memory = malloc(0x10000),
+//         .working_memory_len = 0x10000,
+//         .working_memory_head = 0,
         
-        // The fat32 API needs you to specify which partition to 
-        // create/read fat32 file system to/from.
-        // Rather than providing index to GPT entry or GUID we 
-        // give LBA range.
-        .lba_start = lba_start,
-        .lba_end = lba_end,
-    };
+//         // The fat32 API needs you to specify which partition to 
+//         // create/read fat32 file system to/from.
+//         // Rather than providing index to GPT entry or GUID we 
+//         // give LBA range.
+//         .lba_start = lba_start,
+//         .lba_end = lba_end,
+//     };
 
-    res = fat__print_header(&fat_context);
-    CHECK
+//     res = fat__print_header(&fat_context);
+//     CHECK
 
-}
+// }
 
-#endif // ELOS_DEBUG
+// #endif // ELOS_DEBUG
