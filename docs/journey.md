@@ -86,3 +86,13 @@ Kernel and OS needs to simplify this.
 Once again, where do we draw the line. Well if we want a user application (privlaged of course)
 to access partitions then our Kernel needs to provide this ability.
 
+I have now added some PCI iteration, PS/2 code to read keyboard input, PATA to read sectors from disc.
+
+# What I value in an operating system
+
+- Automation and scriptability
+- Security, isolation, strict program access
+- Few abstraction layers
+- User interface tailored to programmers
+
+## Automation and scriptability

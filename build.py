@@ -8,7 +8,7 @@ The following tools/binaries exist:
 
 '''
 
-import os, sys, platform, shutil, shlex, glob, math
+import os, sys, platform, shutil, shlex, glob, math, threading, multiprocessing, dataclasses
 from dataclasses import dataclass
 
 # TODO: Linux
@@ -91,7 +91,7 @@ def main():
     #     build_elos("bin/elos")
     #     build_image("bin/elos.img")
         # cmd("dd if=bin/elos.img of=bin/elos_padded.img bs=1M count=64 conv=sync")
-    else:
+    elif not run or len(sys.argv) != 2:
         build_create_efi()
 
         build_elos("bin/elos")
@@ -130,6 +130,7 @@ def main():
                 # f"-device ahci,id=ahci "
                 # f"-device ide-drive,drive=disk0,bus=ahci.0 "
                 # f"-nographic "
+                "-machine pc " # PS/2 keyboard input
                 "-serial file:kernel.log "
                 "-s "
                 + ("-S " if gdb else "")
@@ -199,10 +200,13 @@ def build_elos(output: str):
         "src/elos/kernel/log/print.c",
         "src/elos/kernel/driver/pata.c",
         "src/elos/kernel/driver/pci.c",
+        "src/elos/kernel/driver/ps2.c",
+        "src/elos/kernel/driver/keys.c",
         "src/elos/kernel/common/string.c",
         "src/elos/kernel/memory/phys_allocator.c",
         "src/elos/kernel/memory/paging.c",
         "src/elos/kernel/debug/debug.c",
+        "src/elos/user/terminal.c",
 
         "res/ascii_bitmap.c", # temporary
     ]
@@ -213,9 +217,47 @@ def build_elos(output: str):
     CFLAGS += f" -Wno-multichar"
     CFLAGS += f" -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable"
 
-    # TODO: Multiple threads
+    
+    @dataclasses.dataclass
+    class BuildRuntime:
+        commands: list[str] = dataclasses.field(default_factory=list)
+        next_command_index: int = 0
+        failed: bool = False
+
+    runtime = BuildRuntime()
+
     for s,o in zip(sources,objects):
-        cmd(f"{CC} {CFLAGS} -c -o {o} {s}")
+        c = f"{CC} {CFLAGS} -c -o {o} {s}"
+        runtime.commands.append(c)
+    
+    thread_count = multiprocessing.cpu_count()
+
+    def compile_objects(runtime: BuildRuntime):
+        while runtime.next_command_index < len(runtime.commands):
+            command = runtime.commands[runtime.next_command_index]
+            runtime.next_command_index += 1
+
+            # if runtime.config.verbose:
+                # print(command, flush=True)
+            result = cmd(command)
+            
+            if result != 0:
+                # print(command)
+                runtime.next_command_index = len(runtime.commands)
+                runtime.failed = True
+
+    threads = []
+    for i in range(thread_count):
+        t = threading.Thread(target=compile_objects, args=[runtime])
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+    
+    if runtime.failed:
+        print("Failed")
+        exit(1)
 
     OBJS = " ".join(objects)
 
@@ -306,35 +348,35 @@ def build_fat(FAT_PATH):
     cmd(f"bin/elos-img --file {FAT_PATH} --fat-init {fatSize}")
 
     # Copy files
-    for src, dst in DEPS:
-        cmd(f"bin/elos-img --file {FAT_PATH} --fat-copy-file {src} /{dst}")
+    # for src, dst in DEPS:
+    #     cmd(f"bin/elos-img --file {FAT_PATH} --fat-copy-file {src} /{dst}")
     
-        int_dst = os.path.join(INT_DIR, dst)
-        os.makedirs(os.path.dirname(int_dst), exist_ok=True)
-        shutil.copy(src, int_dst)
+    #     int_dst = os.path.join(INT_DIR, dst)
+    #     os.makedirs(os.path.dirname(int_dst), exist_ok=True)
+    #     shutil.copy(src, int_dst)
 
     # else:
     # if platform.system() != "Windows":
     # FAT_PATH = FAT_PATH + "2"
-    # cmd(f"dd if=/dev/zero of={FAT_PATH} bs=1k count={math.ceil(fatSize/1024)} conv=fsync")
-    # cmd(f"mformat -i {FAT_PATH} ::")
+    cmd(f"dd if=/dev/zero of={FAT_PATH} bs=1k count={math.ceil(fatSize/1024)} conv=fsync")
+    cmd(f"mformat -i {FAT_PATH} ::")
     # cmd(f"mformat -i {FAT_PATH} -f {fatSize_kb} ::") # -f with floppy image size calculation
 
     # Copy files
-    # for src, dst in DEPS:
-    #     assert dst[0] != '/', f"{src} -> {dst}"
+    for src, dst in DEPS:
+        assert dst[0] != '/', f"{src} -> {dst}"
         
-    #     split = os.path.dirname(dst).split("/")
-    #     acc = ""
-    #     for s in split:
-    #         acc = os.path.join(acc, s)
-    #         cmd(f"mmd -D o -i {FAT_PATH} ::/{acc}")
+        split = os.path.dirname(dst).split("/")
+        acc = ""
+        for s in split:
+            acc = os.path.join(acc, s)
+            cmd(f"mmd -D o -i {FAT_PATH} ::/{acc}")
 
-    #     cmd(f"mcopy -D o -i {FAT_PATH} {src} ::/{dst}")
+        cmd(f"mcopy -D o -i {FAT_PATH} {src} ::/{dst}")
 
-    #     int_dst = os.path.join(INT_DIR, dst)
-    #     os.makedirs(os.path.dirname(int_dst), exist_ok=True)
-    #     shutil.copy(src, int_dst)
+        int_dst = os.path.join(INT_DIR, dst)
+        os.makedirs(os.path.dirname(int_dst), exist_ok=True)
+        shutil.copy(src, int_dst)
 
     return fatSize
 
@@ -364,11 +406,11 @@ def build_image(os_dir, img_path):
     #                       GPT header info      fat    some extra rom
     gpt_size_estimation = 2 * (2*512 + 128*128) + fat_size + (40 + 400) * 512
     
-    cmd(f"bin/elos-img --file {img_path} --gpt-init {gpt_size_estimation}")
-    cmd(f"bin/elos-img --file {img_path} --gpt-partition-init-from-file 0 40 {40 + math.ceil(fat_size/512)+16} {FAT_PATH}")
+    # cmd(f"bin/elos-img --file {img_path} --gpt-init {gpt_size_estimation}")
+    # cmd(f"bin/elos-img --file {img_path} --gpt-partition-init-from-file 0 40 {40 + math.ceil(fat_size/512)+16} {FAT_PATH}")
 
     # if platform.system() != "Windows":
-    # cmd(f"mkgpt -o {img_path} --image-size {gpt_size_estimation/512} --part {FAT_PATH} --type system")
+    cmd(f"mkgpt -o {img_path} --image-size {gpt_size_estimation/512} --part {FAT_PATH} --type system")
 
 
 
@@ -449,6 +491,8 @@ def cmd(c):
         if not VERBOSE:
             print("ERR",c)
         exit(1)
+
+    return 0
 
 if __name__ == "__main__":
     main()

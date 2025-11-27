@@ -8,8 +8,18 @@ The .img is a raw image file containing a GUID Partition Table and one partition
 FAT32 file system with EFI application and other OS content. (.iso also has EFI)
 
 What we produce in raw form for both formats is a directory with
-- `/EFI/ELOS/BOOTX64.EFI`, UEFI application, loads OS
+- `/EFI/BIOS/BOOTX64.EFI`, UEFI application, loads OS
 - `/ELOS/<content>`, Kernel and OS
+
+
+# Emulation
+
+If the OS and some user applications could be emulated on
+Windows, it would be great for iteration.
+Testing user programs and logic for example.
+
+We abstract the core API of the kernel, device drivers.
+Apps, scheduling we keep. Altough we can't schedule proceses
 
 
 # For Legacy BIOS

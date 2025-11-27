@@ -171,12 +171,11 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
         return Status;
     }
 
-    Status = fetch_memory_map();
-    if (EFI_ERROR(Status)) {
-        return Status;
-    }
-
-    print_memory_map();
+    // Status = fetch_memory_map();
+    // if (EFI_ERROR(Status)) {
+    //     return Status;
+    // }
+    // print_memory_map();
 
     
     Status = load_font();
@@ -236,9 +235,9 @@ EFI_STATUS load_font() {
     
     
     // Iterate files/dirs in folder
-    Status = list_content(volume, 0, NULL);
-    if (EFI_ERROR(Status))
-        return Status;
+    // Status = list_content(volume, 0, NULL);
+    // if (EFI_ERROR(Status))
+    //     return Status;
 
     // const char* font_path = "\\RES\\PIXELOP.TTF";
     const char* font_path = "\\RES\\STDFONT.PSF";

@@ -64,6 +64,8 @@ void printf(char* format, ...) {
                 int screen_width, screen_height;
                 draw_frame_info(&screen_width, &screen_height);
 
+                draw_rect(0, pos_y + text_height, screen_width, text_height, DARK_BLUE);
+
                 if (pos_y + text_height + border_padding >= screen_height) {
                     // @TODO: When about to go beyond the screen border we wrap around.
                     //   We should scroll all text up instead but it's an expensive operation and.
@@ -71,7 +73,7 @@ void printf(char* format, ...) {
                     //   Altough maybe we could do a big memmove of the pixel data/frame buffer?
                     pos_y = border_padding;
 
-                    draw_shift_frame(0, -text_height, DARK_BLUE);
+                    // draw_shift_frame(0, -text_height, DARK_BLUE);
                 }
             }
         }
