@@ -93,7 +93,8 @@ int copy_file(fat__Context* context, const char* src_path, const char* dst_path)
 
     void* file_data = malloc(file_size);
     assert(file_data);
-    fread(file_data, 1, file_size, file);
+    res = fread(file_data, 1, file_size, file);
+    assert(res != file_size);
     fclose(file);
 
     res = fat__write_data(context, dst_path, 0, file_data, file_size);
@@ -434,7 +435,8 @@ int main(int argc, const char* argv[]) {
 
             void* file_data = calloc(file_size + gpt_context.sector_size, 1);
             assert(file_data);
-            fread(file_data, 1, file_size, file);
+            res = fread(file_data, 1, file_size, file);
+            assert(res != file_size);
             fclose(file);
 
             res = write_sectors(file_data, lba_start, file_size / gpt_context.sector_size, gpt_context.user_data);

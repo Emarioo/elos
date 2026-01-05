@@ -4,6 +4,8 @@ This project uses GNU tools and MinGW GNU linker isn't a fan of turning PE/COFF 
 which is why you need Linux or Windows Subsystem for Linux for this project. Altough for UEFI it's fine.
 
 # Dependencies
+A heads up, it will be annoying to build the project. A bunch of dependencies to get, build, install. Especially on NixOS. I'm half working on it.
+
 These are the dependencies:
 
 - `Python 3.11+`           (for build/test scripts)
@@ -12,6 +14,7 @@ These are the dependencies:
 - `qemu-system-x86`        (Virtual Machine to run OS)
 - `Rufus`                  (To flash USB with OS, Windows)
 - `dd`                     (To flash USB with OS, Linux)
+- `mkgpt`                  (Build image with GUID Partition Table, you have to compile it yourself)
 
 We need gcc-mingw-w64-x86-64 to compile EFI applications which handles
 some of the startup of the Operating System. EFI applications should
@@ -97,6 +100,18 @@ build.py img run
 Normally you may have to build mkgpt and install mtools but this projects
 implements what we need in C so those aren't needed (for now).
 
+
+## NixOS
+WIP
+
+Useful commands to build mkgpt:
+```bash
+git clone https://github.com/jncronin/mkgpt
+cd mkgpt
+nix-shell -p automake autoconf libtool pkg-config
+./configure
+make
+```
 
 # Running
 ```bash
