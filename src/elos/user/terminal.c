@@ -15,6 +15,9 @@ int g_terminal_cursor_pos;
 int g_terminal_text_x = 10;
 int g_terminal_text_y = 10;
 
+
+void apply_command(cstring text);
+
 void edit_text(string* text, int scancode, int* cursor) {
     int keycode = scancode_to_keycode(scancode);
 
@@ -106,9 +109,9 @@ void apply_command(cstring text) {
 
     // Parse command
 
-    root := "/home/user"
+    // root := "/home/user"
 
-    list_files(root)
+    // list_files(root)
 
 }
 
