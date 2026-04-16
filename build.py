@@ -11,7 +11,6 @@ The following tools/binaries exist:
 import os, sys, platform, shutil, shlex, glob, math, threading, multiprocessing, dataclasses
 from dataclasses import dataclass
 
-# TODO: Linux
 
 ########################
 #      CONSTANTS
@@ -69,6 +68,8 @@ def main():
 
     if len(sys.argv) <= 1:
         run = True
+
+    package_elos("releases")
 
     if vbox:
         build_elos("bin/elos.img")
@@ -141,6 +142,34 @@ def main():
         if iso:
             cmd(f"qemu-system-x86_64 -bios {OVMF_FD} extern/ovmf/OVMF.fd -cdrom bin/elos.iso")
             # cmd(f"qemu-system-x86_64 -bios {OVMF_FD}-L extern/ovmf/ -pflash extern/ovmf/OVMF.fd -cdrom bin/elos.iso")
+
+
+def package_elos(release_dir):
+    name    = "elos"
+    version = "0.1.0"
+    arch    = "x86_64"
+
+    temp_folder_name = f"{name}-{version}-{arch}"
+    temp_folder_path = f"{release_dir}/{temp_folder_name}"
+
+    os.makedirs(temp_folder_path, exist_ok=True)
+
+    os.makedirs(temp_folder_path+"/iso", exist_ok=True)
+
+    os.makedirs(temp_folder_path+"/iso/EFI/BOOT", exist_ok=True)
+
+    # Build EFI application throw into iso//EFI/BOOT/BOOTX64.EFI
+
+    # Copy ISO into folder
+
+    # Copy raw image into folder
+
+    # Zip folder
+
+    cmd(f"cd {os.path.dirname(temp_folder_path)} tar -czf {temp_folder_name}.tar.gz {temp_folder_name}")
+
+    print(f"Successfully built \033[32m{temp_folder_path}\033[0m")
+
 
 def build_elos(output: str):
 

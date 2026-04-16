@@ -24,3 +24,5 @@ out
 
 # vendor files (like headers for vscode on windows)
 extern
+
+releases
