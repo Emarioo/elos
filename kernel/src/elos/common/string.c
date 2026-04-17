@@ -1,5 +1,5 @@
 
-#include "elos/kernel/common/string.h"
+#include "elos/common/string.h"
 
 #include <stdint.h>
 
@@ -47,12 +47,12 @@ static int output_int(char* buffer, int size, int value) {
     #undef CHECK
 }
 
-static int output_hex(char* buffer, int size, uint32_t value, int width) {
+static int output_hex(char* buffer, int size, u32 value, int width) {
     if (!buffer || !size)
         return 0;
 
     int head = 0;
-    uint32_t acc = value;
+    u32 acc = value;
 
     #define CHECK if (head-1 >= size) { buffer[head] = '\0'; return head; }
 
@@ -73,7 +73,7 @@ static int output_hex(char* buffer, int size, uint32_t value, int width) {
     acc = value;
     
     do {
-        uint32_t val = (acc % 16);
+        u32 val = (acc % 16);
         buffer[head+digits-1] = val < 10 ? val + '0' : val - 10 + 'a';
         digits-=2;
         head++;

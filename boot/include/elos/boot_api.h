@@ -4,7 +4,6 @@
 
 typedef struct {
     uint64_t physical_start;
-    uint64_t virtual_start;
     uint64_t page_count;
 } MemoryRegion;
 

@@ -16,6 +16,8 @@ from dataclasses import dataclass
 #      CONSTANTS
 ########################
 
+ROOT = os.path.abspath(os.path.dirname(__file__))
+
 AS = "as"
 CC = "gcc"
 LD = "ld"
@@ -33,6 +35,7 @@ def main():
     efi       = False
     img       = False
     install   = False
+    clean     = False
 
     argi = 1
     while argi < len(sys.argv):
@@ -58,6 +61,8 @@ def main():
         # elif arg == "usb":
         #     run = False
         #     usb = True
+        elif arg == "clean":
+            clean = True
         elif arg == "iso":
             iso = True
         elif arg == "install":
@@ -69,7 +74,12 @@ def main():
     if len(sys.argv) <= 1:
         run = True
 
-    package_elos("releases")
+    if clean:
+        shutil.rmtree("bin")
+        shutil.rmtree("int")
+        shutil.rmtree("releases")
+        return 0
+
 
     if vbox:
         build_elos("bin/elos.img")
@@ -92,11 +102,14 @@ def main():
     #     build_elos("bin/elos")
     #     build_image("bin/elos.img")
         # cmd("dd if=bin/elos.img of=bin/elos_padded.img bs=1M count=64 conv=sync")
-    elif not run or len(sys.argv) != 2:
-        build_create_efi()
+    else:
+        package_elos("releases")
+        
+    # elif not run or len(sys.argv) != 2:
+    #     build_create_efi()
 
-        build_elos("bin/elos")
-        build_image("bin/elos", "bin/elos.img")
+    #     build_elos("bin/elos")
+    #     build_image("bin/elos", "bin/elos.img")
         # build_iso("bin/elos", "bin/elos.iso")
 
     if run:
@@ -154,11 +167,44 @@ def package_elos(release_dir):
 
     os.makedirs(temp_folder_path, exist_ok=True)
 
-    os.makedirs(temp_folder_path+"/iso", exist_ok=True)
+    os.makedirs(temp_folder_path+"/fs", exist_ok=True)
 
-    os.makedirs(temp_folder_path+"/iso/EFI/BOOT", exist_ok=True)
+    os.makedirs(temp_folder_path+"/fs/EFI/BOOT", exist_ok=True)
 
-    # Build EFI application throw into iso//EFI/BOOT/BOOTX64.EFI
+    iso_path     = f"{temp_folder_path}/elos.iso"
+    img_path     = f"{temp_folder_path}/elos.img"
+    bootx64_path = f"{temp_folder_path}/fs/EFI/BOOT/BOOTX64.EFI"
+    kernel_path  = f"{temp_folder_path}/fs/kernel.img"
+
+    INT_DIR=f"{ROOT}/int"
+
+    cmd(f"make -f {ROOT}/boot/Makefile INT_DIR={INT_DIR} BOOT_EFI={bootx64_path}")
+    
+    cmd(f"make -f {ROOT}/kernel/Makefile INT_DIR={INT_DIR} KERNEL_IMAGE={kernel_path}")
+
+    fat_path = f"{INT_DIR}/fat.img"
+
+    
+    DEPS_SPEC: list[tuple[str,str]] = [
+        (bootx64_path, "EFI/BOOT/BOOTX64.EFI"),
+        (kernel_path, "kernel.img"),
+        ("res/Lat2-Terminus16.psf", "RES/STDFONT.PSF"),
+    ]
+
+    ISO_DIR = f"{INT_DIR}/image"
+    fat_size = make_fat(fat_path, DEPS_SPEC)
+
+    cmd(f"cp {fat_path} {ISO_DIR}/fat.img")
+
+    #                       GPT header info      fat    some extra rom
+    gpt_size_estimation = 2 * (2*512 + 128*128) + fat_size + (40 + 400) * 512
+    cmd(f"mkgpt -o {img_path} --image-size {gpt_size_estimation/512} --part {fat_path} --type system")
+
+    # cmd(f"xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o {iso_path} {ISO_DIR}")
+    cmd(f"xorriso -as mkisofs -R -f -no-emul-boot -o {iso_path} {ISO_DIR}")
+
+
+
 
     # Copy ISO into folder
 
@@ -166,7 +212,11 @@ def package_elos(release_dir):
 
     # Zip folder
 
-    cmd(f"cd {os.path.dirname(temp_folder_path)} tar -czf {temp_folder_name}.tar.gz {temp_folder_name}")
+    cmd(f"cd {os.path.dirname(temp_folder_path)} && tar -czf {temp_folder_name}.tar.gz {temp_folder_name}")
+
+    # Copy latest images to bin for quick access (we could make symlinks)
+    cmd(f"cp {img_path} bin/elos.img")
+    cmd(f"cp {iso_path} bin/elos.iso")
 
     print(f"Successfully built \033[32m{temp_folder_path}\033[0m")
 
@@ -223,15 +273,15 @@ def build_elos(output: str):
         "src/elos/efi/data.c",
 
         "src/elos/kernel/kernel.c",
-        "src/elos/kernel/frame/frame.c",
-        "src/elos/kernel/frame/font/font.c",
-        "src/elos/kernel/frame/font/psf.c",
+        "src/elos/kernel/video/frame.c",
+        "src/elos/kernel/video/font/font.c",
+        "src/elos/kernel/video/font/psf.c",
         "src/elos/kernel/log/print.c",
         "src/elos/kernel/driver/pata.c",
         "src/elos/kernel/driver/pci.c",
         "src/elos/kernel/driver/ps2.c",
         "src/elos/kernel/driver/keys.c",
-        "src/elos/kernel/common/string.c",
+        "src/elos/common/string.c",
         "src/elos/kernel/memory/phys_allocator.c",
         "src/elos/kernel/memory/paging.c",
         "src/elos/kernel/debug/debug.c",
@@ -321,6 +371,99 @@ def build_elos(output: str):
     # cmd(f"{LD} -T src/elos/kernel/kernel.ld bin/elos/bootloader.o bin/elos/setup.o -o bin/elos.elf")
     # cmd(f"objcopy -O binary bin/elos.elf {output}")
 
+
+
+# Returns FAT size
+def make_fat(out_path: str, deps_spec: list[tuple[str,str]]):
+
+    INT_DIR = "int/image"
+    
+    # Collect dependencies
+    # DEPS_SPEC: list[tuple[str,str]] = [
+    #     ("bin/bootx64.efi", "EFI/BOOT/BOOTX64.EFI"),
+    #     ("res/Lat2-Terminus16.psf", "RES/STDFONT.PSF"),
+    # ]
+
+    DEPS = []
+    for d in deps_spec:
+        if d[0].find("*") == -1:
+            # File
+            # os.makedirs(os.path.dirname(d[1]), exist_ok=True)
+            DEPS.append(d)
+        else:
+            # Wild card directory
+            for f in glob.glob(d[0], recursive=True):
+                outf = os.path.join(d[1], os.path.basename(f))
+                # os.makedirs(d[1], exist_ok=True)
+                DEPS.append((f, outf))
+
+    # Compute file size
+    totalSize = 0
+    for src, dst in DEPS:
+        s = os.path.getsize(src)
+        totalSize += s
+        print(f"{src:15} {math.ceil(s/1024)}KB")
+
+    fatSize = math.ceil(math.ceil(totalSize * 1.25) / 512) * 512
+    
+    # I don't remember why I chose 4200. Possible reaons:
+    #   1. 4096 * 1024 is minimum for FAT that UEFI likes.
+    #         Don't think this is true, 4096 sectors might be true.
+    #   2. 4200 * 1024 means 8K sectors so FAT16 will be used.
+
+    # min_fat_size = 32*1024*1024 # Virtual Box doesn't seem to like EFI System Partitions smaller than 32 MiB (wiki.osdev.org/UEFI_App_Bare_Bones)
+    min_fat_size = 4200*512*2
+
+    if fatSize < min_fat_size:
+        fatSize = min_fat_size
+
+    # print(totalSize, fatSize)
+
+    # Format FAT image
+    use_custom = True
+    # use_custom = False
+
+    # if use_custom:
+    if os.path.exists(out_path):
+        os.remove(out_path)
+    # cmd(f"bin/elos-img --file {FAT_PATH} --fat-init {fatSize}")
+
+    # Copy files
+    # for src, dst in DEPS:
+    #     cmd(f"bin/elos-img --file {FAT_PATH} --fat-copy-file {src} /{dst}")
+    
+    #     int_dst = os.path.join(INT_DIR, dst)
+    #     os.makedirs(os.path.dirname(int_dst), exist_ok=True)
+    #     shutil.copy(src, int_dst)
+
+    # else:
+    # if platform.system() != "Windows":
+    # FAT_PATH = FAT_PATH + "2"
+    cmd(f"dd if=/dev/zero of={out_path} bs=1k count={math.ceil(fatSize/1024)} conv=fsync")
+    cmd(f"mformat -i {out_path} ::")
+    # cmd(f"mformat -i {FAT_PATH} -f {fatSize_kb} ::") # -f with floppy image size calculation
+
+    # Copy files
+    for src, dst in DEPS:
+        assert dst[0] != '/', f"{src} -> {dst}"
+        
+        split = os.path.dirname(dst).split("/")
+        acc = ""
+        # print(split)
+        if len(split) > 1 or len(split[0]) > 0:
+            for s in split:
+                acc = os.path.join(acc, s)
+                cmd(f"mmd -D o -i {out_path} ::/{acc}")
+
+        cmd(f"mcopy -D o -i {out_path} {src} ::/{dst}")
+
+        int_dst = os.path.join(INT_DIR, dst)
+        os.makedirs(os.path.dirname(int_dst), exist_ok=True)
+        shutil.copy(src, int_dst)
+
+    return fatSize
+
+
 # Returns FAT size
 def build_fat(FAT_PATH):
 
@@ -374,7 +517,7 @@ def build_fat(FAT_PATH):
     # if use_custom:
     if os.path.exists(FAT_PATH):
         os.remove(FAT_PATH)
-    cmd(f"bin/elos-img --file {FAT_PATH} --fat-init {fatSize}")
+    # cmd(f"bin/elos-img --file {FAT_PATH} --fat-init {fatSize}")
 
     # Copy files
     # for src, dst in DEPS:

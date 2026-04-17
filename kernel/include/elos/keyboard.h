@@ -2,15 +2,15 @@
 
 #include "elos/boot_api.h"
 
+typedef enum Keycode Keycode;
 
 
 void KBD_init(BootAPI* boot_api);
 
-Keycode KBD_read_key();
-// returns int for UTF-8 codepoint (we just support ASCII at the moment)
-int KBD_read_char();
+// @param character is Unicode codepoint which is why it isn't char type (but we just support ASCII at the moment)
+Keycode KBD_read_key(int* character, int* mods);
+// int KBD_read_char();
 
-typedef enum Keycode Keycode;
 
 enum Keycode {
     KEY_NONE, // empty/invalid key

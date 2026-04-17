@@ -2,9 +2,10 @@
 // @NOTTESTED this paging code hasn't been tested much. Might not work so well.
 //
 
-#include "elos/kernel/memory/paging.h"
-#include "elos/kernel/common/types.h"
-#include "elos/kernel/memory/phys_allocator.h"
+#include "elos/physical_memory.h"
+#include "elos/kernel/pmem/paging.h"
+
+#include "elos/common/types.h"
 
 
 static inline u64 read_cr3() {
@@ -111,7 +112,7 @@ void* alloc_page_table() {
     // physical address of new page
     // This is not the address we return.
     // We return one from reserved_page_table
-    void* new_page_table = kerneL_alloc_phys_pages(1);
+    void* new_page_table = PMEM_allocate_phys_pages(1);
     
     u64* page_table_4 = (void*)read_cr3();
 
@@ -151,7 +152,7 @@ void* alloc_page_table() {
             // We need to refill free mapped page tables so that we don't run out of table directories
             // when allocating new page tables.
             
-            void* extraTable = kerneL_alloc_phys_pages(1);
+            void* extraTable = PMEM_allocate_phys_pages(1);
 
             entry = 3; // set present, read/write bit, clear user to get supervisor page (for now)
             entry |= (u64)extraTable & MASK_ENTRY_PHYS_ADDRESS;

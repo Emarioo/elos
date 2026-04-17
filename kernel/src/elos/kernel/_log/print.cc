@@ -1,13 +1,12 @@
 
 #include <stdarg.h>
-#include <efi.h>
-#include <efilib.h>
-#include <efilib.h>
+// #include <efi.h>
+// #include <efilib.h>
+// #include <efilib.h>
 
-#include "elos/kernel/common/types.h"
-#include "elos/kernel/common/string.h"
-#include "elos/kernel/common/core_data.h"
-#include "elos/kernel/frame/frame.h"
+#include "elos/common/types.h"
+#include "elos/common/string.h"
+#include "elos/kernel/video/frame.h"
 
 
 

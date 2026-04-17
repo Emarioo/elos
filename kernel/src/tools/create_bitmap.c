@@ -2,18 +2,23 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+
+int verbose = 0;
+
+#define log(...) if (verbose) { printf(__VA_ARGS__); }
+
 int main(int argc, char** argv) {
 
     int x,y,channels;
-    const char* out_path = "res/ascii_bitmap.c";
-    const char* image_path = "res/ascii_bitmap.png";
+    const char* image_path = argv[1];
+    const char* out_path   = argv[2];
     char* data = (char*)stbi_load(image_path, &x, &y, &channels, 4);
     if(!data) {
         fprintf(stderr, "Could not find or parse '%s'\n", image_path);
         return 1;
     }
 
-    printf("width/height: %d/%d\n", x, y);
+    log("width/height: %d/%d\n", x, y);
 
     
     FILE* out = fopen(out_path, "wb");

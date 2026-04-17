@@ -11,8 +11,7 @@
 
 #include "elos/kernel/memory/phys_allocator.h"
 #include "elos/kernel/memory/paging.h"
-#include "elos/kernel/common/string.h"
-#include "elos/kernel/common/core_data.h"
+#include "elos/common/string.h"
 #include "elos/kernel/debug/debug.h"
 
 #undef PAGE_SIZE

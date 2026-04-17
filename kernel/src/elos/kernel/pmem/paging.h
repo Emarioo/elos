@@ -1,6 +1,6 @@
 #pragma once
 
-#include "elos/kernel/common/types.h"
+#include "elos/common/types.h"
 
 /*
     Sets up backup page tables in case we run out of them when mapping pages.

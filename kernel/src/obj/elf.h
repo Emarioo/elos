@@ -22,7 +22,7 @@
 #include <stdint.h>
 
 typedef uint64_t u64;
-typedef uint32_t u32;
+typedef uint32_t uint32_t;
 typedef uint16_t u16;
 typedef uint8_t u8;
 
@@ -34,18 +34,18 @@ typedef int8_t i8;
 namespace elf {
     
     typedef u16 Elf64_Half;
-    typedef u32 Elf64_Word;
+    typedef uint32_t Elf64_Word;
     typedef i32 Elf64_Sword;
     typedef u64 Elf64_Xword;
     typedef i64 Elf64_Sxword;
     typedef u64 Elf64_Addr;
     typedef u64 Elf64_Off;
     
-    typedef u32 Elf32_Addr;
+    typedef uint32_t Elf32_Addr;
     typedef u16 Elf32_Half;
-    typedef u32 Elf32_Off;
+    typedef uint32_t Elf32_Off;
     typedef i32 Elf32_Sword;
-    typedef u32 Elf32_Word;
+    typedef uint32_t Elf32_Word;
     
     #define EI_CLASS 4
     #define EI_DATA 5
@@ -380,7 +380,7 @@ struct FileELF {
     // QuickArray<elf::Elf64_Shdr*> sections{};
     // QuickArray<elf::Elf64_Sym*> symbols{};
 
-    // u32 stringTableSize = 0;
+    // uint32_t stringTableSize = 0;
     // char* stringTableData = nullptr;
 
     void writeFile(const std::string& path);
@@ -388,13 +388,13 @@ struct FileELF {
     static FileELF* DeconstructFile(const std::string& path, bool silent = true);
     static void Destroy(FileELF* elfFile);
 
-    static bool WriteFile(const std::string& name, Program* program, u32 from = 0, u32 to = (u32)-1);
+    static bool WriteFile(const std::string& name, Program* program, uint32_t from = 0, uint32_t to = (uint32_t)-1);
 };
 
 // Constants for .ARM.attributes
-#define Tag_File                       1  // u32
-// #define Tag_Section                    2  // u32
-// #define Tag_Symbol                     3  // u32
+#define Tag_File                       1  // uint32_t
+// #define Tag_Section                    2  // uint32_t
+// #define Tag_Symbol                     3  // uint32_t
 #define Tag_CPU_raw_name               4  // NTBS         r2.0	 
 #define Tag_CPU_name                   5  // NTBS         r2.0	 
 #define Tag_CPU_arch                   6  // uleb128      r2.0	r2.06: Added enum values for v6-M, v6S-M; r2.08: Added enum value for v7E-M. r2.09: Added enum value for v8.

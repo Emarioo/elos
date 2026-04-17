@@ -1,6 +1,8 @@
 
 #include "elos/cpu.h"
 
+#include "elos/common/types.h"
+
 
 
 void init_gdt_idt();
@@ -15,16 +17,16 @@ void CPU_init(BootAPI* boot_api) {
 // TODO: GDT,IDT tables should be placed elsewhere
 #pragma pack(push, 1)
 typedef struct GDT_IDT_Register {
-    uint16_t size;
-    uint64_t addr;
+    u16 size;
+    u64 addr;
 } GDT_IDT_Register;
 #pragma pack(pop)
 
 static GDT_IDT_Register _gdt_register;
 static GDT_IDT_Register _idt_register;
 
-static uint64_t _gdt[3];
-static uint64_t _idt[1024];
+static u64 _gdt[3];
+static u64 _idt[1024];
 
 void init_gdt_idt() {
     
@@ -35,7 +37,7 @@ void init_gdt_idt() {
     // @TODO: Setup ring-3 user task system segments
     
     _gdt_register.size = sizeof(_gdt);
-    _gdt_register.addr = (uint64_t)&_gdt;
+    _gdt_register.addr = (u64)&_gdt;
     
     // @TODO: Interrupt descriptor table
 

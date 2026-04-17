@@ -1,6 +1,6 @@
 #pragma once
 
-#include "elos/kernel/common/types.h"
+#include "elos/common/types.h"
 
 static inline void outb(u16 port, u8 value) {
     asm(

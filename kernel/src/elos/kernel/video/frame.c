@@ -2,10 +2,10 @@
     Basic graphics
 */
 
-#include "elos/kernel/frame/frame.h"
-#include "elos/kernel/common/types.h"
-#include "elos/kernel/common/string.h"
-#include "elos/kernel/common/core_data.h"
+#include "elos/kernel/video/frame.h"
+#include "elos/common/types.h"
+#include "elos/common/string.h"
+#include "elos/frame_buffer.h"
 
 
 #define ascii_width 16;
@@ -20,8 +20,8 @@ extern const u32 ascii_bitmap[0];
 
 void draw_frame_info(int* width, int* height) {
     // TODO: Validate user addresses
-    *width = kernel__core_data->graphics_output->Mode->Info->HorizontalResolution;
-    *height = kernel__core_data->graphics_output->Mode->Info->VerticalResolution;
+    *width = g_frame_buffer.width;
+    *height = g_frame_buffer.height;
 }
 
 // void draw_text(int x, int y, int h, string text) {
@@ -32,7 +32,15 @@ void draw_frame_info(int* width, int* height) {
 //     kernel__core_data->graphics_output->Blt(kernel__core_data->graphics_output, ,
 // }
 void draw_char_bcolor(int x, int y, int height, char c, u32 color, u32 back_color) {
-    EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE* const mode = kernel__core_data->graphics_output->Mode;
+    // EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE* const mode = kernel__core_data->graphics_output->Mode;
+
+    int format = 0;
+
+    #define PixelBlueGreenRedReserved8BitPerColor 0
+    #define PixelRedGreenBlueReserved8BitPerColor 1
+    #define PixelBitMask 2
+    #define PixelBltOnly 3
+    #define PixelFormatMax 4
 
     int w = 8;
     int h = 8;
@@ -44,14 +52,14 @@ void draw_char_bcolor(int x, int y, int height, char c, u32 color, u32 back_colo
         h += y;
         y = 0;
     }
-    if (x + w > mode->Info->HorizontalResolution)
-        w = mode->Info->HorizontalResolution - x;
-    if (y + h > mode->Info->VerticalResolution)
-        h = mode->Info->VerticalResolution - y;
+    if (x + w > g_frame_buffer.width)
+        w = g_frame_buffer.width - x;
+    if (y + h > g_frame_buffer.height)
+        h = g_frame_buffer.height - y;
 
     const int FACTOR = ((7+height) / 8);
 
-    switch(mode->Info->PixelFormat) {
+    switch(format) {
         case PixelRedGreenBlueReserved8BitPerColor: {
             // TODO: FIX
             // color = ((color >> 16) & 0xFF) |
@@ -61,8 +69,8 @@ void draw_char_bcolor(int x, int y, int height, char c, u32 color, u32 back_colo
         // fallthrough
         case PixelBlueGreenRedReserved8BitPerColor: {
             // TODO: SIMD
-            u32* const pixels           = (u32*)mode->FrameBufferBase;
-            u32  const pixels_per_line  = mode->Info->PixelsPerScanLine;
+            u32* const pixels           = (u32*)g_frame_buffer.base;
+            u32  const pixels_per_line  = g_frame_buffer.pixels_per_scan_line;
             const int dst_offset = x + y * pixels_per_line;
             const int src_offset = c * 8*8; // each character is 8x8 pixels
             for (int iy = 0; iy < h; iy++) {
@@ -102,7 +110,7 @@ void draw_text_bcolor(int x, int y, int h, cstring text, u32 color, u32 back_col
 }
 
 void draw_rect(int x, int y, int w, int h, u32 rgba) {
-    EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE* const mode = kernel__core_data->graphics_output->Mode;
+    // EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE* const mode = kernel__core_data->graphics_output->Mode;
 
     if (x < 0) {
         w += x;
@@ -112,13 +120,13 @@ void draw_rect(int x, int y, int w, int h, u32 rgba) {
         h += y;
         y = 0;
     }
-    if (x + w > mode->Info->HorizontalResolution)
-        w = mode->Info->HorizontalResolution - x;
-    if (y + h > mode->Info->VerticalResolution)
-        h = mode->Info->VerticalResolution - y;
+    if (x + w > g_frame_buffer.width)
+        w = g_frame_buffer.width - x;
+    if (y + h > g_frame_buffer.height)
+        h = g_frame_buffer.height - y;
 
     u32 color = rgba;
-    switch(mode->Info->PixelFormat) {
+    switch(0) {
         case PixelRedGreenBlueReserved8BitPerColor: {
             // TODO: FIX
             // color = ((rgba >> 16) & 0xFF) |
@@ -128,8 +136,8 @@ void draw_rect(int x, int y, int w, int h, u32 rgba) {
         // fallthrough
         case PixelBlueGreenRedReserved8BitPerColor: {
             // TODO: SIMD
-            u32* const pixels           = (u32*)mode->FrameBufferBase;
-            u32  const pixels_per_line  = mode->Info->PixelsPerScanLine;
+            u32* const pixels           = (u32*)g_frame_buffer.base;
+            u32  const pixels_per_line  = g_frame_buffer.pixels_per_scan_line;
             for (int iy = y; iy < y + h; iy++) {
                 for (int ix = x; ix < x + w; ix++) {
                     pixels[ix + iy * pixels_per_line] = color;
@@ -153,21 +161,21 @@ void draw_refresh() {
 }
 
 void draw_shift_frame(int x, int y, u32 fill_color) {
-    EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE* const mode = kernel__core_data->graphics_output->Mode;
-    u32* const pixels           = (u32*)mode->FrameBufferBase;
-    u32  const pixels_per_line  = mode->Info->PixelsPerScanLine;
+    // EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE* const mode = kernel__core_data->graphics_output->Mode;
+    u32* const pixels           = (u32*)g_frame_buffer.base;
+    u32  const pixels_per_line  = g_frame_buffer.pixels_per_scan_line;
 
     // NOTE: Horizontal shift not implemented. This function is mainly for simple scrolling where pixels are lost.
 
     int abs_y = (y < 0 ? -y : y);
 
-    int total_size = 4 * pixels_per_line * mode->Info->VerticalResolution;
+    int total_size = 4 * pixels_per_line * g_frame_buffer.height;
     int shift_size = total_size - 4 * pixels_per_line * abs_y;
 
     if (y < 0) {
         memmove(pixels, pixels + pixels_per_line * abs_y, shift_size);
         if (fill_color & 0xFF000000) {
-            draw_rect(0, mode->Info->VerticalResolution - abs_y, pixels_per_line, abs_y, fill_color);
+            draw_rect(0, g_frame_buffer.height - abs_y, pixels_per_line, abs_y, fill_color);
         }
     } else {
         memmove(pixels + pixels_per_line * abs_y, pixels, shift_size);
@@ -178,8 +186,8 @@ void draw_shift_frame(int x, int y, u32 fill_color) {
 }
 
 void draw_glyphs_from_text_bcolor(int x, int y, int height, const cstring text, const Font* font, u32 color, u32 back_color) {
-    EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE* const mode = kernel__core_data->graphics_output->Mode;
-    const int pixel_count = mode->Info->PixelsPerScanLine * mode->Info->VerticalResolution;
+    // EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE* const mode = kernel__core_data->graphics_output->Mode;
+    const int pixel_count = g_frame_buffer.pixels_per_scan_line * g_frame_buffer.height;
     int monospace_width  = 1; // determines aspect ratio, we use width and height to avoid floats
     int monospace_height = 2;
 
@@ -195,7 +203,7 @@ void draw_glyphs_from_text_bcolor(int x, int y, int height, const cstring text, 
         if(glyph->format != GLYPH_FORMAT_GRAYMAP)
             continue; // TODO: Use missing glyph texture
 
-        switch(mode->Info->PixelFormat) {
+        switch(0) {
             case PixelRedGreenBlueReserved8BitPerColor: {
                 // TODO: FIX
                 // color = ((color >> 16) & 0xFF) |
@@ -206,8 +214,8 @@ void draw_glyphs_from_text_bcolor(int x, int y, int height, const cstring text, 
             case PixelBlueGreenRedReserved8BitPerColor: {
                 // TODO: SIMD
                 
-                u32* const pixels           = (u32*)mode->FrameBufferBase;
-                u32  const pixels_per_line  = mode->Info->PixelsPerScanLine;
+                u32* const pixels           = (u32*)g_frame_buffer.base;
+                u32  const pixels_per_line  = g_frame_buffer.pixels_per_scan_line;
 
                 // HA, good luck understanding this math future me!
                 //  It's integer math where we keep precision and are wary of integer division.

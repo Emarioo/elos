@@ -1,6 +1,6 @@
-#include "elos/kernel/frame/font/font.h"
+#include "elos/kernel/video/font/font.h"
 
-#include "elos/kernel/frame/font/psf.h"
+#include "elos/kernel/video/font/psf.h"
 
 #define be16(X) __builtin_bswap16(X)
 #define be32(X) __builtin_bswap32(X)

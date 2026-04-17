@@ -1,39 +1,20 @@
 
 
-#include "elos/kernel/frame/font/psf.h"
+#include "elos/kernel/video/font/psf.h"
 
-#include "elos/kernel/memory/phys_allocator.h"
-#include "elos/kernel/common/string.h"
+#include "elos/physical_memory.h"
+#include "elos/common/string.h"
 
-// @TODO: Temporary, needed to print using UEFI
-#include <efi.h>
-#include <efilib.h>
+#include "elos/kernel_console.h"
+
 
 #define be16(X) __builtin_bswap16(X)
 #define be32(X) __builtin_bswap32(X)
 #define be64(X) __builtin_bswap64(X)
 
-#define log(...) printf(__VA_ARGS__)
+#define log(...) KCON_printf(__VA_ARGS__)
 // #define log(...)
 
-
-static void printf(char* format, ...) {
-    char buffer[256];
-    unsigned short w_buffer[256];
-
-    va_list va;
-    va_start(va, format);
-    const int len = vsnprintf(buffer, sizeof(buffer), format, va);
-    va_end(va);
-
-    for (int i=0;i<len+1;i++) {
-        w_buffer[i] = buffer[i];
-    }
-
-    EFI_STATUS status = ST->ConOut->OutputString(ST->ConOut, w_buffer);
-    // if(EFI_ERROR(status))
-    //     catch_bad_status();
-}
 
 
 #define PSF1_FONT_MAGIC 0x0436
@@ -143,7 +124,7 @@ bool font_psf__load_from_bytes(const u8* data, u32 size, Font** out_font) {
         + numGlyphsInFont * glyphWidth * glyphHeight;
     // @TODO: Allocate user accessible memory?
     int head_data = 0;
-    u8* memory = (u8*)kernel_alloc(memory_max, NULL);
+    u8* memory = (u8*)PMEM_allocate(memory_max, NULL);
     if (!memory) {
         // @TODO: Error
         return false;

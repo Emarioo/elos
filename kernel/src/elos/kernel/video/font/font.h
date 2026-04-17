@@ -18,7 +18,7 @@ Note that characters are taller than they wide.
 
 #pragma once
 
-#include "elos/kernel/common/types.h"
+#include "elos/common/types.h"
 
 
 typedef enum GlyphFormat {

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "elos/kernel/common/types.h"
-#include "elos/kernel/frame/font/font.h"
+#include "elos/common/types.h"
+#include "elos/kernel/video/font/font.h"
 
 // ARGB in big endian (hexidecimal literal)
 // BGRA in little endian

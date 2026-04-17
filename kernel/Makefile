@@ -1,14 +1,79 @@
+#
+# Makefile to build EFI Application
+#
+
+# Parameters to set:
+INT_DIR      ?= int
+KERNEL_ELF   ?= $(INT_DIR)/kernel.elf
+KERNEL_IMAGE ?= $(INT_DIR)/kernel.img
+
+################################
+
+SILENT := @
+
+ROOT := $(abspath $(dir $(abspath $(lastword $(MAKEFILE_LIST))))..)
 
 
-all: uefi
+CC      := gcc
+AS      := as
+LD      := ld
+OBJCOPY := objcopy
 
 
 
+CFLAGS := -ggdb -ffreestanding
+CFLAGS += -I$(ROOT)/boot/include -I$(ROOT)/kernel/src -I$(ROOT)/kernel/include
+CFLAGS += -fshort-wchar -Werror=implicit-function-declaration
+CFLAGS += -fno-asynchronous-unwind-tables -fno-exceptions
+CFLAGS += -Wall -Werror -Wno-multichar
+CFLAGS += -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable
+
+ASFLAGS := -g
+
+LDFLAGS := -nostdlib  -T $(ROOT)/kernel/sections.ld
+
+SRC_FILES := $(shell find $(ROOT)/kernel/src/elos -name '*.c') $(wildcard $(ROOT)/kernel/*.s)
+SRC_FILES += $(INT_DIR)/ascii_bitmap.c
+
+OBJ_FILES := $(patsubst $(ROOT)/kernel/%.c,$(INT_DIR)/%.o,$(SRC_FILES))
+OBJ_FILES := $(patsubst $(ROOT)/kernel/%.s,$(INT_DIR)/%.o,$(OBJ_FILES))
+OBJ_FILES := $(patsubst $(INT_DIR)/%.c,$(INT_DIR)/%.o,$(OBJ_FILES))
+
+DEP_FILES := $(patsubst %.o,%.d,$(OBJ_FILES))
+
+# $(info $(SRC_FILES))
+
+all: $(KERNEL_IMAGE) $(KERNEL_ELF)
+
+ifeq (0, $(words $(findstring $(MAKECMDGOALS), clean)))
+    -include $(DEP_FILES)
+endif
 
 
+$(INT_DIR):
+	$(SILENT) mkdir $(INT_DIR)
+
+$(INT_DIR)/%.o: $(ROOT)/kernel/%.c | $(INT_DIR)
+	$(SILENT) mkdir -p $(@D)
+	$(SILENT) $(CC) $(CFLAGS) -c -MD -o $@ $<
+
+$(INT_DIR)/%.o: $(INT_DIR)/%.c | $(INT_DIR)
+	$(SILENT) $(CC) $(CFLAGS) -c -MD -o $@ $<
+	
+$(INT_DIR)/%.o: $(ROOT)/kernel/%.s | $(INT_DIR)
+	$(SILENT) $(AS) $(ASFLAGS) -c -MD $(patsubst %.o,%.d,$@) -o $@ $<
+
+$(KERNEL_ELF): $(OBJ_FILES) | $(INT_DIR)
+	$(SILENT) $(LD) $(LDFLAGS) -o $@ $^
+	
+$(KERNEL_IMAGE): $(KERNEL_ELF) | $(INT_DIR)
+	$(SILENT) $(OBJCOPY) -O binary $< $@
 
 
+$(INT_DIR)/ascii_bitmap.c: $(ROOT)/kernel/src/tools/create_bitmap.c | $(INT_DIR)
+	$(SILENT) gcc -o $(INT_DIR)/create_bitmap -I$(ROOT)/kernel/include/vendor $< -lm \
+	    && $(INT_DIR)/create_bitmap $(ROOT)/res/ascii_bitmap.png $@
 
 
-
-
+clean:
+	$(SILENT) rm $(OBJ_FILES) $(DEP_FILES) $(BOOT_APP)

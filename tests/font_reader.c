@@ -1,4 +1,4 @@
-#include "elos/kernel/frame/font.h"
+#include "elos/kernel/video/font.h"
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>

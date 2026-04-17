@@ -2,10 +2,11 @@
     Main terminal
 */
 
-#include "elos/kernel/driver/ps2.h"
-#include "elos/kernel/frame/frame.h"
-#include "elos/kernel/common/types.h"
-#include "elos/kernel/common/string.h"
+#include "elos/keyboard.h"
+#include "elos/kernel/video/frame.h"
+#include "elos/frame_buffer.h"
+#include "elos/common/types.h"
+#include "elos/common/string.h"
 
 
 char _text_buffer[4096];
@@ -18,8 +19,7 @@ int g_terminal_text_y = 10;
 
 void apply_command(cstring text);
 
-void edit_text(string* text, int scancode, int* cursor) {
-    int keycode = scancode_to_keycode(scancode);
+void edit_text(string* text, Keycode keycode, int character, int mods, int* cursor) {
 
     if (keycode == KEY_LEFT_ARROW) {
         if (*cursor > 0) {
@@ -44,17 +44,16 @@ void edit_text(string* text, int scancode, int* cursor) {
             text->len--;
         }
     } else {
-        char chr = scancode_to_char(scancode, 0);
-        if (chr == 0)
+        if (character == 0)
             return; // not a char code.
         if (*cursor == text->len) {
-            text->ptr[*cursor] = chr;
+            text->ptr[*cursor] = character;
             text->len++;
             (*cursor)++;
             text->ptr[*cursor] = '\0';
         } else {
             memmove(text->ptr + *cursor + 1, text->ptr + *cursor, text->len - *cursor);
-            text->ptr[*cursor] = chr;
+            text->ptr[*cursor] = character;
             text->len++;
             (*cursor)++;
         }
@@ -71,10 +70,10 @@ void terminal_start() {
     int text_height = 20;
     while (1) {
 
-        // Blocking
-        int scancode = ps2_read_scancode();
 
-        int keycode = scancode_to_keycode(scancode);
+        int character;
+        int mods;
+        Keycode keycode = KBD_read_key(&character, &mods);
 
         if (keycode == KEY_ENTER) {
             g_terminal_cursor_pos = 0;
@@ -83,11 +82,11 @@ void terminal_start() {
 
             apply_command(STR_CSTR(g_terminal_text));
         } else {
-            edit_text(&g_terminal_text, scancode, &g_terminal_cursor_pos);
+            edit_text(&g_terminal_text, keycode, character, mods, &g_terminal_cursor_pos);
         }
 
         //  debug scancode
-        snprintf(buffer, sizeof(buffer), "scancode %d", scancode);
+        snprintf(buffer, sizeof(buffer), "scancode %d", keycode);
         draw_glyphs_from_text_bcolor(500, 500, text_height, PTR_CSTR(buffer), g_default_font, WHITE, DARK_BLUE);
 
         int text_width = draw_text_width(STR_CSTR(g_terminal_text), text_height, g_default_font);

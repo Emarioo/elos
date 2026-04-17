@@ -2,7 +2,7 @@
 
 #include <immintrin.h>
 
-#include "elos/kernel/common/types.h"
+#include "elos/common/types.h"
 
 // #include <efi.h>
 // #include <efilib.h>

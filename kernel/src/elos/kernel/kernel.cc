@@ -2,17 +2,17 @@
     
 */
 
-#include "elos/kernel/frame/frame.h"
+#include "elos/kernel/video/frame.h"
 #include "immintrin.h"
-#include "elos/kernel/common/string.h"
+#include "elos/common/string.h"
 #include "elos/kernel/log/print.h"
-#include "elos/kernel/common/cpu.h"
+#include "elos/common/cpu.h"
 #include "elos/kernel/driver/pata.h"
-#include "elos/kernel/driver/pci.h"
-#include "elos/kernel/driver/ps2.h"
-#include "elos/kernel/debug/debug.h"
-#include "elos/kernel/memory/phys_allocator.h"
-#include "elos/kernel/memory/paging.h"
+// #include "elos/kernel/driver/pci.h"
+// #include "elos/kernel/driver/ps2.h"
+// #include "elos/kernel/debug/debug.h"
+// #include "elos/kernel/memory/phys_allocator.h"
+// #include "elos/kernel/memory/paging.h"
 #include "fs/fat.h"
 
 #include "elos/user/terminal.h"
@@ -21,69 +21,56 @@ u32 make_color(u8 r, u8 g, u8 b) {
     return (int)r | ((int)g << 8) | ((int)b << 16);
 }
 
-static unsigned long xorshift_state = 2463534242;
-
-unsigned int xorshift32(void) {
-    unsigned x = xorshift_state;
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    return xorshift_state = x;
-}
-
-void srandx(unsigned long s) {
-    xorshift_state = s ? s : 2463534242;
-}
 
 // TODO: GDT,IDT tables should be placed elsewhere
-#pragma pack(push, 1)
-typedef struct GDT_IDT_Register {
-    u16 size;
-    u64 addr;
-} GDT_IDT_Register;
-#pragma pack(pop)
+// #pragma pack(push, 1)
+// typedef struct GDT_IDT_Register {
+//     u16 size;
+//     u64 addr;
+// } GDT_IDT_Register;
+// #pragma pack(pop)
 
-static GDT_IDT_Register _gdt_register;
-static GDT_IDT_Register _idt_register;
+// static GDT_IDT_Register _gdt_register;
+// static GDT_IDT_Register _idt_register;
 
-static u64 _gdt[3];
-static u64 _idt[1024];
+// static u64 _gdt[3];
+// static u64 _idt[1024];
 
-void init_gdt_idt() {
+// void init_gdt_idt() {
     
-    _gdt[0] = 0;
-    _gdt[1] = (( 0b0010LLU ) << 52) | (( 0b10011010LLU ) << 40);
-    _gdt[2] = (( 0b0000LLU ) << 52) | (( 0b10010010LLU ) << 40);
+//     _gdt[0] = 0;
+//     _gdt[1] = (( 0b0010LLU ) << 52) | (( 0b10011010LLU ) << 40);
+//     _gdt[2] = (( 0b0000LLU ) << 52) | (( 0b10010010LLU ) << 40);
 
-    // @TODO: Setup ring-3 user task system segments
+//     // @TODO: Setup ring-3 user task system segments
     
-    _gdt_register.size = sizeof(_gdt);
-    _gdt_register.addr = (u64)&_gdt;
+//     _gdt_register.size = sizeof(_gdt);
+//     _gdt_register.addr = (u64)&_gdt;
     
-    // @TODO: Interrupt descriptor table
+//     // @TODO: Interrupt descriptor table
 
-    asm ( "lgdt %0\n" : : "m" (_gdt_register) );
+//     asm ( "lgdt %0\n" : : "m" (_gdt_register) );
 
-    asm volatile (
-        "mov $0x10, %%ax\n"
-        "mov %%ax, %%ds\n"
-        "mov %%ax, %%es\n"
-        "mov %%ax, %%ss\n"
-        "pushq $0x08\n"
-        "leaq 1f(%%rip), %%rax\n"
-        "pushq %%rax\n"
-        "lretq\n"
-        "1:\n"
-        :::"rax"
-    );
-}
+//     asm volatile (
+//         "mov $0x10, %%ax\n"
+//         "mov %%ax, %%ds\n"
+//         "mov %%ax, %%es\n"
+//         "mov %%ax, %%ss\n"
+//         "pushq $0x08\n"
+//         "leaq 1f(%%rip), %%rax\n"
+//         "pushq %%rax\n"
+//         "lretq\n"
+//         "1:\n"
+//         :::"rax"
+//     );
+// }
 
-extern const char* sv_keymap;
+// extern const char* sv_keymap;
 
 void kernel_entry() {
-    init_paging();
+    // init_paging();
 
-    init_gdt_idt();
+    // init_gdt_idt();
 
 
     int width,height;
@@ -235,12 +222,6 @@ void kernel_entry() {
 
 
 
-int bugs;
-void kernel_bug() {
-    printf("KERNEL BUG");
-    serial_printf("KERNEL BUG");
-    bugs++;
-}
 
                     // keycode scancode
 const char* sv_keymap = "1 118\n"

@@ -1,12 +1,11 @@
 #include "elos/kernel/kbd/ps2.h"
 
-#include "elos/kernel/common/intrinsics.h"
-#include "elos/kernel/log/print.h"
-#include "elos/kernel/common/cpu.h"
-#include "elos/kernel/common/types.h"
-#include "elos/kernel/common/string.h"
+#include "elos/common/intrinsics.h"
+#include "elos/kernel_console.h"
+#include "elos/common/cpu.h"
+#include "elos/common/types.h"
+#include "elos/common/string.h"
 #include "elos/kernel/kbd/keys.h"
-#include "elos/kernel/debug/debug.h"
 
 
 
@@ -19,6 +18,8 @@
 #define PS2_TIME_OUT_MASK 0x40
 #define PS2_PARITY_MASK 0x80
 
+
+#define printf(...) KCON_printf(__VA_ARGS__)
 
 extern int us_keymap[256];
 extern int sv_keymap[256];
@@ -320,13 +321,13 @@ int ps2_ask_keymap() {
         _default_keymap.scan_to_key[(((scancode >> 16) == 0xE0) ? 256 : 0) + (scancode & 0xFF)].scancode = scancode;
     }
 
-    serial_printf("Keymap (keycode,scancode):\n");
-    for (int i=0;i<KEY_MAX;i++) {
-        KeymapEntry* entry = &_default_keymap.key_to_scan[i];
-        if (entry->keycode != KEY_NONE) {
-            serial_printf("%d %d\n", entry->keycode, entry->scancode);
-        }
-    }
+    // serial_printf("Keymap (keycode,scancode):\n");
+    // for (int i=0;i<KEY_MAX;i++) {
+    //     KeymapEntry* entry = &_default_keymap.key_to_scan[i];
+    //     if (entry->keycode != KEY_NONE) {
+    //         serial_printf("%d %d\n", entry->keycode, entry->scancode);
+    //     }
+    // }
 
     return 0;
 }

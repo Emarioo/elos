@@ -12,7 +12,7 @@ def test_font_reader():
     EXE = TEST_INT + "/font_reader.exe"
     SRC = " ".join([
         "tests/font_reader.c",
-        "src/elos/kernel/frame/font.c"
+        "src/elos/kernel/video/font.c"
     ])
     FLAGS = "-Iinclude -Isrc -g"
     FLAGS += " -Werror=implicit-function-declaration"

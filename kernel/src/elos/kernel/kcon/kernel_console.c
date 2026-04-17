@@ -1,7 +1,8 @@
 
 #include "elos/kernel_console.h"
 
-#include "elos/kernel/common/string.h"
+#include "elos/common/string.h"
+#include "elos/common/intrinsics.h"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -69,7 +70,7 @@ void serial_write(const char* buffer, int size) {
     for (int i = 0; i < size; i++) {
         int limit = 100;
         while (limit--) {
-            uint8_t status = inb(COM1 + 5);
+            u8 status = inb(COM1 + 5);
             if ((status & 0x20) != 0)
                 break;
         }

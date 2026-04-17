@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "elos/kernel/common/types.h"
+#include "elos/common/types.h"
 
 
 

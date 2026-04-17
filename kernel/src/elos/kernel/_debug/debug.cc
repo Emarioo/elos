@@ -1,7 +1,7 @@
 
 #include "elos/kernel/debug/debug.h"
-#include "elos/kernel/common/intrinsics.h"
-#include "elos/kernel/common/string.h"
+#include "elos/common/intrinsics.h"
+#include "elos/common/string.h"
 
 static bool _serial_initialized;
 

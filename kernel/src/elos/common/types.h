@@ -2,6 +2,10 @@
 
 // We assume 64-bit system
 
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+
 typedef unsigned long long u64;
 typedef unsigned int       u32;
 typedef unsigned short     u16;
@@ -11,8 +15,6 @@ typedef long long         s64;
 typedef int               s32;
 typedef short             s16;
 typedef char              s8;
-
-typedef unsigned char     bool;
 
 typedef struct cstring {
     const char* ptr;
@@ -25,19 +27,11 @@ typedef struct string {
     u32  max;
 } string;
 
-
-
-
 typedef struct bytearray {
     char* ptr;
     u64  len;
 } bytearray;
 
-#define false 0
-#define true 1
-#ifndef NULL
-    #define NULL 0
-#endif
 
 void kernel_bug();
 

@@ -1,4 +1,7 @@
 
+#include <stdint.h>
+#include <stddef.h>
+
 #include "elos/kernel/kbd/keys.h"
 
 const char* key_name(int keycode) {

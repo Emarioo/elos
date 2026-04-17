@@ -3,6 +3,8 @@
 
 #include "elos/kernel/driver/pata.h"
 
+#include "elos/common/string.h"
+
 
 // stub for now
 static inline bool valid_user_address(void* ptr, int size) {
@@ -52,7 +54,7 @@ bool elos__list_devices(elos__DeviceType types, elos__Device* out_devices, u32* 
         return false;
     }
 
-    res = valid_user_pointer(in_out_devices_len, 4);
+    res = valid_user_address(in_out_devices_len, 4);
     if(!res) {
         if(out_error) {
             out_error->type = elos__DEVICE_CODE_BAD_PARAMETER;
@@ -61,7 +63,7 @@ bool elos__list_devices(elos__DeviceType types, elos__Device* out_devices, u32* 
         return false;
     }
 
-    res = valid_user_pointer(out_devices, sizeof(*out_devices) * *in_out_devices_len);
+    res = valid_user_address(out_devices, sizeof(*out_devices) * *in_out_devices_len);
     if(!res) {
         if(out_error) {
             out_error->type = elos__DEVICE_CODE_BAD_PARAMETER;

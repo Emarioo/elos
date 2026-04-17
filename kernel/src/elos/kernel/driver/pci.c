@@ -1,9 +1,8 @@
 
 #include "elos/kernel/driver/pci.h"
-#include "elos/kernel/common/string.h"
-#include "elos/kernel/log/print.h"
-#include "elos/kernel/common/intrinsics.h"
-#include "elos/kernel/debug/debug.h"
+#include "elos/common/string.h"
+#include "elos/kernel_console.h"
+#include "elos/common/intrinsics.h"
 
 #include "elos/kernel/driver/pata.h"
 
@@ -275,6 +274,10 @@ typedef struct PCI_ConfigSpace {
     };
 } PCI_ConfigSpace;
 
+
+#define printf(...) KCON_printf(__VA_ARGS__)
+
+
 static u16 pciConfig_readw(u8 bus, u8 slot, u8 func, u8 offset) {
     // TODO: Handle errors?
     if (slot >= 1<<6)
@@ -332,7 +335,6 @@ void trace_config_space(PCI_ConfigSpace* config) {
     char buffer[512];
     snprintf(buffer, sizeof(buffer), "Device %d, Vendor %d, Class %d, Subclass %d, ProgIF %d\n", config->deviceID, config->vendorID, config->classCode, config->subclass, config->progIF);
     printf("%s", buffer);
-    serial_printf("%s", buffer);
 }
 
 u8 pci_readHeaderType(int bus, int device, int function) {

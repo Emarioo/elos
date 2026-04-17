@@ -1,10 +1,10 @@
 
 #include "elos/kernel/driver/pata.h"
 
-#include "elos/kernel/log/print.h"
-#include "elos/kernel/common/cpu.h"
+#include "elos/kernel_console.h"
+#include "elos/common/cpu.h"
 
-#include "elos/kernel/common/intrinsics.h"
+#include "elos/common/intrinsics.h"
 
 
 /*
@@ -17,6 +17,9 @@
 const int IO_PRIMARY_BASE = 0x1F0;
 const int IO_PRIMARY_CONTROL = 0x3F6;
 const int device0 = 0xA0;
+
+
+#define printf(...) KCON_printf(__VA_ARGS__)
 
 // Returns non-zero if we didn't get non-bsy
 int ata_wait_bsy() {

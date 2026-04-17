@@ -15,19 +15,12 @@ void KBD_init(BootAPI* boot_api) {
 }
 
 
-Keycode KBD_read_key() {
+Keycode KBD_read_key(int* character, int* mods) {
     // BLOCKING
     int scancode = ps2_read_scancode();
 
+    *character = scancode_to_char(scancode, 0);
     return scancode_to_keycode(scancode);
-}
-
-// returns int for UTF-8 codepoint (we just support ASCII at the moment)
-int KBD_read_char() {
-    // BLOCKING
-    int scancode = ps2_read_scancode();
-    
-    return scancode_to_char(scancode, 0);
 }
 
                     // keycode scancode

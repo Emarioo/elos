@@ -1,10 +1,12 @@
 
 #include "elos/boot_api.h"
 
+#include "elos/keyboard.h"
 #include "elos/kernel_console.h"
 #include "elos/frame_buffer.h"
 #include "elos/physical_memory.h"
 #include "elos/cpu.h"
+
 
 void kernel_entry(BootAPI* boot_api) {
 
@@ -18,7 +20,7 @@ void kernel_entry(BootAPI* boot_api) {
         // If frame buffer is available initialize it.
         KCON_printf("Initializing frame buffer");
         FB_init(boot_api);
-        KCON_add_printf_hook(FB_write);
+        KCON_add_write_hook(FB_write);
         // Kernel components will now write to serial UART and
         // frame buffer whenever a Kernel Component logs anything.
         // (we see stuff on the display as well as a log file from QEMU)
@@ -42,4 +44,11 @@ void kernel_entry(BootAPI* boot_api) {
     KCON_printf("END OF KERNEL_ENTRY!");
     while (1) ;
 
+}
+
+
+int bugs;
+void kernel_bug() {
+    KCON_printf("KERNEL BUG");
+    bugs++;
 }
