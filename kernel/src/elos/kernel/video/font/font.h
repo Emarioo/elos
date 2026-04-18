@@ -59,6 +59,7 @@ typedef struct Font {
 
 extern Font* g_default_font;
 
+
 bool font__load_from_bytes(const u8* data, u32 size, Font** out_font);
 
 const Glyph* font__get_glyph(const Font* font, u32 codepoint);

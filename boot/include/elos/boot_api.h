@@ -27,3 +27,4 @@ typedef struct {
 
 } BootAPI;
 
+typedef void(*FN_BootAPI)(BootAPI);

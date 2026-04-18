@@ -235,7 +235,7 @@ void* PMEM_allocate(u64 size, void* ptr) {
             g_num_used_regions = found_used_index + 1;
         }
 
-        void* const new_ptr    = (void*)(used_alloc->virtualStart * PAGE_SIZE);
+        void* const new_ptr    = (void*)(used_alloc->virtualStart);
         const u64 aligned_size = ((size + PAGE_SIZE-1) / PAGE_SIZE) * PAGE_SIZE;
 
         // Safe to assume regions/pages from UEFI is mapped mostly?

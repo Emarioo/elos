@@ -17,13 +17,13 @@
 
 void draw_frame_info(int* width, int* height);
 
-void draw_char_bcolor(int x, int y, int h, char c, u32 color, u32 back_color);
-static inline void draw_char(int x, int y, int h, char c, u32 color)
-    { draw_char_bcolor(x,y,h,c,color,0); } // transparent back color 
+// void draw_char_bcolor(int x, int y, int h, char c, u32 color, u32 back_color);
+// static inline void draw_char(int x, int y, int h, char c, u32 color)
+//     { draw_char_bcolor(x,y,h,c,color,0); } // transparent back color 
 
-void draw_text_bcolor(int x, int y, int h, cstring text, u32 color, u32 back_color);
-static inline void draw_text(int x, int y, int h, cstring text, u32 color)
-    { draw_text_bcolor(x,y,h,text,color, 0); } // transparent back color 
+// void draw_text_bcolor(int x, int y, int h, cstring text, u32 color, u32 back_color);
+// static inline void draw_text(int x, int y, int h, cstring text, u32 color)
+//     { draw_text_bcolor(x,y,h,text,color, 0); } // transparent back color 
 
 int draw_text_width(cstring text, int height, Font* font);
 

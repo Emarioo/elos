@@ -62,6 +62,7 @@ EFI_STATUS boot_init_memory();
 
 void boot_init_frame_buffer();
 
+EFI_STATUS load_kernel();
 
 // Put breakpoint here
 
@@ -192,6 +193,60 @@ void boot_init_frame_buffer() {
 //     return EFI_SUCCESS;
 // }
 
+
+
+EFI_STATUS load_kernel(void* address) {
+    
+    EFI_STATUS Status;
+    EFI_FILE_PROTOCOL* volume;
+    Status = simple_file_system->OpenVolume(simple_file_system, &volume);
+    if (EFI_ERROR(Status)) {
+        catch_bad_status();
+        return Status;
+    }
+
+    const char* kernel_path = "\\kernel.img";
+    u16* kernel_wpath = tmp_path_wstring(kernel_path);
+
+    EFI_FILE_PROTOCOL* handle;
+    Status = volume->Open(volume, &handle, kernel_wpath, EFI_FILE_MODE_READ, 0);
+    if (EFI_ERROR(Status)) {
+        catch_bad_status();
+        return Status;
+    }
+
+    char temp_buffer[sizeof(EFI_FILE_INFO) + 256];
+    EFI_FILE_INFO* file_info = (EFI_FILE_INFO*)temp_buffer;
+    UINTN buffer_size = sizeof(EFI_FILE_INFO) + 256;
+
+    Status = handle->GetInfo(handle, &gEfiFileInfoGuid, &buffer_size, file_info);
+    if (EFI_ERROR(Status)) {
+        catch_bad_status();
+        return Status;
+    }
+    const int PAGE_SIZE = 4096;
+    int pages = (file_info->FileSize + PAGE_SIZE-1) / PAGE_SIZE;
+
+    Status = ST->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, pages, (EFI_PHYSICAL_ADDRESS*)&address);
+    if (EFI_ERROR(Status)) {
+        printf("Could not allocate pages at %p\r\n", address);
+        catch_bad_status();
+        return Status;
+    }
+
+    UINTN file_size = file_info->FileSize;
+    Status = handle->Read(handle, &file_size, (void*)address);
+    if (EFI_ERROR(Status)) {
+        catch_bad_status();
+        return Status;
+    }
+    
+    printf("First word: %x\r\n", *(int*)address);
+    printf("Kernel size: %d\r\n", file_info->FileSize);
+
+    return EFI_SUCCESS;
+}
+
 EFI_STATUS EFIAPI
 efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     // InitializeLib(imageHandle, systemTable); // <- what is this, why is it commented out?
@@ -220,7 +275,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     }
 
     // Print the actual base address of the loaded image
-    // printf("Image loaded at: 0x%lx\n", (uint64_t)loaded_image->ImageBase);
+    printf("Image loaded at: 0x%x\n", (uint32_t)(uint64_t)loaded_image->ImageBase);
 
     // Write image base and marker for GDB
     volatile uint64_t *marker_ptr = (uint64_t *)0x10000;
@@ -230,22 +285,6 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
 
     printf("Hello World\r\n"); // EFI Applications use Unicode and CRLF, a la Windows
 
-    /* Now wait for a keystroke before continuing, otherwise your
-       message will flash off the screen before you see it.
-
-       First, we need to empty the console input buffer to flush
-       out any keystrokes entered before this point */
-    Status = ST->ConIn->Reset(ST->ConIn, FALSE);
-    if (EFI_ERROR(Status)) {
-        catch_bad_status();
-        return Status;
-    }
-
-    /* Now wait until a key becomes available.  This is a simple
-       polling implementation.  You could try and use the WaitForKey
-       event instead if you like */
-    // while ((Status = ST->ConIn->ReadKeyStroke(ST->ConIn, &Key)) == EFI_NOT_READY) ;
-    (void)Key;
     
 
     Status = ST->BootServices->LocateProtocol(&gEfiGraphicsOutputProtocolGuid, NULL, (void**)&graphics_output);
@@ -254,12 +293,20 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
         return Status;
     }
 
-    // @TODO Load kernel image into memory from FAT file system.
-    // @TODO Get kernel entry point
+    FN_BootAPI kernel_entry = NULL;
+
+    void* address = (void*)0x00100000; // linker script hardcodes kernel at address 1 MB
+    // @TODO We need to check if memory map contains usable pages at the address.
+    Status = load_kernel(address);
+    if (EFI_ERROR(Status)) {
+        catch_bad_status();
+        return Status;
+    }
+    kernel_entry = address; // linker script for kernel (sections.ld) defines _start at beginning of kernel image.
 
     boot_init_frame_buffer();
 
-    printf("UEFI - Exit boot services\n");
+    printf("UEFI - Exit boot services\r\n");
 
     Status = boot_init_memory();
     if (EFI_ERROR(Status)) {
@@ -271,11 +318,11 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     Status = ST->BootServices->ExitBootServices(ImageHandle, g_last_map_key);
     if (EFI_ERROR(Status)) {
         catch_bad_status();
-        printf("ExitBootServices failed %d\n", (int)Status);
+        printf("ExitBootServices failed %d\r\n", (int)Status);
         return Status;
     }
 
-    // @TODO Call kernel entry point
+    kernel_entry(g_boot_api);
 
     // Shouldn't return. We're in the hands of the OS now
     return Status;
@@ -283,6 +330,30 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
 
 
 // EFI_STATUS list_content(EFI_FILE_PROTOCOL* dir, int depth, EFI_FILE_INFO* info);
+
+
+
+
+
+    //   Some code to flush and read key.
+    // /* Now wait for a keystroke before continuing, otherwise your
+    //    message will flash off the screen before you see it.
+
+    //    First, we need to empty the console input buffer to flush
+    //    out any keystrokes entered before this point */
+    // Status = ST->ConIn->Reset(ST->ConIn, FALSE);
+    // if (EFI_ERROR(Status)) {
+    //     catch_bad_status();
+    //     return Status;
+    // }
+
+    // /* Now wait until a key becomes available.  This is a simple
+    //    polling implementation.  You could try and use the WaitForKey
+    //    event instead if you like */
+    // // while ((Status = ST->ConIn->ReadKeyStroke(ST->ConIn, &Key)) == EFI_NOT_READY) ;
+    // (void)Key;
+
+
 
 
 // EFI_STATUS load_font() {

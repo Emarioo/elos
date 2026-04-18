@@ -13,8 +13,9 @@ _start:
     # rcx = pointer to BootAPI
 
     # Save BootAPI to non-volatile register
-    mov rdx, rcx
+    mov rbx, rcx
     
+    # @NOCHECKIN Uncomment
     call zero_bss
 
     mov rdi, rbx
@@ -23,18 +24,21 @@ _start:
 
 zero_bss:
     
-    mov rsi, __bss_start
-    mov rdi, __bss_end
+    lea rsi, __bss_start
+    lea rdi, __bss_start + 16
 
     xor rax, rax
 
 .zero_loop:
     cmp rsi, rdi
+    je .end
 
     mov [rsi], rax
     add rsi, 8
 
+    cmp rsi, rdi
     jne .zero_loop
+.end:
 
     ret
 

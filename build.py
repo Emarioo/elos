@@ -173,6 +173,7 @@ def package_elos(release_dir):
 
     iso_path     = f"{temp_folder_path}/elos.iso"
     img_path     = f"{temp_folder_path}/elos.img"
+    kernel_elf_path     = f"{temp_folder_path}/kernel.elf"
     bootx64_path = f"{temp_folder_path}/fs/EFI/BOOT/BOOTX64.EFI"
     kernel_path  = f"{temp_folder_path}/fs/kernel.img"
 
@@ -180,7 +181,7 @@ def package_elos(release_dir):
 
     cmd(f"make -f {ROOT}/boot/Makefile INT_DIR={INT_DIR} BOOT_EFI={bootx64_path}")
     
-    cmd(f"make -f {ROOT}/kernel/Makefile INT_DIR={INT_DIR} KERNEL_IMAGE={kernel_path}")
+    cmd(f"make -f {ROOT}/kernel/Makefile INT_DIR={INT_DIR} KERNEL_IMAGE={kernel_path} KERNEL_ELF={kernel_elf_path}")
 
     fat_path = f"{INT_DIR}/fat.img"
 
@@ -201,7 +202,7 @@ def package_elos(release_dir):
     cmd(f"mkgpt -o {img_path} --image-size {gpt_size_estimation/512} --part {fat_path} --type system")
 
     # cmd(f"xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o {iso_path} {ISO_DIR}")
-    cmd(f"xorriso -as mkisofs -R -f -no-emul-boot -o {iso_path} {ISO_DIR}")
+    # cmd(f"xorriso -as mkisofs -R -f -no-emul-boot -o {iso_path} {ISO_DIR}")
 
 
 
@@ -216,6 +217,8 @@ def package_elos(release_dir):
 
     # Copy latest images to bin for quick access (we could make symlinks)
     cmd(f"cp {img_path} bin/elos.img")
+    cmd(f"cp {bootx64_path} bin/boot.elf")
+    cmd(f"cp {kernel_elf_path} bin/kernel.elf")
     cmd(f"cp {iso_path} bin/elos.iso")
 
     print(f"Successfully built \033[32m{temp_folder_path}\033[0m")
