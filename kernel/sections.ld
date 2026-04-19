@@ -2,27 +2,37 @@
 ENTRY(_start)
 
 SECTIONS {
+    
+    # @IMPORTANT The text and data addresses are also hardcoded in cpu.c
+    # where we setup interrupt and global descriptor tables.
+
     . = 0x00100000; /* 1 MB */
+    __text_start = .;
 
     .text ALIGN(4K) : {
         *start.o(.text)
         *(.text*)
     }
 
-    __rodata_start = .;
+    . = 0x00200000; /* 1 MB */
+    __data_start = .;
+    
     .rodata ALIGN(4K) : {
+        __rodata_start = .;
         *(.rodata*)
+        __rodata_end = .;
     }
-    __rodata_end = .;
 
     .data ALIGN(4K) : {
+        __data_start = .;
         *(.data*)
+        __data_end = .;
     }
 
-    __bss_start = .;
     .bss ALIGN(4K) : {
+        __bss_start = .;
         *(.bss*)
+        __bss_end = .;
     }
-    __bss_end = .;
 
 }

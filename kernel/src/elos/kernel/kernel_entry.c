@@ -5,6 +5,7 @@
 
 #include "elos/keyboard.h"
 #include "elos/kernel_console.h"
+#include "elos/network.h"
 #include "elos/frame_buffer.h"
 #include "elos/physical_memory.h"
 #include "elos/cpu.h"
@@ -12,6 +13,14 @@
 void load_font();
 
 void kernel_entry(BootAPI* boot_api) {
+
+    // Have .bss section in kernel image been memory mapped?
+    // In theory the .data, .rodata, .text should be mapped because we allocate memory for kernel image from
+    // EFI. EFI sets up page tables for the kernel image. In our kernel entry does
+    // page tables still exist.
+    // When we setup or own page tables we reuse the ones EFI setup.
+    // .bss section is not included in the kernel image and should therefore not have page tables set up.
+    // Perhaps EFI happens to setup page tables for surrounding memory and in practise .bss happens to be mapped correctly too.
 
     // Initialize kernel console.
     // Kernel components logs information to it.
@@ -43,8 +52,10 @@ void kernel_entry(BootAPI* boot_api) {
     // Initialize interrupt tables
     CPU_init(boot_api);
 
-    // Initialize file system, or disk devices?
-    
+    // @TODO Initialize file system and disk devices
+
+    NET_init();
+
 
     KCON_printf("END OF KERNEL_ENTRY!\n");
     while (1) ;

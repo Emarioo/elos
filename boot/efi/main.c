@@ -229,7 +229,7 @@ EFI_STATUS load_kernel(void* address) {
 
     Status = ST->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, pages, (EFI_PHYSICAL_ADDRESS*)&address);
     if (EFI_ERROR(Status)) {
-        printf("Could not allocate pages at %p\r\n", address);
+        printf("Could not allocate pages at %x\r\n", address);
         catch_bad_status();
         return Status;
     }

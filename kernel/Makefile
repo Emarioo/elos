@@ -33,11 +33,11 @@ ASFLAGS := -g
 LDFLAGS := -nostdlib  -T $(ROOT)/kernel/sections.ld --no-warn-execstack
 
 SRC_FILES := $(shell find $(ROOT)/kernel/src/elos -name '*.c') $(wildcard $(ROOT)/kernel/*.s)
-# SRC_FILES += $(INT_DIR)/ascii_bitmap.c
+SRC_FILES +=$(INT_DIR)/interrupts.s
 
 OBJ_FILES := $(patsubst $(ROOT)/kernel/%.c,$(INT_DIR)/%.o,$(SRC_FILES))
 OBJ_FILES := $(patsubst $(ROOT)/kernel/%.s,$(INT_DIR)/%.o,$(OBJ_FILES))
-# OBJ_FILES := $(patsubst $(INT_DIR)/%.c,$(INT_DIR)/%.o,$(OBJ_FILES))
+OBJ_FILES := $(patsubst $(INT_DIR)/%.s,$(INT_DIR)/%.o,$(OBJ_FILES))
 
 OBJ_FILES += $(INT_DIR)/default_font.o
 
@@ -77,9 +77,8 @@ $(INT_DIR)/default_font.o: $(ROOT)/res/Lat2-Terminus16.psf | $(INT_DIR)
         --redefine-sym _binary_Lat2_Terminus16_psf_start=__default_font_start \
         $(INT_DIR)/default_font.trash $@
 
-# $(INT_DIR)/ascii_bitmap.c: $(ROOT)/kernel/src/tools/create_bitmap.c | $(INT_DIR)
-# 	$(SILENT) gcc -o $(INT_DIR)/create_bitmap -I$(ROOT)/kernel/include/vendor $< -lm \
-# 	    && $(INT_DIR)/create_bitmap $(ROOT)/res/ascii_bitmap.png $@
+$(INT_DIR)/interrupts.s: $(ROOT)/kernel/gen_interrupts.py | $(INT_DIR)
+	$(SILENT) $(ROOT)/kernel/gen_interrupts.py $@
 
 
 clean:

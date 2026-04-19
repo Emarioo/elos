@@ -11,13 +11,14 @@
 .global _start
 _start:
     # rcx = pointer to BootAPI
+    push rbp # push to align stack to 16 bytes
 
     # Save BootAPI to non-volatile register
     mov rbx, rcx
     
-    # @NOCHECKIN Uncomment
     call zero_bss
 
+    // mov rsp, __stack_end
     mov rdi, rbx
     call kernel_entry
 
