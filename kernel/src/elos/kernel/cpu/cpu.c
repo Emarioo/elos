@@ -54,7 +54,7 @@ static IDT_Entry _idt[256];
 
 void exception_handler(int vector, int error_code) {
     printf("EXCEPTION #%d (error code %d)\nHALTING\n", vector, error_code);
-    asm ( "cli; hlt\n" );
+    while (1) asm ( "cli\n" );
 }
 
 

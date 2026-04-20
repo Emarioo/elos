@@ -3,8 +3,8 @@ ENTRY(_start)
 
 SECTIONS {
     
-    # @IMPORTANT The text and data addresses are also hardcoded in cpu.c
-    # where we setup interrupt and global descriptor tables.
+    # @IMPORTANT The text and data addresses are also hardcoded in physical_memory.c.
+    #   Where we mark addresses as in use.
 
     . = 0x00100000; /* 1 MB */
     __text_start = .;

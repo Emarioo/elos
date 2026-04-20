@@ -7,9 +7,9 @@
 
 #include "elos/common/string.h"
 
+#include "elos/kernel_console.h"
 
-#undef PAGE_SIZE
-#define PAGE_SIZE 4096
+
 
 #define MAX_REGIONS 1000
 
@@ -25,11 +25,11 @@ typedef enum {
 } RegionFlag;
 
 
-
+#define printf(...) KCON_printf(__VA_ARGS__)
 
 typedef struct PhysicalMemoryRegion {
     u64 physicalStart;
-    u64 virtualStart; // unused at the moment (same as physical)
+    u64 virtualStart;
     u64 pageCount;
     u32 flags; // READ,WRITE,EXECUTABLE,MEMORY MAPPED, whether virtualStart is valid
 } PhysicalMemoryRegion;
@@ -41,25 +41,35 @@ PhysicalMemoryRegion g_used_regions[MAX_REGIONS];
 
 
 void PMEM_init(BootAPI* boot_api) {
-    // g_free_regions = find_free_descriptor(MAX_REGIONS*sizeof(PhysicalMemoryRegion));
-    // if (!g_free_regions) {
-    //     serial_printf("phys: Can't allocate free regions\n");
-    //     return false;
-    // }
-    // serial_printf("phys: Allocated free regions ptr: %x, size: %d\n", g_free_regions, MAX_REGIONS*sizeof(PhysicalMemoryRegion));
     
-    // g_used_regions = find_free_descriptor(MAX_REGIONS*sizeof(PhysicalMemoryRegion));
-    // if (!g_used_regions) {
-    //     serial_printf("phys: Can't allocate used regions\n");
-    //     return false;
-    // }
-    // serial_printf("phys: Allocated used regions ptr: %x, size: %d\n", g_used_regions, MAX_REGIONS*sizeof(PhysicalMemoryRegion));
+    typedef struct Range {
+        u64 address;
+        u64 size;
+    } Range;
 
-    // memset(g_free_regions, 0x9D, MAX_REGIONS * sizeof(PhysicalMemoryRegion));
-    // memset(g_used_regions, 0x9D, MAX_REGIONS * sizeof(PhysicalMemoryRegion));
+    // @TODO We should have a python script that reads sections.ld
+    //   and creates config.c with the occupied address ranges
+    //   instead of hardcoding this.
+    Range ranges[] = {
+        { 0x0, 0x80000 }, // Skip regions below 512 KB.
+                          // We may want it for something special.
+
+        { 0x100000, 0x100000 }, // Kernel .text
+        { 0x200000, 0x400000 }, // Kernel .rodata, .data, .bss
+    };
+
+    // @TODO If we run out of static g_free_regions then
+    //   we can allocate another buffer of free regions.
+    //   We can have a double linked list of region arrays 
+    //   where first array is buffer from statics data and the rest
+    //   allocated as they are needed.
+
+    int check_index = 0;
 
     for (int i = 0; i < boot_api->regions_len; i++) {
         MemoryRegion* reg = &boot_api->regions[i];
+
+        // printf("IN %x - %x\n", reg->physical_start, reg->page_count * PAGE_SIZE);
         
         if(g_num_free_regions >= MAX_REGIONS)
             break;
@@ -71,6 +81,65 @@ void PMEM_init(BootAPI* boot_api) {
         alloc->pageCount = reg->page_count;
         alloc->physicalStart = reg->physical_start;
         alloc->virtualStart = 0;
+
+        while (check_index < g_num_free_regions) {
+            PhysicalMemoryRegion* region = &g_free_regions[check_index];
+            bool removed = false;
+            for (int i=0;i<ARRAY_LENGTH(ranges);i++) {
+                Range range = ranges[i];
+
+                // Quick check for any collision
+                if (range.address + range.size > alloc->physicalStart && range.address < alloc->physicalStart + alloc->pageCount * PAGE_SIZE) {
+                    
+                    //       [ region ]
+                    //   [     range     ]
+                    if (range.address <= alloc->physicalStart && range.address + range.size >= alloc->physicalStart + alloc->pageCount * PAGE_SIZE) {
+                        // if cover completely
+                        g_num_free_regions--;
+                        removed=true;
+                        break;
+                    }
+                    //     [ region  ]
+                    //  [ range ]
+                    else if (range.address < alloc->physicalStart && range.address + range.size < alloc->physicalStart + alloc->pageCount * PAGE_SIZE) {
+                        // left
+                        int physEnd = alloc->physicalStart + alloc->pageCount * PAGE_SIZE;
+                        alloc->physicalStart = PAGE_SIZE * ( ( (range.address + range.size) + (PAGE_SIZE-1) ) / PAGE_SIZE );
+                        alloc->pageCount = (physEnd - alloc->physicalStart) / PAGE_SIZE;
+                    }
+                    //  [ region  ]
+                    //       [ range ]
+                    else if (range.address > alloc->physicalStart && range.address + range.size < alloc->physicalStart + alloc->pageCount * PAGE_SIZE) {
+                        // right
+                        alloc->pageCount = (range.address - alloc->physicalStart ) / PAGE_SIZE;
+                    }
+                    //   [    region    ]
+                    //       [ range ]
+                    else if (range.address > alloc->physicalStart && range.address + range.size < alloc->physicalStart + alloc->pageCount * PAGE_SIZE) {
+                        // middle (toughest because we split region in two and have to check if they collide with other ranges)
+                        region->pageCount = (range.address - alloc->physicalStart) / PAGE_SIZE;
+                        
+                        int regions_to_move = g_num_free_regions - check_index+1;
+
+                        if(g_num_free_regions >= MAX_REGIONS)
+                            break;
+
+                        memmove(&g_free_regions[check_index+2], &g_free_regions[check_index+1], regions_to_move * sizeof(PhysicalMemoryRegion));
+
+                        PhysicalMemoryRegion* new_region = &g_free_regions[check_index+1];
+                        new_region->flags = FLAG_FREE;
+                        new_region->virtualStart = 0;
+                        new_region->physicalStart = PAGE_SIZE * ( (range.address + range.size + (PAGE_SIZE-1)) / PAGE_SIZE );
+                        new_region->pageCount = (region->physicalStart + region->pageCount*PAGE_SIZE - new_region->physicalStart) / PAGE_SIZE;
+                        g_num_free_regions++;
+                    }
+                }
+            }
+            if (!removed) {
+                // printf(" OUT %x - %x\n", region->physicalStart, region->pageCount * PAGE_SIZE);
+                check_index++;
+            }
+        }
     }
 }
 
@@ -80,11 +149,12 @@ void* PMEM_allocate(u64 size, void* ptr) {
     const int requested_pages = (size + PAGE_SIZE-1) / PAGE_SIZE;
     const int requested_aligned_size = ((size + PAGE_SIZE-1) / PAGE_SIZE) * PAGE_SIZE;
     // in pages, same as PhysicalMemoryRegion.virtualStart
-    const u64 old_virtual_address = (u64)ptr / PAGE_SIZE;
-    void* const old_aligned_ptr   = (void*)(((u64)ptr / PAGE_SIZE) * PAGE_SIZE);
+    const u64 old_virtual_address = (u64)ptr;
+    void* const old_aligned_ptr   = (void*)(((u64)ptr) * PAGE_SIZE);
 
-    if (!size && !old_virtual_address)
+    if (!size && !old_virtual_address) {
         return NULL;
+    }
 
 
     if (old_virtual_address && size) {
@@ -226,7 +296,7 @@ void* PMEM_allocate(u64 size, void* ptr) {
         used_alloc->flags         = FLAG_USED | FLAG_VIRTUALLY_MAPPED;
 
         free_alloc->pageCount     -= requested_pages;
-        free_alloc->physicalStart += requested_pages;
+        free_alloc->physicalStart += requested_pages * PAGE_SIZE;
         if (free_alloc->pageCount == 0) {
             free_alloc->flags = 0; // clear region
         }

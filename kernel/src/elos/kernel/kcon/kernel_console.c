@@ -3,14 +3,12 @@
 
 #include "elos/common/string.h"
 #include "elos/common/intrinsics.h"
+#include "elos/common/types.h"
 
-#include <stdint.h>
-#include <stdbool.h>
 
 // @TODO Implement serial device?
 // #include "elos/serial_device.h"
 
-#define ARRAY_LENGTH(ARR) sizeof(ARR)/sizeof(*ARR)
 
 void serial_init();
 void serial_write(const char* buffer, int size);

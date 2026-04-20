@@ -149,8 +149,8 @@ EFI_STATUS boot_init_memory() {
         MemoryRegion* region = &regions[regions_len];
         regions_len++;
 
-        regions->physical_start = desc->PhysicalStart;
-        regions->page_count     = desc->NumberOfPages;
+        region->physical_start = desc->PhysicalStart;
+        region->page_count     = desc->NumberOfPages;
     }
 
     g_boot_api.regions     = regions;

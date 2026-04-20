@@ -5,6 +5,7 @@
 
 #include "elos/common/types.h"
 
+#define PAGE_SIZE 4096
 
 void PMEM_init(BootAPI* boot_api);
 
@@ -14,6 +15,9 @@ void PMEM_init(BootAPI* boot_api);
     Memory is uninitialized
 */
 void* PMEM_allocate(u64 bytes, void* ptr);
+#define PMEM_alloc(BYTES) PMEM_allocate(BYTES, NULL)
+#define PMEM_free(PTR) PMEM_allocate(0, PTR)
+#define PMEM_realloc(BYTES, PTR) PMEM_allocate(BYTES, PTR)
 
 /*
     Does no memory mapping

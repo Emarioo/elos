@@ -74,14 +74,106 @@
 #define CARD_BIT_EERD_START  0x1
 #define CARD_BIT_EERD_DONE   0x10
 
-// #pragma pack(push, 1)
-// typedef struct TransmitDescriptor {
-//     u64 buffer_address;
-//     u16 length;
 
-// } TransmitDescriptor;
-// #pragma pack(pop)
+#define CARD_BIT_TCTL_EN  (1 << 1)
+#define CARD_BIT_TCTL_PSP (1 << 3)
 
+
+#define CARD_BIT_RCTL_EN    (1 << 1)
+#define CARD_BIT_RCTL_SBP   (1 << 2)
+#define CARD_BIT_RCTL_UPE   (1 << 3)
+#define CARD_BIT_RCTL_MPE   (1 << 3)
+#define CARD_BIT_RCTL_LPE   (1 << 3)
+#define CARD_BIT_RCTL_BAM   (1 << 15)
+#define CARD_VAL_RCTL_BSIZE(N) ((N) << 16)
+#define CARD_BIT_RCTL_BSEX  (1 << 25)
+
+#define CARD_BIT_IMS_TXDW    (1 << 0)
+#define CARD_BIT_IMS_TXQE    (1 << 1)
+#define CARD_BIT_IMS_LSC     (1 << 2)
+#define CARD_BIT_IMS_RXSEQ   (1 << 3)
+#define CARD_BIT_IMS_RXDMT0  (1 << 4)
+#define CARD_BIT_IMS_RXO     (1 << 6)
+#define CARD_BIT_IMS_RXT0    (1 << 7)
+#define CARD_BIT_IMS_MDAC    (1 << 9)
+#define CARD_BIT_IMS_RXCFG   (1 << 10)
+#define CARD_BIT_IMS_PHYINT  (1 << 12)
+#define CARD_BIT_IMS_TXD_LOW (1 << 15)
+
+#define CARD_BIT_ICR_TXDW    (1 << 0)
+#define CARD_BIT_ICR_TXQE    (1 << 1)
+#define CARD_BIT_ICR_LSC     (1 << 2)
+#define CARD_BIT_ICR_RXSEQ   (1 << 3)
+#define CARD_BIT_ICR_RXDMT0  (1 << 4)
+#define CARD_BIT_ICR_RXO     (1 << 6)
+#define CARD_BIT_ICR_RXT0    (1 << 7)
+#define CARD_BIT_ICR_MDAC    (1 << 9)
+#define CARD_BIT_ICR_RXCFG   (1 << 10)
+#define CARD_BIT_ICR_PHYINT  (1 << 12)
+#define CARD_BIT_ICR_TXD_LOW (1 << 15)
+
+
+
+#pragma pack(push, 1)
+typedef struct TransmitDescriptor {
+    void* buffer_address;
+    u16 length;
+    u8  cso;
+    u8  cmd;
+    u8  sta : 4;
+    u8  rsv : 4;
+    u8  css;
+    u16 special;
+} TransmitDescriptor;
+#pragma pack(pop)
+
+
+#define CARD_BIT_TD_CMD_EOP  (1 << 0)
+#define CARD_BIT_TD_CMD_IFCS (1 << 1)
+#define CARD_BIT_TD_CMD_IC   (1 << 2)
+#define CARD_BIT_TD_CMD_RS   (1 << 3)
+#define CARD_BIT_TD_CMD_RPS  (1 << 4)
+#define CARD_BIT_TD_CMD_DEXT (1 << 5)
+#define CARD_BIT_TD_CMD_VLE  (1 << 6)
+#define CARD_BIT_TD_CMD_IDE  (1 << 7)
+
+
+#define CARD_BIT_TD_STA_DD   (1 << 0)
+#define CARD_BIT_TD_STA_EC   (1 << 1)
+#define CARD_BIT_TD_STA_LC   (1 << 2)
+#define CARD_BIT_TD_STA_TU   (1 << 3)
+
+
+#pragma pack(push, 1)
+typedef struct ReceiveDescriptor {
+    void* buffer_address;
+    u16 length;
+    u16 checksum;
+    u8  status;
+    u8  errors;
+    u16 special;
+} ReceiveDescriptor;
+#pragma pack(pop)
+
+
+#define CARD_BIT_RD_STATUS_DD    (1 << 0)
+#define CARD_BIT_RD_STATUS_EOP   (1 << 1)
+#define CARD_BIT_RD_STATUS_IXSM  (1 << 2)
+#define CARD_BIT_RD_STATUS_VP    (1 << 3)
+#define CARD_BIT_RD_STATUS_RSV   (1 << 4)
+#define CARD_BIT_RD_STATUS_TCPCS (1 << 5)
+#define CARD_BIT_RD_STATUS_IPCF  (1 << 6)
+#define CARD_BIT_RD_STATUS_PIF   (1 << 7)
+
+
+#define CARD_BIT_RD_ERRORS_CE   (1 << 0)
+#define CARD_BIT_RD_ERRORS_SE   (1 << 1)
+#define CARD_BIT_RD_ERRORS_SEQ  (1 << 2)
+#define CARD_BIT_RD_ERRORS_RSV  (1 << 3)
+#define CARD_BIT_RD_ERRORS_CXE  (1 << 4)
+#define CARD_BIT_RD_ERRORS_TCPE (1 << 5)
+#define CARD_BIT_RD_ERRORS_IPE  (1 << 6)
+#define CARD_BIT_RD_ERRORS_RXE  (1 << 7)
 
 void card_init();
 

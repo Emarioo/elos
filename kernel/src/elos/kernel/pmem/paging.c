@@ -107,7 +107,6 @@ void* alloc_page_table() {
     u64 base = 0x23000000;
     const u64 MASK_48_BIT = 0x0000FFFFFFFFFFFF;
     const u64 MASK_ENTRY_PHYS_ADDRESS = 0x0000FFFFFFFFF000;
-    const int PAGE_SIZE = 0x1000;
 
     // physical address of new page
     // This is not the address we return.
