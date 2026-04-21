@@ -1,35 +1,26 @@
 My attempt at kernel/OS development
 
-This project uses GNU tools and MinGW GNU linker isn't a fan of turning PE/COFF to binaries
-which is why you need Linux or Windows Subsystem for Linux for this project. Altough for UEFI it's fine.
+This project only builds on Linux (Linux has good tools for kernel development).
+Personally I use NixOS and Windows Subsystem for Linux.
 
 # Dependencies
-A heads up, it will be annoying to build the project. A bunch of dependencies to get, build, install. Especially on NixOS. I'm half working on it.
 
 These are the dependencies:
 
 - `Python 3.11+`           (for build/test scripts)
+- `Make`                   (for build scripts)
 - `gcc-mingw-w64-x86-64`   (for EFI application)
 - `gcc`                    (for C programs on host and for OS)
-- `qemu-system-x86`        (Virtual Machine to run OS)
+- `qemu-system-x86_64`     (Virtual Machine to run OS)
 - `Rufus`                  (To flash USB with OS, Windows)
 - `dd`                     (To flash USB with OS, Linux)
 - `mkgpt`                  (Build image with GUID Partition Table, you have to compile it yourself)
 
-We need gcc-mingw-w64-x86-64 to compile EFI applications which handles
-some of the startup of the Operating System. EFI applications should
-use Windows x64 calling conventions which is why classic `gcc` on Linux
-doesn't work.
-
-Everything isn't setup as it should be. We also use mingw to compile OS and kernel code
-which maybe isn't what we want in the end.
-
-# Installing (dependencies)
-I would love a python script that installs all dependencies on Windows and Linux
-but we do not live in an ideal world. Maybe we will in the future.
 
 
-## Linux (Ubuntu, or WSL)
+# Installing (INCOMPLETE)
+
+## Linux
 Assuming you have cloned the repo do these steps:
 
 **Install dependencies (auto)**

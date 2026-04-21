@@ -136,9 +136,9 @@ void card_init() {
     */
 
     setup_transmit_ring();
-    // setup_receive_ring();
+    setup_receive_ring();
 
-    // enable_interrupts();
+    enable_interrupts();
 
 }
 
