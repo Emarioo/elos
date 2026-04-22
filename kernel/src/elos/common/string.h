@@ -55,6 +55,7 @@ static inline void memset(void* dst, int val, int size) {
     }
 }
 
+long strtol(const char* ptr, char** endptr, int base);
 
 static inline cstring STR_CSTR(const string s) {
     cstring st = { s.ptr , s.len };

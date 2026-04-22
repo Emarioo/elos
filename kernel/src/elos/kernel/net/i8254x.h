@@ -177,3 +177,7 @@ typedef struct ReceiveDescriptor {
 
 void card_init();
 
+void receive_packets();
+
+int send_packet(void* data, int size);
+

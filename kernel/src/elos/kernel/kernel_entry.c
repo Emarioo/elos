@@ -10,6 +10,10 @@
 #include "elos/physical_memory.h"
 #include "elos/cpu.h"
 
+#include "elos/common/intrinsics.h"
+
+#include "elos/kernel/net/i8254x.h"
+
 void load_font();
 
 void kernel_entry(BootAPI* boot_api) {
@@ -57,8 +61,12 @@ void kernel_entry(BootAPI* boot_api) {
     NET_init();
 
 
+
     KCON_printf("END OF KERNEL_ENTRY!\n");
-    while (1) ;
+    while (1) {
+        NET_poll();
+        pause();
+    }
 
 }
 

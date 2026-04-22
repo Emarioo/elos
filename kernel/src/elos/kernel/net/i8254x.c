@@ -9,6 +9,12 @@
 
 #include "elos/common/string.h"
 
+#include "elos/common/string.h"
+
+#include "elos/kernel/net/net_internal.h"
+
+
+
 
 typedef struct NetworkController {
     bool found;
@@ -122,7 +128,9 @@ void card_init() {
     */
     reset_nic();
 
-    printf("NET_init: MAC Address: %x%x-%x%x-%x%x-%x%x-%x%x-%x%x\n",
+    memcpy(current_mac, controller.mac_address, 6);
+
+    printf("NET_init: MAC Address: %x%x:%x%x:%x%x:%x%x:%x%x:%x%x\n",
         controller.mac_address[0] >> 4, controller.mac_address[0] & 0xF,
         controller.mac_address[1] >> 4, controller.mac_address[1] & 0xF,
         controller.mac_address[2] >> 4, controller.mac_address[2] & 0xF,
@@ -238,6 +246,7 @@ TransmitDescriptor* transmit_ring;
 ReceiveDescriptor* receive_ring;
 
 void setup_transmit_ring() {
+    // @TODO memory should not be cached.
     int transmit_ring_size = NUM_OF_TX_DESCRIPTORS * 16;
     transmit_ring = PMEM_alloc(transmit_ring_size);
     memset(transmit_ring, 0, transmit_ring_size);
@@ -260,6 +269,7 @@ void setup_transmit_ring() {
 
 
 void setup_receive_ring() {
+    // @TODO memory should not be cached. uncacheable pages
     int receive_ring_size = NUM_OF_RX_DESCRIPTORS * 16; // you can substitute 16 with sizeof(receive_descriptor_t)
     receive_ring = PMEM_alloc(receive_ring_size);
     
@@ -286,8 +296,6 @@ void enable_interrupts(){
     write_register(CARD_REG_IMS, ims);
 }
 
-void receive_packets();
-
 void _handle_interrupt() {
     uint32_t cause = read_register(CARD_REG_ICR); // Cleared uppon read
 
@@ -308,13 +316,9 @@ void _handle_interrupt() {
 
 u8 rx_next = 0;
 
-void stack_receive_packet(void* buffer, size_t buffer_len) {
-    printf("Packet [%x, %d]\n", *(u32*)buffer, (int)buffer_len);
-}
-
 
 void receive_packets() {
-    printf("RECV packets!\n");
+    // printf("RECV packets!\n");
 
     u32 idx = rx_next;
 
@@ -355,7 +359,8 @@ void receive_packets() {
         if (eop) {
             // This is the last descriptor of the packet
             // Forward the packet to your network stack
-            stack_receive_packet(buffer, buffer_len);
+            handle_packet(buffer, buffer_len);
+            PMEM_free(buffer);
             buffer = NULL;
             buffer_len = 0;
         }
@@ -381,10 +386,10 @@ void send_data(void* data, u32 size, bool EOP){
     write_register(CARD_REG_TDT, tail); // Increment and write the tail
 }
 
-size_t send(void* data, size_t length){
-    size_t sent = 0;
+int send_packet(void* data, int length){
+    int sent = 0;
     // split the data into chunks and send them
-    for (; sent < length;){
+    while (sent < length){
         int to_send = min(length - sent, SIZE_OF_TX_DESCRIPTOR_BUFFER);
         send_data((void*)((u64)data + sent), to_send, to_send == (length - sent));
         sent += to_send;

@@ -18,14 +18,15 @@ The top sections are:
 Tasks related to kernel and operating system
 
 ## @current
-- [ ] Support multiple mice and keyboards (might be a while but this would be cool and i'm excited for the implementation)
 
 ## @urgent
 
 ## @bug
 
 ## @feature
+- [ ] Support multiple mice and keyboards (might be a while but this would be cool and i'm excited for the implementation)
 - [ ] Kernel logger. Logs actions in the OS. Files open, written to. Apps started stopped.
+- [ ] Support multiple network controllers.
 
 ## @project
 - [ ] Clearly state dependencies of this project. Do fresh Ubuntu install in VirtualBox and compile this project, see what you need.

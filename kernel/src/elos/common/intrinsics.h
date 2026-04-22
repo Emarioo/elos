@@ -51,3 +51,9 @@ static inline u32 inl(u16 port) {
     );
     return value;
 }
+
+static inline void pause() {
+    asm(
+        "pause\n"
+    );
+}

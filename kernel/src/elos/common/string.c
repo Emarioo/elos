@@ -126,6 +126,14 @@ int vsnprintf(char* buffer, int size, const char* format, va_list va) {
             int len = output_int(buffer + head, size - head, value);
             head += len;
             CHECK
+        } else if (format[i] == 'u') {
+            i++;
+
+            u32 value = va_arg(va, u32);
+            // @TODO Call uint function instead!
+            int len = output_int(buffer + head, size - head, value);
+            head += len;
+            CHECK
         } else if (format[i] == 'c') {
             i++;
 
@@ -185,3 +193,57 @@ int snprintf(char* buffer, int size, const char* format, ...) {
     va_end(va);
     return res;
 }
+
+
+
+
+long strtol(const char* ptr, char** endptr, int base) {
+
+    #define isdigit(C) ( (C) >= '0' && (C) <= '9' )
+
+    int head = 0;
+    long acc = 0;
+    int isNegative = 0;
+    int len = strlen(ptr);
+    if (base != 10 && base != 8 && base != 16)
+        base = 10;
+
+    if (ptr[head] == '-') {
+        isNegative = 1;
+        head++;
+    }
+
+    while (head < len) {
+        char c = ptr[head];
+        if (base == 8 && c >= '0' && c <= '7') {
+            acc = acc * base + c - '0';
+            head++;
+            continue;
+        } else if (base == 10 && c >= '0' && c <= '9') {
+            acc = acc * base + c - '0';
+            head++;
+            continue;
+        } else if (base == 16) {
+            if (c >= '0' && c <= '9') {
+                acc = acc * base + c - '0';
+                head++;
+                continue;
+            } else if ((c|32) >= 'a' && (c|32) <= 'f') {
+                acc = acc * base + c - 'a';
+                head++;
+                continue;
+            }
+        }
+        break;
+    }
+    if (endptr) {
+        *endptr = (char*)ptr + head;
+    }
+    if (isNegative) {
+        acc = -acc;
+    }
+
+    return acc;
+}
+
+
