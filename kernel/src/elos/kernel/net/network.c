@@ -120,21 +120,167 @@ void handle_packet(void* buffer, int length) {
                 ipv4_int_str(ip->sourceAddress, buffer0),
                 ipv4_int_str(ip->destinationAddress, buffer1)
                 );
+            
+            int ipHeaderSize = ip->headerLength * 4;
 
-            // switch (ip->protocol) {
-            //     case IP_ICMP: {
-            //         ICMP_Header* icmp = (ICMP_Header*)((char*)ip + ip->headerLength);
-            //         int icmp_size = ip->totalLength - ip->headerLength;
+            switch (ip->protocol) {
+                case IP_ICMP: {
+                    ICMP_Header* icmp = (ICMP_Header*)((char*)ip + ipHeaderSize);
+                    int icmp_size = ip->totalLength - ipHeaderSize;
                     
-            //         u16 computed_checksum = compute_internet_checksum(icmp, icmp_size);
+                    u16 computed_checksum = compute_internet_checksum(icmp, icmp_size);
+                    
+                    icmp->checksum = bswap16(icmp->checksum);
 
-            //         if (icmp->type == ICMP_ECHO_REQUEST) {
-            //             // @TODO Construct packet
-            //         } else {
-            //             // ignore for now
-            //         }
-            //     } break;
-            // }
+
+                    if (icmp->type == ICMP_ECHO_REQUEST) {
+                        ICMP_Header_Echo* echo = (ICMP_Header_Echo*)icmp;
+
+                        echo->identifier = bswap16(echo->identifier);
+                        echo->sequence_number = bswap16(echo->sequence_number);
+
+                        printf("ICMP type=%d code=%d chksum=%d (computed %d) ident=%d seq=%d\n",
+                            echo->type,
+                            echo->code,
+                            echo->checksum,
+                            computed_checksum,
+                            echo->identifier,
+                            echo->sequence_number
+                            );
+                        
+                        if (computed_checksum != 0) {
+                            // Don't send anything back, checksum is bad (or my implementation is bad)
+                            return;
+                        }
+
+                        u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(ICMP_Header_Echo) + 256] = {};
+
+                        int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + icmp_size;
+
+                        if (packet_size > sizeof(message_buffer)) {
+                            printf("NET: ICMP packet payload to big for static buffer, dropping\n");
+                            return;
+                        }
+
+                        EtherFrame* message_frame = (EtherFrame*)message_buffer;
+                        memcpy(message_frame->destination, frame->source, 6);
+                        memcpy(message_frame->source, current_mac, 6);
+                        message_frame->etherType = ETHER_IPV4;
+                        IPV4_Header* message_ipv4 = (IPV4_Header*)(message_buffer + sizeof(EtherFrame));
+                        message_ipv4->headerLength = sizeof(IPV4_Header) / 4;
+                        message_ipv4->version = 4;
+                        message_ipv4->totalLength = sizeof(IPV4_Header) + icmp_size;
+                        message_ipv4->identification = ip->identification;
+                        message_ipv4->fragmentPart = IPV4_FLAG_DONT_FRAGMENT;
+                        message_ipv4->headerChecksum = 0;
+                        message_ipv4->timeToLive = 64;
+                        message_ipv4->protocol = IP_ICMP;
+                        memcpy(&message_ipv4->sourceAddress, &current_ip, 4);
+                        memcpy(&message_ipv4->destinationAddress, &ip->sourceAddress, 4);
+
+                        message_frame->etherType = bswap16(message_frame->etherType);
+                        message_ipv4->totalLength = bswap16(message_ipv4->totalLength);
+                        message_ipv4->identification = bswap16(message_ipv4->identification);
+                        message_ipv4->fragmentPart = bswap16(message_ipv4->fragmentPart);
+
+                        message_ipv4->headerChecksum = bswap16(compute_internet_checksum(message_ipv4, sizeof(IPV4_Header)));
+
+                        ICMP_Header_Echo* message_echo = (ICMP_Header_Echo*)(message_buffer + sizeof(EtherFrame) + sizeof(IPV4_Header));
+                        message_echo->type = ICMP_ECHO_REPLY;
+                        message_echo->code = 0;
+                        message_echo->checksum = 0;
+                        message_echo->identifier = echo->identifier;
+                        message_echo->sequence_number = echo->sequence_number;
+
+                        memcpy(message_echo->payload, echo->payload, icmp_size - sizeof(ICMP_Header_Echo));
+
+                        message_echo->identifier = bswap16(message_echo->identifier);
+                        message_echo->sequence_number = bswap16(message_echo->sequence_number);
+                        
+                        message_echo->checksum = bswap16(compute_internet_checksum(message_echo, icmp_size));
+
+                        NET_send_packet(message_buffer, packet_size); 
+                    } else {
+                        // ignore for now
+                    }
+                } break;
+                case IP_UDP: {
+                    UDP_Header* udp = (UDP_Header*)((char*)ip + ipHeaderSize);
+                    int udpSize = bswap16(udp->length);
+                    // u16 computed_checksum = compute_internet_checksum(udp, udpSize);
+                    // @TODO Ignoring checksum for now
+
+                    udp->sourcePort = bswap16(udp->sourcePort);
+                    udp->destinationPort = bswap16(udp->destinationPort);
+                    udp->length = bswap16(udp->length);
+                    
+                    
+                    u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + 256] = {};
+
+                    int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + udpSize;
+
+                    if (packet_size > sizeof(message_buffer)) {
+                        printf("NET: UDP packet data to big for static buffer, dropping\n");
+                        return;
+                    }
+
+                    int message_udpSize = sizeof(UDP_Header) + 4;
+
+                    EtherFrame* message_frame = (EtherFrame*)message_buffer;
+                    memcpy(message_frame->destination, frame->source, 6);
+                    memcpy(message_frame->source, current_mac, 6);
+                    message_frame->etherType = ETHER_IPV4;
+                    IPV4_Header* message_ipv4 = (IPV4_Header*)(message_buffer + sizeof(EtherFrame));
+                    message_ipv4->headerLength = sizeof(IPV4_Header) / 4;
+                    message_ipv4->version = 4;
+                    message_ipv4->totalLength = sizeof(IPV4_Header) + message_udpSize;
+                    message_ipv4->identification = ip->identification;
+                    message_ipv4->fragmentPart = IPV4_FLAG_DONT_FRAGMENT;
+                    message_ipv4->headerChecksum = 0;
+                    message_ipv4->timeToLive = 64;
+                    message_ipv4->protocol = IP_UDP;
+                    memcpy(&message_ipv4->sourceAddress, &current_ip, 4);
+                    memcpy(&message_ipv4->destinationAddress, &ip->sourceAddress, 4);
+
+                    message_frame->etherType = bswap16(message_frame->etherType);
+                    message_ipv4->totalLength = bswap16(message_ipv4->totalLength);
+                    message_ipv4->identification = bswap16(message_ipv4->identification);
+                    message_ipv4->fragmentPart = bswap16(message_ipv4->fragmentPart);
+
+                    message_ipv4->headerChecksum = bswap16(compute_internet_checksum(message_ipv4, sizeof(IPV4_Header)));
+
+                    UDP_Header* message_udp = (UDP_Header*)(message_buffer + sizeof(EtherFrame) + sizeof(IPV4_Header));
+                    message_udp->sourcePort = udp->destinationPort;
+                    message_udp->destinationPort = udp->sourcePort;
+                    message_udp->checksum = 0;
+                    message_udp->length = message_udpSize;
+
+                    message_udp->sourcePort = bswap16(message_udp->sourcePort);
+                    message_udp->destinationPort = bswap16(message_udp->destinationPort);
+                    message_udp->length = bswap16(message_udp->length);
+
+                    int value = *(int*)udp->data;
+                    value += 1;
+                    *(int*)message_udp->data = value;
+
+                    // @TODO Checksum. Need pseduo header for ipv4
+                    UDP_Pseudo_Header pseudo = {};
+                    pseudo.sourceAddress = message_ipv4->sourceAddress;
+                    pseudo.destinationAddress = message_ipv4->destinationAddress;
+                    pseudo.protocol = IP_UDP;
+                    pseudo.udpLength = bswap16(message_udpSize);
+
+                    message_udp->checksum = bswap16(~compute_internet_checksum(&pseudo, sizeof(UDP_Pseudo_Header)));
+
+                    message_udp->checksum = bswap16(compute_internet_checksum(message_udp, message_udpSize));
+
+                    NET_send_packet(message_buffer, sizeof(EtherFrame) + sizeof(IPV4_Header) + message_udpSize);
+
+                } break;
+                default: {
+
+                } break;
+            }
 
         } break;
         default: {

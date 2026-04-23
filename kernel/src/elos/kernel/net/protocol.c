@@ -46,7 +46,16 @@ const char* ipproto_str(IP_Protocol type) {
     return buffer;
 }
 
-
+const char* icmptype_str(ICMP_Type type) {
+    static char buffer[256];
+    switch(type) {
+        case ICMP_ECHO_REQUEST: return "ECHO REQUEST";
+        case ICMP_ECHO_REPLY: return "ECHO REPLY";
+        default: break;
+    }
+    snprintf(buffer, sizeof(buffer), "%u", type);
+    return buffer;
+}
 
 const char* mac_str(u8 mac[6], char* buffer) {
     snprintf(buffer, 20, "%x%x:%x%x:%x%x:%x%x:%x%x:%x%x", 
@@ -84,7 +93,7 @@ u32 ipv4_from_str(const char* address) {
 
 
 
-u16 compute_internet_checksum(u8* header, int size) {
+u16 compute_internet_checksum(void* header, int size) {
     u32 acc = 0;
     int half_words = (size + 1) / 2;
 

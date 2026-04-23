@@ -127,15 +127,42 @@ typedef struct ICMP_Header_Echo {
     u8 code;
     u16 checksum;
     u16 identifier;
-    u8 sequence_number;
+    u16 sequence_number;
     u8 payload[];
 } ICMP_Header_Echo;
 #pragma pack(pop)
+
+
+/*
+    User Datagram Protocol (UDP)
+*/
+
+#pragma pack(push, 1)
+typedef struct UDP_Header {
+    u16 sourcePort;
+    u16 destinationPort;
+    u16 length;
+    u16 checksum;
+    u8 data[];
+} UDP_Header;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct UDP_Pseudo_Header {
+    u32 sourceAddress;
+    u32 destinationAddress;
+    u8  zeros;
+    u8  protocol;
+    u16 udpLength;
+} UDP_Pseudo_Header;
+#pragma pack(pop)
+
 
 const char* htype_str(ARP_HardwareType type);
 const char* oper_str(ARP_Operation type);
 const char* ether_str(EtherType type);
 const char* ipproto_str(IP_Protocol type);
+const char* icmptype_str(ICMP_Type type);
 
 const char* mac_str(u8 mac[6], char* buffer);
 const char* ipv4_str(u8 address[4], char* buffer);
@@ -151,6 +178,6 @@ static inline u64 bswap64(u32 x) {
     return __builtin_bswap64(x);
 }
 
-u16 compute_internet_checksum(u8* buffer, int size);
+u16 compute_internet_checksum(void* buffer, int size);
 
 u32 ipv4_from_str(const char* address);
