@@ -48,6 +48,14 @@ static inline void memmove(void* dst, const void* src, int size) {
     }
 }
 
+static inline int memcmp(void* dst, void* src, int size) {
+    for(int i=0;i<size;i++) {
+        if ( ((char*)dst)[i] != ((char*)src)[i] )
+            // Did i flip the subtraction?
+            return ((char*)dst)[i] - ((char*)src)[i];
+    }
+    return 0;
+}
 
 static inline void memset(void* dst, int val, int size) {
     for(int i=0;i<size;i++) {

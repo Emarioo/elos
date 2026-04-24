@@ -2,7 +2,9 @@
 
 #include "elos/common/types.h"
 
+#include "elos/network.h"
+
 extern u32 current_ip;
 extern u8 current_mac[6];
 
-void handle_packet(void* buffer, int length);
+extern FN_NET_recv_packet g_recv_packet_callback;

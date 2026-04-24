@@ -58,13 +58,20 @@ void kernel_entry(BootAPI* boot_api) {
 
     // @TODO Initialize file system and disk devices
 
-    NET_init();
-
+    NetDevice net_device;
+    int count;
+    NET_scan_devices(&net_device, &count);
+    // @TODO Check that we got device
 
 
     KCON_printf("END OF KERNEL_ENTRY!\n");
     while (1) {
-        NET_poll();
+        NET_Packet packet;
+        bool yes = NET_poll_packet(net_device, &packet);
+        if (yes) {
+            NET_handle_packet(net_device, &packet);
+            NET_free_packet(net_device, &packet);
+        }
         pause();
     }
 

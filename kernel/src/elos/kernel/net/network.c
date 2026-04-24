@@ -9,6 +9,8 @@
 
 #include "elos/common/string.h"
 
+#include "elos/physical_memory.h"
+
 
 
 #define printf(...) KCON_printf(__VA_ARGS__)
@@ -17,7 +19,18 @@
 u32 current_ip;
 u8 current_mac[6]; // set by card_init (at the moment)
 
-void NET_init() {
+int fake_device;
+
+void NET_scan_devices(NetDevice devices[], int* count) {
+    if (!count) {
+        return;
+    }
+    if (!devices && count) {
+        // @TODO Don't hardcode.
+        *count = 1;
+        return;
+    }
+    
     char buffer0[24];
 
     current_ip = ipv4_from_str("192.168.100.54");
@@ -25,16 +38,63 @@ void NET_init() {
 
     card_init();
 
+    devices[0] = &fake_device;
+    *count = 1;
+}
+
+void NET_cleanup() {
+    // @TODO implement
+}
+
+FN_NET_recv_packet g_recv_packet_callback;
+
+void NET_set_receive_callback(NetDevice device, FN_NET_recv_packet callback) {
+    // @TODO Thread safety.
+    g_recv_packet_callback = callback;
+}
+
+bool NET_poll_packet(NetDevice device, NET_Packet* packet) {
+    if (!packet) {
+        kernel_bug();
+        return false;
+    }
+    
+    void* buffer;
+    int size;
+    receive_packet(&buffer, &size);
+
+    if (!buffer || !size)
+        return false;
+
+    packet->buffer = buffer;
+    packet->size = size;
+    return true;
+}
+void NET_free_packet(NetDevice device, NET_Packet* packet) {
+    PMEM_free(packet->buffer);
+    packet->buffer = NULL;
+    packet->size = 0;
+}
+
+void NET_send_packet(NetDevice device, void* buffer, int size) {
+    if (!device) {
+        kernel_bug();
+        return;
+    }
+    send_packet(buffer, size);
 }
 
 
-void NET_poll() {
-    receive_packets();
-}
 
-void handle_packet(void* buffer, int length) {
+void NET_handle_packet(NetDevice device, NET_Packet* packet) {
     
     // @NOCHECKIN We need to check that lengths specified in packet doesn't extend the length of the whole packet. Malicious or corrupt packet should be dropped if so.
+
+    if (!packet->buffer || !packet->size)
+        return;
+
+    void* buffer = packet->buffer;
+    int size = packet->size;
 
     EtherFrame* frame = buffer;
 
@@ -87,7 +147,7 @@ void handle_packet(void* buffer, int length) {
                     message_arp->protocol_type = bswap16(message_arp->protocol_type);
                     message_arp->operation     = bswap16(message_arp->operation);
 
-                    NET_send_packet(message_buffer, sizeof(message_buffer));
+                    NET_send_packet(device, message_buffer, sizeof(message_buffer));
                 }
             } else {
                 printf("ARP hw=%s proto=%s oper=%s\n",
@@ -199,7 +259,7 @@ void handle_packet(void* buffer, int length) {
                         
                         message_echo->checksum = bswap16(compute_internet_checksum(message_echo, icmp_size));
 
-                        NET_send_packet(message_buffer, packet_size); 
+                        NET_send_packet(device, message_buffer, packet_size); 
                     } else {
                         // ignore for now
                     }
@@ -274,7 +334,7 @@ void handle_packet(void* buffer, int length) {
 
                     message_udp->checksum = bswap16(compute_internet_checksum(message_udp, message_udpSize));
 
-                    NET_send_packet(message_buffer, sizeof(EtherFrame) + sizeof(IPV4_Header) + message_udpSize);
+                    NET_send_packet(device, message_buffer, sizeof(EtherFrame) + sizeof(IPV4_Header) + message_udpSize);
 
                 } break;
                 default: {
@@ -296,7 +356,3 @@ void handle_packet(void* buffer, int length) {
 
 }
 
-
-void NET_send_packet(void* buffer, int size) {
-    send_packet(buffer, size);
-}

@@ -13,6 +13,8 @@
 
 #include "elos/kernel/net/net_internal.h"
 
+#include "elos/network.h"
+
 
 
 
@@ -35,6 +37,8 @@ static NetworkController controller;
 void setup_transmit_ring();
 void setup_receive_ring();
 void enable_interrupts();
+
+
 
 
 bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
@@ -300,8 +304,15 @@ void _handle_interrupt() {
     uint32_t cause = read_register(CARD_REG_ICR); // Cleared uppon read
 
     if (cause & CARD_BIT_ICR_RXT0) { // Packets received
-        receive_packets();  // Call the function responsible for receiving
-                            // packets and sending them to the network stack
+        if (g_recv_packet_callback) {
+            // Call the function responsible for receiving
+            // packets and sending them to the network stack
+            static int fake_device;
+            NET_Packet packet;
+            NET_poll_packet(&fake_device, &packet);
+            NET_handle_packet(&fake_device, &packet);
+            NET_free_packet(&fake_device, &packet);
+        }
     }
 
     if (cause & CARD_BIT_ICR_LSC){ // link status change
@@ -317,8 +328,10 @@ void _handle_interrupt() {
 u8 rx_next = 0;
 
 
-void receive_packets() {
+void receive_packet(void** out_buffer, int* out_size) {
     // printf("RECV packets!\n");
+
+    // @TODO make this thread safe
 
     u32 idx = rx_next;
 
@@ -357,12 +370,7 @@ void receive_packets() {
         idx = (idx + 1) % NUM_OF_RX_DESCRIPTORS;
 
         if (eop) {
-            // This is the last descriptor of the packet
-            // Forward the packet to your network stack
-            handle_packet(buffer, buffer_len);
-            PMEM_free(buffer);
-            buffer = NULL;
-            buffer_len = 0;
+            break;
         }
     }
 
@@ -371,6 +379,9 @@ void receive_packets() {
     write_register(CARD_REG_RDT, tail);
 
     rx_next = idx;
+
+    *out_buffer = buffer;
+    *out_size = buffer_len;
 }
 
 void send_data(void* data, u32 size, bool EOP){
