@@ -276,6 +276,7 @@ void setup_receive_ring() {
     // @TODO memory should not be cached. uncacheable pages
     int receive_ring_size = NUM_OF_RX_DESCRIPTORS * 16; // you can substitute 16 with sizeof(receive_descriptor_t)
     receive_ring = PMEM_alloc(receive_ring_size);
+    memset(receive_ring, 0, receive_ring_size);
     
     for (int i = 0; i < NUM_OF_RX_DESCRIPTORS; i++){
         ReceiveDescriptor* descriptor = receive_ring + i;
@@ -310,7 +311,7 @@ void _handle_interrupt() {
             static int fake_device;
             NET_Packet packet;
             NET_poll_packet(&fake_device, &packet);
-            NET_handle_packet(&fake_device, &packet);
+            g_recv_packet_callback(&fake_device, &packet, g_recv_packet_callback_userData);
             NET_free_packet(&fake_device, &packet);
         }
     }

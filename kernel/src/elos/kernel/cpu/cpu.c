@@ -4,6 +4,8 @@
 #include "elos/common/types.h"
 #include "elos/kernel_console.h"
 
+#include "elos/kernel/driver/acpi.h"
+
 
 
 void init_gdt_idt();
@@ -12,6 +14,9 @@ void init_gdt_idt();
 void CPU_init(BootAPI* boot_api) {
 
     init_gdt_idt();
+
+    acpi_init(boot_api);
+
 }
 
 

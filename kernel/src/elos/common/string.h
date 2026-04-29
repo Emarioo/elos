@@ -57,6 +57,22 @@ static inline int memcmp(void* dst, void* src, int size) {
     return 0;
 }
 
+static inline int strcmp(const char* dst, const char* src) {
+    int i=0;
+    while (1) {
+        char s = src[i];
+        char d = dst[i];
+        if (d != s) {
+            return d - s;
+        }
+        if (d == 0) {
+            break;
+        }
+        i++;
+    }
+    return 0;
+}
+
 static inline void memset(void* dst, int val, int size) {
     for(int i=0;i<size;i++) {
         *((char*)dst + i) = val;

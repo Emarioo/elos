@@ -80,6 +80,7 @@ def main():
         shutil.rmtree("releases")
         return 0
 
+    cmd(f"make -f {ROOT}/boot/netboot_server/Makefile")
 
     if vbox:
         build_elos("bin/elos.img")
@@ -216,6 +217,8 @@ def package_elos(release_dir):
     # Zip folder
 
     cmd(f"cd {os.path.dirname(temp_folder_path)} && tar -czf {temp_folder_name}.tar.gz {temp_folder_name}")
+
+    os.makedirs("bin", exist_ok=True)
 
     # Copy latest images to bin for quick access (we could make symlinks)
     cmd(f"cp {img_path} bin/elos.img")

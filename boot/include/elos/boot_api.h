@@ -10,6 +10,11 @@ typedef struct {
 typedef struct {
 
     //
+    // Other stuff
+    //
+    void* rsdp;
+
+    //
     //  Accessible Memory Regions
     // 
     MemoryRegion* regions;

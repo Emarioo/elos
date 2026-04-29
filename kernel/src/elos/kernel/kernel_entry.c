@@ -16,6 +16,9 @@
 
 void load_font();
 
+
+void handle_packet(NetDevice device, NET_Packet* packet, void* user_data);
+
 void kernel_entry(BootAPI* boot_api) {
 
     // Have .bss section in kernel image been memory mapped?
@@ -63,6 +66,8 @@ void kernel_entry(BootAPI* boot_api) {
     NET_scan_devices(&net_device, &count);
     // @TODO Check that we got device
 
+    
+    NET_set_receive_callback(net_device, handle_packet, NULL);
 
     KCON_printf("END OF KERNEL_ENTRY!\n");
     while (1) {
@@ -76,6 +81,11 @@ void kernel_entry(BootAPI* boot_api) {
     }
 
 }
+
+void handle_packet(NetDevice device, NET_Packet* packet, void* user_data) {
+    NET_handle_packet(device, packet);
+}
+
 
 // These are defined in kernel Makefile (created from res/Lat2-Terminus16.psf at the time of writing this)
 extern u8 __default_font_start;

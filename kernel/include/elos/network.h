@@ -30,12 +30,12 @@
 
 typedef void* NetDevice;
 
-typedef void(*FN_NET_recv_packet)(NetDevice device, void** buffer, int* size);
-
 typedef struct NET_Packet {
     char* buffer;
     int   size;
 } NET_Packet;
+
+typedef void(*FN_NET_recv_packet)(NetDevice device, NET_Packet* packet, void* user_data);
 
 
 //######################################
@@ -107,7 +107,7 @@ void NET_send_packet(NetDevice device, void* buffer, int size);
 
     @param callback Will be called asynchronously when packet was received.
 */
-void NET_set_receive_callback(NetDevice device, FN_NET_recv_packet callback);
+void NET_set_receive_callback(NetDevice device, FN_NET_recv_packet callback, void* user_data);
 
 
 //######################################

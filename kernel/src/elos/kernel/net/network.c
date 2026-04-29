@@ -47,10 +47,12 @@ void NET_cleanup() {
 }
 
 FN_NET_recv_packet g_recv_packet_callback;
+void* g_recv_packet_callback_userData;
 
-void NET_set_receive_callback(NetDevice device, FN_NET_recv_packet callback) {
+void NET_set_receive_callback(NetDevice device, FN_NET_recv_packet callback, void* user_data) {
     // @TODO Thread safety.
     g_recv_packet_callback = callback;
+    g_recv_packet_callback_userData = user_data;
 }
 
 bool NET_poll_packet(NetDevice device, NET_Packet* packet) {

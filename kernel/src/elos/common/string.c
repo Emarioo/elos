@@ -138,8 +138,22 @@ int vsnprintf(char* buffer, int size, const char* format, va_list va) {
             i++;
 
             char value = va_arg(va, int);
-            buffer[head] = value;
-            head += 1;
+            if (value == '\0') {
+                buffer[head] = '\\';
+                buffer[head+1] = '0';
+                head += 2;
+            } else if (value == '\n') {
+                buffer[head] = '\\';
+                buffer[head+1] = 'n';
+                head += 2;
+            } else if (value == '\t') {
+                buffer[head] = '\\';
+                buffer[head+1] = 't';
+                head += 2;
+            } else {
+                buffer[head] = value;
+                head += 1;
+            }
             CHECK
         } else if (format[i] == 'x') {
             i++;

@@ -9,6 +9,7 @@
 #include "elos/boot_api.h"
 #include "elos/common/string.h"
 
+#include "elos/netboot.h"
 
 /*
     Types
@@ -46,6 +47,7 @@ const char* efi_memory_type_names[EfiMaxMemoryType] = {
 
 EFI_GRAPHICS_OUTPUT_PROTOCOL* graphics_output;
 EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* simple_file_system;
+EFI_SIMPLE_NETWORK_PROTOCOL* simple_network;
 EFI_LOADED_IMAGE_PROTOCOL* loaded_image;
 
 UINTN g_last_map_key; // needed when allocating memory and exiting boot services.
@@ -194,8 +196,50 @@ void boot_init_frame_buffer() {
 // }
 
 
+EFI_STATUS load_kernel_from_file(void* address);
+
+void done_net() {
+
+}
 
 EFI_STATUS load_kernel(void* address) {
+    EFI_STATUS status;
+    status = simple_network->Start(simple_network);
+    if (EFI_ERROR(status)) {
+        printf("Cannot start network, %d\n", status);
+        return status;
+    }
+
+    status = simple_network->Initialize(simple_network, 0x0, 0x0);
+    // status = simple_network->Initialize(simple_network, 0x100000, 0x100000);
+    if (EFI_ERROR(status)) {
+        printf("Cannot init network, %d\n", status);
+        return status;
+    }
+    
+
+    NETBOOT_init();
+
+    int kernel_file_size = 4*0x100000; // 8 MB
+    const int PAGE_SIZE = 4096;
+    int pages = (kernel_file_size + PAGE_SIZE-1) / PAGE_SIZE;
+
+    status = ST->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, pages, (EFI_PHYSICAL_ADDRESS*)&address);
+    if (EFI_ERROR(status)) {
+        printf("Could not allocate pages at %x\r\n", address);
+        catch_bad_status();
+        return status;
+    }
+
+    NETBOOT_request_file("/KERNEL.IMG", 0, kernel_file_size, address);
+
+    // load_kernel_from_file(address);
+    done_net();
+
+    return EFI_SUCCESS;
+}
+
+EFI_STATUS load_kernel_from_file(void* address) {
     
     EFI_STATUS Status;
     EFI_FILE_PROTOCOL* volume;
@@ -229,7 +273,7 @@ EFI_STATUS load_kernel(void* address) {
 
     Status = ST->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, pages, (EFI_PHYSICAL_ADDRESS*)&address);
     if (EFI_ERROR(Status)) {
-        printf("Could not allocate pages at %x\r\n", address);
+        printf("Could not allocate pages at %x!!!\r\n", address);
         catch_bad_status();
         return Status;
     }
@@ -267,12 +311,6 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
         return Status;
     }
 
-    Status = BS->HandleProtocol(loaded_image->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (void**)&simple_file_system);
-    if (EFI_ERROR(Status)) {
-        catch_bad_status();
-        // printf("HandleProtocol failed: 0x%lx\n", Status);
-        return Status;
-    }
 
     // Print the actual base address of the loaded image
     printf("Image loaded at: 0x%x\n", (uint32_t)(uint64_t)loaded_image->ImageBase);
@@ -285,12 +323,42 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
 
     printf("Hello World\r\n"); // EFI Applications use Unicode and CRLF, a la Windows
 
-    
+    Status = BS->LocateProtocol(&gEfiSimpleNetworkProtocolGuid, NULL, (void**)&simple_network);
+    if (EFI_ERROR(Status)) {
+        catch_bad_status();
+        printf("SimpleNetworkProtocol is not available, %d\n", Status);
+        // We should not stop here? boot from what we have?
+        return Status;
+    }
 
-    Status = ST->BootServices->LocateProtocol(&gEfiGraphicsOutputProtocolGuid, NULL, (void**)&graphics_output);
+    Status = BS->HandleProtocol(loaded_image->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (void**)&simple_file_system);
+    if (EFI_ERROR(Status)) {
+        catch_bad_status();
+        // printf("HandleProtocol failed: 0x%lx\n", Status);
+        return Status;
+    }
+
+    Status = BS->LocateProtocol(&gEfiGraphicsOutputProtocolGuid, NULL, (void**)&graphics_output);
     if (EFI_ERROR(Status)) {
         catch_bad_status();
         return Status;
+    }
+
+    EFI_GUID acpi20 = ACPI_20_TABLE_GUID;
+    
+    for (int i=0;i<SystemTable->NumberOfTableEntries;i++) {
+        EFI_CONFIGURATION_TABLE* table = &SystemTable->ConfigurationTable[i];
+        if (!memcmp(&table->VendorGuid, &AcpiTableGuid, sizeof(EFI_GUID))) {
+            g_boot_api.rsdp = table->VendorTable;
+            printf("BOOT: Found ACPI 1.0, RSDP at %x.\r\n", g_boot_api.rsdp);
+        } else if (!memcmp(&table->VendorGuid, &acpi20, sizeof(EFI_GUID))) {
+            g_boot_api.rsdp = table->VendorTable;
+            printf("BOOT: Found ACPI 2.0, RSDP at %x.\r\n", g_boot_api.rsdp);
+            break;
+        }
+    }
+    if (!g_boot_api.rsdp) {
+        printf("BOOT: Could not find RSDP in EFI System Table.\r\n");
     }
 
     FN_BootAPI kernel_entry = NULL;
@@ -327,7 +395,6 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     // Shouldn't return. We're in the hands of the OS now
     return Status;
 }
-
 
 // EFI_STATUS list_content(EFI_FILE_PROTOCOL* dir, int depth, EFI_FILE_INFO* info);
 
