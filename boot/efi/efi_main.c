@@ -204,37 +204,49 @@ void done_net() {
 
 EFI_STATUS load_kernel(void* address) {
     EFI_STATUS status;
-    status = simple_network->Start(simple_network);
-    if (EFI_ERROR(status)) {
-        printf("Cannot start network, %d\n", status);
-        return status;
-    }
-
-    status = simple_network->Initialize(simple_network, 0x0, 0x0);
-    // status = simple_network->Initialize(simple_network, 0x100000, 0x100000);
-    if (EFI_ERROR(status)) {
-        printf("Cannot init network, %d\n", status);
-        return status;
-    }
     
-
-    NETBOOT_init();
-
     int kernel_file_size = 4*0x100000; // 8 MB
     const int PAGE_SIZE = 4096;
     int pages = (kernel_file_size + PAGE_SIZE-1) / PAGE_SIZE;
 
+    
     status = ST->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, pages, (EFI_PHYSICAL_ADDRESS*)&address);
     if (EFI_ERROR(status)) {
         printf("Could not allocate pages at %x\r\n", address);
         catch_bad_status();
         return status;
     }
+    
+    
+    status = simple_network->Start(simple_network);
+    if (EFI_ERROR(status)) {
+        printf("Cannot start network, %d\n", status);
+        goto local_kernel;
+        // return status;
+    }
 
-    NETBOOT_request_file("/KERNEL.IMG", 0, kernel_file_size, address);
+    status = simple_network->Initialize(simple_network, 0x0, 0x0);
+    // status = simple_network->Initialize(simple_network, 0x100000, 0x100000);
+    if (EFI_ERROR(status)) {
+        printf("Cannot init network, %d\n", status);
+        goto local_kernel;
+        // return status;
+    }
+    
 
-    // load_kernel_from_file(address);
+    NETBOOT_init();
+
+
+    bool res = NETBOOT_request_file("/KERNEL.IMG", 0, kernel_file_size, address);
+    if (!res) {
+        goto local_kernel;
+    }
+
     done_net();
+    return EFI_SUCCESS;
+
+local_kernel:
+    load_kernel_from_file(address);
 
     return EFI_SUCCESS;
 }
@@ -268,15 +280,15 @@ EFI_STATUS load_kernel_from_file(void* address) {
         catch_bad_status();
         return Status;
     }
-    const int PAGE_SIZE = 4096;
-    int pages = (file_info->FileSize + PAGE_SIZE-1) / PAGE_SIZE;
+    // const int PAGE_SIZE = 4096;
+    // int pages = (file_info->FileSize + PAGE_SIZE-1) / PAGE_SIZE;
 
-    Status = ST->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, pages, (EFI_PHYSICAL_ADDRESS*)&address);
-    if (EFI_ERROR(Status)) {
-        printf("Could not allocate pages at %x!!!\r\n", address);
-        catch_bad_status();
-        return Status;
-    }
+    // Status = ST->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, pages, (EFI_PHYSICAL_ADDRESS*)&address);
+    // if (EFI_ERROR(Status)) {
+    //     printf("Could not allocate pages at %x!!!\r\n", address);
+    //     catch_bad_status();
+    //     return Status;
+    // }
 
     UINTN file_size = file_info->FileSize;
     Status = handle->Read(handle, &file_size, (void*)address);
@@ -314,6 +326,8 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
 
     // Print the actual base address of the loaded image
     printf("Image loaded at: 0x%x\n", (uint32_t)(uint64_t)loaded_image->ImageBase);
+
+    while (1);
 
     // Write image base and marker for GDB
     volatile uint64_t *marker_ptr = (uint64_t *)0x10000;

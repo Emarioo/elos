@@ -138,7 +138,7 @@ int main(int argc, char** argv) {
     //   packets may be dropped if we're too fast. we need to resend.
 
     #ifdef _WIN32
-        CreateThread();
+        HANDLE handle = CreateThread(NULL, 0x10000, (DWORD(*)(void*))thread_loss_detection, NULL, 0, NULL);
     #else
         pthread_t thread;
         res = pthread_create(&thread, NULL, (FN_Thread) thread_loss_detection, NULL);
@@ -160,6 +160,11 @@ Session sessions[MAX_SESSIONS];
 uint64_t access_time_now() {
     #ifdef _WIN32
         // performance counter
+        LARGE_INTEGER freq;
+        LARGE_INTEGER perf;
+        QueryPerformanceFrequency(&freq);
+        QueryPerformanceCounter(&perf);
+        return perf.QuadPart * TIME_RESOLUTION / freq.QuadPart;
     #else
         struct timespec tp;
         clock_gettime(CLOCK_REALTIME, &tp);
@@ -314,10 +319,10 @@ void work() {
                     refresh_transfers(session);
                 }
             } else {
-                printf("warning: ACK off=%d size=%d did not complete any Transfer (duplicates?).\n", ack->offset, ack->size);
+                printf("warning: ACK off=%d size=%d did not complete any Transfer (duplicates?).\n", (int)ack->offset, ack->size);
                 for (int i=0;i<MAX_TRANSFER_INFOS;i++) {
                     TransferInfo* info = &session->transferInfos[i];
-                    debug("  Transfer[%d] off=%d size=%d\n", i, info->offset, info->size);
+                    debug("  Transfer[%d] off=%d size=%d\n", i, (int)info->offset, info->size);
                 }
             }
         }
@@ -357,7 +362,11 @@ void thread_loss_detection(void*) {
             }
         }
         // printf("Refresh %lf\n", (double)access_time_now()/(double)TIME_RESOLUTION);
-        usleep(50*1000);
+        #ifdef _WIN32
+            Sleep(45);
+        #else
+            usleep(50*1000);
+        #endif
     }
 }
 

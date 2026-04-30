@@ -23,6 +23,7 @@ int fake_device;
 
 void NET_scan_devices(NetDevice devices[], int* count) {
     if (!count) {
+        // INVALID parameter
         return;
     }
     if (!devices && count) {
@@ -36,10 +37,15 @@ void NET_scan_devices(NetDevice devices[], int* count) {
     current_ip = ipv4_from_str("192.168.100.54");
     printf("Hardcoded IP: %s\n", ipv4_int_str(current_ip, buffer0));
 
-    card_init();
+    bool res = card_init();
+    if (!res) {
+        *count = 0;
+        return;
+    }
 
     devices[0] = &fake_device;
     *count = 1;
+    return;
 }
 
 void NET_cleanup() {

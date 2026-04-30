@@ -204,7 +204,7 @@ def package_elos(release_dir):
     gpt_size_estimation = 2 * (2*512 + 128*128) + fat_size + (40 + 400) * 512
     cmd(f"mkgpt -o {img_path} --image-size {gpt_size_estimation/512} --part {fat_path} --type system")
 
-    # cmd(f"xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o {iso_path} {ISO_DIR}")
+    cmd(f"xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o {iso_path} {ISO_DIR}")
     # cmd(f"xorriso -as mkisofs -R -f -no-emul-boot -o {iso_path} {ISO_DIR}")
 
 
@@ -221,10 +221,14 @@ def package_elos(release_dir):
     os.makedirs("bin", exist_ok=True)
 
     # Copy latest images to bin for quick access (we could make symlinks)
-    cmd(f"cp {img_path} bin/elos.img")
-    cmd(f"cp {bootx64_path} bin/boot.elf")
-    cmd(f"cp {kernel_elf_path} bin/kernel.elf")
-    cmd(f"cp {iso_path} bin/elos.iso")
+    if os.path.exists(img_path):
+        cmd(f"cp {img_path} bin/elos.img")
+    if os.path.exists(bootx64_path):
+        cmd(f"cp {bootx64_path} bin/boot.elf")
+    if os.path.exists(kernel_elf_path):
+        cmd(f"cp {kernel_elf_path} bin/kernel.elf")
+    if os.path.exists(iso_path):
+        cmd(f"cp {iso_path} bin/elos.iso")
 
     print(f"Successfully built \033[32m{temp_folder_path}\033[0m")
 

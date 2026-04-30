@@ -48,7 +48,7 @@ bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
             controller.config = *config;
             return true;
         } else {
-            printf("NET_init: Searching PCI for network card, found device id 0x%x (vendor 0x%x), but card is not supported.\n", config->deviceID, config->vendorID);
+            printf("[INFO] NET_init: Searching PCI for network card, found device id 0x%x (vendor 0x%x), but card is not supported.\n", config->deviceID, config->vendorID);
         }
     }
 
@@ -65,12 +65,12 @@ uint32_t read_register(uint16_t reg_offset){
     return *(uint32_t *)(controller.ioaddr + reg_offset);
 }
 
-void reset_nic();
+bool reset_nic();
 
 
 u16 eeprom_read(u8 addr);
 
-void card_init() {
+bool card_init() {
 
     PCI_Scanner scanner = {};
     scanner.func = find_device;
@@ -78,13 +78,13 @@ void card_init() {
     pci_scan_buses(&scanner);
 
     if (!controller.found) {
-        printf("NET_init: Could not find a supported Network Controller on the PCI bus.\n");
-        return;
+        printf("[WARNING] NET_init: Could not find a supported Network Controller on the PCI bus.\n");
+        return false;
     }
 
     if ((controller.config.header0.bar0 & 0x1) == 1) {
-        printf("NET_init: Network Controller uses I/O space not memory mapped!?\n");
-        return;
+        printf("[WARNING] NET_init: Network Controller uses I/O space not memory mapped!?\n");
+        return false;
     }
 
     int prefetchable = controller.config.header0.bar0 & 0x8;
@@ -122,7 +122,7 @@ void card_init() {
             break;
         default:
             printf("NET_init: The heck? bar type\n");
-            return;
+            return false;
     }
 
     // @TODO Do i need to memory map (page tables) the base address space?
@@ -130,7 +130,9 @@ void card_init() {
     /*
         Reset the Network Controller
     */
-    reset_nic();
+    bool res = reset_nic();
+    if (!res)
+        return false;
 
     memcpy(current_mac, controller.mac_address, 6);
 
@@ -152,6 +154,7 @@ void card_init() {
 
     enable_interrupts();
 
+    return true;
 }
 
 u16 eeprom_read(u8 addr) {
@@ -176,7 +179,7 @@ u16 eeprom_read(u8 addr) {
 }
 
 
-void reset_nic() {
+bool reset_nic() {
     // Just interesting to see this value when debugging
     uint32_t status = read_register(CARD_REG_STATUS);
     
@@ -196,7 +199,7 @@ void reset_nic() {
     // Check if eeprom present bit is set. That's how we get the mac address.
     if ((read_register(CARD_REG_EECD) & CARD_BIT_EECD_EE_PRES) == 0) {
         printf("NET_init: EEPROM present bit is not set for i8254x\n");
-        return;
+        return false;
     }
 
     // I misunderstood documentation?
@@ -239,6 +242,7 @@ void reset_nic() {
     write_register(CARD_REG_RAL(0), writeL);
     write_register(CARD_REG_RAH(0), writeH);
 
+    return true;
 }
 
 #define NUM_OF_TX_DESCRIPTORS 8

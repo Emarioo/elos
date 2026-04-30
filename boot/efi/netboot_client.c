@@ -228,9 +228,69 @@ bool NETBOOT_handle_base(char* buffer, int size) {
     return false;
 }
 
+extern EFI_SYSTEM_TABLE *ST;
+
+
+uint64_t time_to_us(const EFI_TIME tim) {
+    // This is flawed
+    return (uint64_t) tim.Year * 12 * 31 * 24 * 60 * 60 * 1000000 +
+        (uint64_t) tim.Month * 31 * 24 * 60 * 60 * 1000000 +
+    (uint64_t) tim.Day * 24 * 60 * 60 * 1000000 +
+    (uint64_t) tim.Hour * 60 * 60 * 1000000 +
+    (uint64_t) tim.Minute * 60 * 1000000 +
+    (uint64_t) tim.Second * 1000000 +
+    (uint64_t) tim.Nanosecond / 1000;
+}
+
+uint64_t crude_measure() {
+    EFI_STATUS status;
+    EFI_TIME start_time, end_time;
+    uint64_t start_tsc, end_tsc;
+
+    status = ST ->RuntimeServices->GetTime(&start_time, NULL);
+    if (EFI_ERROR(status)) {
+        printf("GetTime err %d\r\n", status);
+    }
+    start_tsc = rtdsc();
+
+    while (1) {
+        end_tsc = rtdsc();
+        status = ST ->RuntimeServices->GetTime(&end_time, NULL);
+        
+        if (EFI_ERROR(status))
+            break;
+
+        if (end_time.Second == (start_time.Second + 1) % 60) {
+            break;
+        }
+    }
+
+    int64_t diff_us = 1000000;
+    int64_t diff_tsc = end_tsc - start_tsc;
+    int64_t per_sec = (1000000*diff_tsc) / diff_us;
+    // printf("DIFFS %d M %d %d M/sec\r\n", diff_tsc / 1000000, diff_us, per_sec/1000000);
+
+    return per_sec;
+}
+
+uint64_t tsc_per_second;
+uint64_t base_tsc;
+
+uint64_t now_us() {
+    if (tsc_per_second == 0) {
+        tsc_per_second = crude_measure();
+    }
+    if (base_tsc == 0) {
+        base_tsc = rtdsc();
+    }
+
+    return (1000000*(rtdsc() - base_tsc)) / tsc_per_second;
+}
+
 
 // offset and size are optional
 int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void* buffer) {
+    tsc_per_second = crude_measure();
 
     printf("Requesting %s\r\n", path);
 
@@ -238,9 +298,12 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
 
     int received_bytes = 0;
 
-    int limit_cap = 10000000;
-    int limit = limit_cap;
-    while (limit) {
+    uint64_t start_us = now_us();
+    uint64_t timeoutStart_us = now_us();
+
+    uint64_t timeoutValue = 1800 * 1000; // 800 ms
+    // int limit = limit_cap;
+    while (1) {
         int buffer_size = sizeof(g_recv_buffer);
         bool res = recv_packet(g_recv_buffer, &buffer_size);
         if (!res) {
@@ -250,7 +313,11 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
 
             // @TODO If we haven't received all data then and no more SEND_FILE packets
             //   are arriving then we should let server know what we are missing.
-            limit--;
+            uint64_t now = now_us();
+            // printf("wait %d...\r\n", (now - timeoutStart_us) / 1000);
+            if (now - timeoutStart_us > timeoutValue) {
+                break;
+            }
             pause();
             // printf("limit %d recvbytes=%d\r\n", limit, received_bytes);
             continue;
@@ -307,7 +374,7 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
 
 
         debug("Recv file size, recbytes=%d off=%d recvsize=%d total=%d foff=%d\r\n", received_bytes, buffer_offset, sendf->size, sendf->totalFileSize, sendf->offset);
-        limit = limit_cap;
+        timeoutStart_us = now_us();
 
         send_file_ack(frame->source, ipv4->sourceAddress, udp->sourcePort, sendf->offset, sendf->size);
 
@@ -322,7 +389,7 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
         }
     }
 
-    printf("No response on NETBOOT file request?\r\n");
+    printf("No response on NETBOOT file request? (or incomplete response)\r\n");
 
     return 0;
 }

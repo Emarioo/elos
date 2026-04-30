@@ -57,3 +57,15 @@ static inline void pause() {
         "pause\n"
     );
 }
+
+static inline uint64_t rtdsc() {
+    uint64_t value;
+    asm(
+        "rdtsc\n"
+        "shl $32, %%rdx\n"
+        "or %%rdx, %%rax\n"
+        : "=a" (value)
+        :
+    );
+    return value;
+}
