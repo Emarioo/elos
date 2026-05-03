@@ -15,6 +15,8 @@
 
 #include "elos/network.h"
 
+#include "elos/kernel/pmem/paging.h"
+
 
 
 
@@ -50,53 +52,11 @@ bool i8254x_init() {
         return false;
     }
     
-    // decode_bar(&controller.config, &controller.ioaddr, &controller.ioaddr_size, &controller.maddr, &controller.maddr_size);
-
-
-    if ((controller.config.header0.bar0 & 0x1) == 1) {
-        printf("[WARNING] NET_init: Network Controller uses I/O space not memory mapped!?\n");
-        return false;
-    }
-
-    int prefetchable = controller.config.header0.bar0 & 0x8;
-
-    // There text at https://wiki.osdev.org/PCI "Address and size of the BAR" which says:
-    // "Before attempting to read the information about the BAR, make sure to disable both I/O and memory decode in the command byte"
-    // I am not doiung this which might be a problem.
-
-    // Disable memory + IO decode
-    u16 cmd = pciConfig_readw(controller.config.pci_bus, controller.config.pci_device, controller.config.pci_function, 0x6);
-    pciConfig_writew(controller.config.pci_bus, controller.config.pci_device, controller.config.pci_function, 0x6, cmd & ~0x3);
-
-    int prev_bar = pciConfig_readl(controller.config.pci_bus, controller.config.pci_device, controller.config.pci_function, 0x10);
-    pciConfig_writel(controller.config.pci_bus, controller.config.pci_device, controller.config.pci_function, 0x10, 0xFFFFFFFF);
-    int bar_size = pciConfig_readl(controller.config.pci_bus, controller.config.pci_device, controller.config.pci_function, 0x10);
-    bar_size = ~bar_size + 1; // decode to actual size
-    pciConfig_writel(controller.config.pci_bus, controller.config.pci_device, controller.config.pci_function, 0x10, prev_bar);
-
-    cmd = pciConfig_readw(controller.config.pci_bus, controller.config.pci_device, controller.config.pci_function, 0x6);
-    pciConfig_writew(controller.config.pci_bus, controller.config.pci_device, controller.config.pci_function, 0x6, cmd | 0x3);
-
-
-    printf("NET_init: Network Controller prefetchable: %d\n", prefetchable);
-    printf("NET_init: Network Controller BAR0 size: %dK\n", bar_size/1024);
-
-    switch ((controller.config.header0.bar0 & 0x6) >> 1) {
-        case 0:
-            // 32 bit
-            controller.maddr = controller.config.header0.bar0 & 0xFFFFFFF0;
-            break;
-        case 2:
-            // 64 bit
-            controller.maddr = (u64)(controller.config.header0.bar0 & 0xFFFFFFF0) |
-                           (u64)controller.config.header0.bar1 << 32;
-            break;
-        default:
-            printf("NET_init: The heck? bar type\n");
-            return false;
-    }
+    decode_bar(&controller.config, &controller.ioaddr, &controller.ioaddr_size, &controller.maddr, &controller.maddr_size);
 
     // @TODO Do i need to memory map (page tables) the base address space?
+
+    map_pages((void*)controller.maddr, (void*)controller.maddr, controller.maddr_size/PAGE_SIZE);
 
     /*
         Reset the Network Controller
@@ -227,12 +187,12 @@ ReceiveDescriptor* receive_ring;
 void setup_transmit_ring() {
     // @TODO memory should not be cached.
     int transmit_ring_size = NUM_OF_TX_DESCRIPTORS * 16;
-    transmit_ring = PMEM_alloc(transmit_ring_size);
+    transmit_ring = PMEM_alloc_phys(transmit_ring_size, PMEM_FLAG_IDENTITY_MAPPED);
     memset(transmit_ring, 0, transmit_ring_size);
     
     for (int i = 0; i < NUM_OF_TX_DESCRIPTORS; i++){
         TransmitDescriptor* descriptor = transmit_ring + i;
-        descriptor->buffer_address = PMEM_alloc(SIZE_OF_TX_DESCRIPTOR_BUFFER);
+        descriptor->buffer_address = PMEM_alloc_phys(SIZE_OF_TX_DESCRIPTOR_BUFFER, PMEM_FLAG_IDENTITY_MAPPED);
     }
     
     write_register(CARD_REG_TDBAL, ((u64)transmit_ring) & 0xFFFFFFFF);

@@ -113,7 +113,7 @@ void* alloc_page_table() {
     // physical address of new page
     // This is not the address we return.
     // We return one from reserved_page_table
-    void* new_page_table = PMEM_allocate_phys_pages(1);
+    void* new_page_table = PMEM_alloc_phys(PAGE_SIZE, PMEM_FLAG_NONE);
     
     u64* page_table_4 = (void*)read_cr3();
 
@@ -153,7 +153,7 @@ void* alloc_page_table() {
             // We need to refill free mapped page tables so that we don't run out of table directories
             // when allocating new page tables.
             
-            void* extraTable = PMEM_allocate_phys_pages(1);
+            void* extraTable = PMEM_alloc_phys(PAGE_SIZE, PMEM_FLAG_NONE);
             if (!extraTable) {
                 kernel_bug();
                 return NULL;

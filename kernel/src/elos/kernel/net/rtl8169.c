@@ -24,6 +24,7 @@ bool rtl8169_init() {
         return false;
     }
 
+    // If we use maddr don't forget to map the physical pages to virtual.
 
     bool yes = reset_nic();
     if (!yes) {
@@ -52,17 +53,13 @@ static bool prepare_buffers() {
     #define RAW_BUFFER_SIZE (2*256 + 2*8 + 2 * rx_buffer_len * rx_descriptors_len)
     // static u8 _raw_buffer[2*256 + 2*8 + 2 * rx_buffer_len * rx_descriptors_len];
 
-    u8* _raw_buffer = PMEM_allocate_phys_pages(RAW_BUFFER_SIZE / PAGE_SIZE);
-    // PMEM_alloc currently identitiy maps memory, will it in the future?
-    // we manually allcoate phys pages and map them because of this.
-
-    // @TODO Some memory virtual memory may be mapped to this region.
-    //  From EFI, stack or frame buffer for example. Kernel is loaded at 1-3 MB so that's fine.
-    bool yes = map_pages(_raw_buffer, _raw_buffer, RAW_BUFFER_SIZE / PAGE_SIZE);
-    if (yes) {
-        printf("rtl8169: Could not map pages at %x.\n", _raw_buffer);
+    u8* _raw_buffer = PMEM_alloc_phys(RAW_BUFFER_SIZE, PMEM_FLAG_IDENTITY_MAPPED);
+    if (!_raw_buffer) {
+        printf("rtl8169: Could not allocate physical pages for buffers. %d KB\n", RAW_BUFFER_SIZE/1024);
         return false;
     }
+    // PMEM_alloc currently identitiy maps memory, will it in the future?
+    // we manually allcoate phys pages and map them because of this.
 
     // Descriptors should be 256-byte aligned.
     // Buffers should be 8-byte aligned.

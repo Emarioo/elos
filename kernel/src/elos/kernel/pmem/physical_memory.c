@@ -316,16 +316,13 @@ void* PMEM_allocate(u64 size, void* ptr) {
 
         // Safe to assume regions/pages from UEFI is mapped mostly?
         // Otherwise we need this:
-        for (int i = 0; i < requested_pages; i++) {
-            void* addr = (char*)new_ptr + i * PAGE_SIZE;
-            bool yes = map_page(addr, addr);
-            if (!yes) {
-                // Bug in kernel if this doesn't work
-                return NULL;
-            }
+        bool yes = map_pages(new_ptr, new_ptr, requested_pages);
+        if (!yes) {
+            kernel_bug();
+            return NULL;
         }
 
-        // Always initialize memory. Malicious program should not be able to read freed memory from other programs.
+        // Initialize to non-zero. Easier to debug when i see 9D and now it's uninitialized and came from PMEM_allocate.
         memset(new_ptr, 0x9D, aligned_size);
 
         return new_ptr;
@@ -425,9 +422,11 @@ void* PMEM_allocate(u64 size, void* ptr) {
 
 
 
-void* PMEM_allocate_phys_pages(u64 requested_pages) {
-    if (requested_pages <= 0)
+void* PMEM_alloc_phys(u64 size, PMEM_Flags flags) {
+    if (size <= 0)
         return NULL;
+
+    u64 requested_pages = (size + PAGE_SIZE-1) / PAGE_SIZE;
 
     int found_free_index = -1;
     for (int i = 0; i < g_num_free_regions; i++) {
@@ -478,7 +477,16 @@ void* PMEM_allocate_phys_pages(u64 requested_pages) {
     if (found_used_index >= g_num_used_regions) {
         g_num_used_regions = found_used_index + 1;
     }
-
+    
     void* new_ptr = (void*)(used_alloc->physicalStart);
+
+    if (flags & PMEM_FLAG_IDENTITY_MAPPED) {
+        bool yes = map_pages(new_ptr, new_ptr, requested_pages);
+        if (!yes) {
+            printf("pmem: Could not identity physical pages at %x.\n", new_ptr);
+            return NULL;
+        }
+    }
+
     return new_ptr;
 }

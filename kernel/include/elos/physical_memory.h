@@ -7,12 +7,18 @@
 
 #define PAGE_SIZE 4096
 
+typedef enum PMEM_Flags {
+    PMEM_FLAG_NONE,
+    PMEM_FLAG_IDENTITY_MAPPED,
+} PMEM_Flags;
+
 void PMEM_init(BootAPI* boot_api);
 
 
 /*
-    Allocate generic memory mapped memory
-    Memory is uninitialized
+    Allocate generic mapped memory.
+    Memory may not be identity mapped to physical addresses.
+    Memory is uninitialized.
 */
 void* PMEM_allocate(u64 bytes, void* ptr);
 #define PMEM_alloc(BYTES) PMEM_allocate(BYTES, NULL)
@@ -20,10 +26,10 @@ void* PMEM_allocate(u64 bytes, void* ptr);
 #define PMEM_realloc(BYTES, PTR) PMEM_allocate(BYTES, PTR)
 
 /*
-    Does no memory mapping
+    Does no memory mapping by default (flags can change this)
     Memory is uninitialized
 */
-void* PMEM_allocate_phys_pages(u64 requested_pages);
+void* PMEM_alloc_phys(u64 size, PMEM_Flags flags);
 
 /*
     TODO: Allocates contiguous pages with some optional flags
