@@ -41,3 +41,14 @@ It has a partion table with one partition with FAT16 file format.
 |11-19|File allocation table 2|
 |20-33|Root directory|
 |34-N|File data (clusters)|
+
+# How the OS is designed
+The OS has:
+- Bootloader : Performs setup based on the processor it runs on and starts the kernel.
+- Kernel : Manager of the system resources.
+- Application : The user programs which requests resources from the Kernel.
+
+
+
+For fun, wouldn't it be cool to run PE and ELF applications, Linux and Windows?
+Like steam's proton builtin to the kernel?
