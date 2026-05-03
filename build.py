@@ -8,7 +8,7 @@ The following tools/binaries exist:
 
 '''
 
-import os, sys, platform, shutil, shlex, glob, math, threading, multiprocessing, dataclasses
+import os, sys, platform, shutil, shlex, glob, math, threading, multiprocessing, dataclasses, subprocess
 from dataclasses import dataclass
 
 
@@ -88,9 +88,9 @@ def main():
         vdi_path = "/mnt/d/vms/elos.vdi"
         cmd(f"rm -f {vdi_path}")
         cmd(f"VBoxManage convertfromraw bin/elos_padded.img {vdi_path} --format VDI")
-    elif iso:
-        build_elos("bin/elos")
-        build_iso("bin/elos", "bin/elos.iso")
+    # elif iso:
+    #     build_elos("bin/elos")
+    #     build_iso("bin/elos", "bin/elos.iso")
     elif efi:
         build_create_efi()
         cmd("bin/elos-img")
@@ -204,6 +204,7 @@ def package_elos(release_dir):
     gpt_size_estimation = 2 * (2*512 + 128*128) + fat_size + (40 + 400) * 512
     cmd(f"mkgpt -o {img_path} --image-size {gpt_size_estimation/512} --part {fat_path} --type system")
 
+    # subprocess.Popen(
     cmd(f"xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o {iso_path} {ISO_DIR}")
     # cmd(f"xorriso -as mkisofs -R -f -no-emul-boot -o {iso_path} {ISO_DIR}")
 
@@ -438,7 +439,8 @@ def make_fat(out_path: str, deps_spec: list[tuple[str,str]]):
     # if use_custom:
     if os.path.exists(out_path):
         os.remove(out_path)
-    # cmd(f"bin/elos-img --file {FAT_PATH} --fat-init {fatSize}")
+    build_create_efi()
+    cmd(f"bin/elos-img --file {out_path} --fat-init {fatSize}")
 
     # Copy files
     # for src, dst in DEPS:
@@ -529,7 +531,7 @@ def build_fat(FAT_PATH):
     # if use_custom:
     if os.path.exists(FAT_PATH):
         os.remove(FAT_PATH)
-    # cmd(f"bin/elos-img --file {FAT_PATH} --fat-init {fatSize}")
+    cmd(f"bin/elos-img --file {FAT_PATH} --fat-init {fatSize}")
 
     # Copy files
     # for src, dst in DEPS:
@@ -642,7 +644,7 @@ def build_iso(os_dir, path):
 
 def build_create_efi():
     os.makedirs("bin", exist_ok=True)
-    cmd("gcc -g -o bin/elos-img src/tools/create_efi.c -DELOS_DEBUG -Iinclude/vendor -Isrc -lm")
+    cmd("gcc -g -o bin/elos-img kernel/src/tools/create_efi.c -DELOS_DEBUG -Ikernel/include/vendor -Ikernel/src -lm")
 
 
 def install_deps():

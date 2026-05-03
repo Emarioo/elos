@@ -14,7 +14,7 @@ FrameBuffer g_frame_buffer;
 
 
 
-const int border_padding = 20;
+#define border_padding 20
 static int pos_x = border_padding;
 static int pos_y = border_padding;
 
@@ -72,7 +72,8 @@ void FB_write(const char* buffer, int len) {
         start = head;
 
         if (text.len > 0) {
-            draw_glyphs_from_text_bcolor(pos_x, pos_y, text_height, text, g_default_font, WHITE, DARK_BLUE);
+            draw_glyphs_from_text_bcolor(pos_x, pos_y, text_height, text, g_default_font, WHITE, 0);
+            // draw_glyphs_from_text_bcolor(pos_x, pos_y, text_height, text, g_default_font, WHITE, DARK_BLUE);
             int text_width = draw_text_width(text, text_height, g_default_font);
             pos_x += text_width;
         }
@@ -86,7 +87,7 @@ void FB_write(const char* buffer, int len) {
             int screen_width, screen_height;
             draw_frame_info(&screen_width, &screen_height);
 
-            draw_rect(0, pos_y + text_height, screen_width, text_height, DARK_BLUE);
+            // draw_rect(0, pos_y + text_height, screen_width, text_height, DARK_BLUE);
 
             if (pos_y + text_height + border_padding >= screen_height) {
                 // @TODO: When about to go beyond the screen border we wrap around.

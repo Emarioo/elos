@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 typedef struct {
-    uint64_t physical_start;
+    uint64_t physical_address;
     uint64_t page_count;
 } MemoryRegion;
 

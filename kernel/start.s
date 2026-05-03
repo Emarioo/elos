@@ -26,7 +26,7 @@ _start:
 zero_bss:
     
     lea rsi, __bss_start
-    lea rdi, __bss_start + 16
+    lea rdi, __bss_end
 
     xor rax, rax
 

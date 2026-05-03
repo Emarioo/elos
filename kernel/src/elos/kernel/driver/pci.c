@@ -134,7 +134,7 @@ void trace_config_space(PCI_ConfigSpace* config) {
 }
 
 bool pci_scan_function(PCI_Scanner* scanner, int bus, int device, int function) {
-    PCI_ConfigSpace config = {};
+    PCI_ConfigSpace config = {0};
     config.pci_bus = bus;
     config.pci_device = device;
     config.pci_function = function;
@@ -221,3 +221,91 @@ void pci_scan_buses(PCI_Scanner* scanner) {
     }
 }
 
+
+void decode_bar_size(PCI_ConfigSpace* config, int bar_index, u64* out_bar_size) {
+    // There text at https://wiki.osdev.org/PCI "Address and size of the BAR" which says:
+    // "Before attempting to read the information about the BAR, make sure to disable both I/O and memory decode in the command byte"
+    // I am not doiung this which might be a problem.
+
+    int pci_bus = config->pci_bus;
+    int pci_device = config->pci_device;
+    int pci_function = config->pci_function;
+
+    // Disable memory + IO decode
+    u16 cmd = pciConfig_readw(pci_bus, pci_device, pci_function, 0x6);
+    pciConfig_writew(pci_bus, pci_device, pci_function, 0x6, cmd & ~0x3);
+
+    int bar_offset = 0x10 + bar_index * 4;
+
+    // @TODO This may not work for 64-bit BARS. Doing two separate writes of 1s 
+    //   to lower and upper bar seems strange though?
+
+    // Get current bar
+    int prev_bar = pciConfig_readl(pci_bus, pci_device, pci_function, bar_offset);
+
+    // Write ones to bar to tell PCI to give back bar size.
+    pciConfig_writel(pci_bus, pci_device, pci_function, bar_offset, 0xFFFFFFFF);
+    
+    // Retrieve and decode size
+    int bar_size = pciConfig_readl(pci_bus, pci_device, pci_function, bar_offset);
+    bar_size = ~bar_size + 1;
+
+    // Restore bar
+    pciConfig_writel(pci_bus, pci_device, pci_function, bar_offset, prev_bar);
+
+    // Enable memory + IO decode
+    cmd = pciConfig_readw(pci_bus, pci_device, pci_function, 0x6);
+    pciConfig_writew(pci_bus, pci_device, pci_function, 0x6, cmd | 0x3);
+
+    *out_bar_size = bar_size;
+}
+void decode_bar(PCI_ConfigSpace* config, u64* first_ioaddr, u64* out_first_ioaddr_size, u64* first_maddr, u64* out_first_maddr_size) {
+    
+    *first_ioaddr = 0;
+    *out_first_ioaddr_size = 0;
+    *first_maddr = 0;
+    *out_first_maddr_size = 0;
+
+    u32* bars = &config->header0.bar0;
+
+    int head = 0;
+    while (head < 6) {
+        u32 bar = bars[head];
+        head++;
+        u64 bar_size = 0;
+        decode_bar_size(config, head-1, &bar_size);
+
+        if (bar & 0x1) {
+            u32 addr = bar & ~0x3;
+            printf("[INFO] bar[%d] IO-mapped addr=%x size=%d KB\n", head, addr, bar_size/1024);
+            if (*first_ioaddr == 0) {
+                *first_ioaddr = addr;
+                *out_first_ioaddr_size = bar_size;
+            }
+        } else if (((bar >> 1) & 0x6) == 0) {
+            u32 addr = bar & ~0xf;
+            if (bar & 0x8) {
+                printf("[INFO] bar[%d] 32-bit prefetchable addr=%x size=%d KB\n", head, addr, bar_size/1024);
+            } else {
+                printf("[INFO] bar[%d] 32-bit addr=%x size=%d KB\n", head,addr, bar_size/1024);
+            }
+            if (*first_maddr == 0) {
+                *first_maddr = addr;
+                *out_first_maddr_size = bar_size;
+            }
+        } else if (((bar >> 1) & 0x3) == 2) {
+            u32 bar_ext = bars[head];
+            u64 addr = ((u64)bar_ext << 32) | ((u64)bar & ~0xfLLU);
+            head++;
+            if (bar & 0x8) {
+                printf("[INFO] bar[%d] 64-bit prefetchable addr=%x\n", head, addr, bar_size/1024);
+            } else {
+                printf("[INFO] bar[%d] 64-bit addr=%x size=%d KB\n", head, addr, bar_size/1024);
+            }
+            if (*first_maddr == 0) {
+                *first_maddr = addr;
+                *out_first_maddr_size = bar_size;
+            }
+        }
+    }
+}

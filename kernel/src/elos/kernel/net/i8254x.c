@@ -18,20 +18,6 @@
 
 
 
-typedef struct NetworkController {
-    bool found;
-    PCI_ConfigSpace config;
-    u64 ioaddr;
-
-    u8 mac_address[6];
-} NetworkController;
-
-static NetworkController controller;
-
-#define VENDOR_ID__INTEL 0x8086
-
-#define DEVICE_ID__82540EM_A 0x100E
-
 #define printf(...) KCON_printf(__VA_ARGS__)
 
 void setup_transmit_ring();
@@ -41,28 +27,16 @@ void enable_interrupts();
 
 
 
-bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
-    if (config->classCode == PCI_CLASSCODE__NETWORK_CONTROLLER) {
-        if (config->vendorID == VENDOR_ID__INTEL && config->deviceID == DEVICE_ID__82540EM_A) {
-            controller.found = true;
-            controller.config = *config;
-            return true;
-        } else {
-            printf("[INFO] NET_init: Searching PCI for network card, found device id 0x%x (vendor 0x%x), but card is not supported.\n", config->deviceID, config->vendorID);
-        }
-    }
-
-    return false;
-}
 
 void write_register(uint16_t reg_offset, uint32_t value){
     // @TODO Memory needs to be marked non cacheable in the page tables?
-    *(uint32_t *)(controller.ioaddr + reg_offset) = value;
+    // @TODO Also need to map them? EFI might have done it but bad to assume so.
+    *(uint32_t *)(controller.maddr + reg_offset) = value;
 }
 
 uint32_t read_register(uint16_t reg_offset){
     // @TODO Memory needs to be marked non cacheable in the page tables?
-    return *(uint32_t *)(controller.ioaddr + reg_offset);
+    return *(uint32_t *)(controller.maddr + reg_offset);
 }
 
 bool reset_nic();
@@ -70,17 +44,14 @@ bool reset_nic();
 
 u16 eeprom_read(u8 addr);
 
-bool card_init() {
-
-    PCI_Scanner scanner = {};
-    scanner.func = find_device;
-
-    pci_scan_buses(&scanner);
-
-    if (!controller.found) {
-        printf("[WARNING] NET_init: Could not find a supported Network Controller on the PCI bus.\n");
+bool i8254x_init() {
+    if (!controller.found || controller.config.vendorID != VENDOR_ID__INTEL || controller.config.deviceID != DEVICE_ID__82540EM_A) {
+        printf("[WARNING] NET_init: Why we call ix8254x when found controller is different device id?\n");
         return false;
     }
+    
+    // decode_bar(&controller.config, &controller.ioaddr, &controller.ioaddr_size, &controller.maddr, &controller.maddr_size);
+
 
     if ((controller.config.header0.bar0 & 0x1) == 1) {
         printf("[WARNING] NET_init: Network Controller uses I/O space not memory mapped!?\n");
@@ -113,11 +84,11 @@ bool card_init() {
     switch ((controller.config.header0.bar0 & 0x6) >> 1) {
         case 0:
             // 32 bit
-            controller.ioaddr = controller.config.header0.bar0 & 0xFFFFFFF0;
+            controller.maddr = controller.config.header0.bar0 & 0xFFFFFFF0;
             break;
         case 2:
             // 64 bit
-            controller.ioaddr = (u64)(controller.config.header0.bar0 & 0xFFFFFFF0) |
+            controller.maddr = (u64)(controller.config.header0.bar0 & 0xFFFFFFF0) |
                            (u64)controller.config.header0.bar1 << 32;
             break;
         default:
@@ -152,7 +123,7 @@ bool card_init() {
     setup_transmit_ring();
     setup_receive_ring();
 
-    enable_interrupts();
+    // enable_interrupts();
 
     return true;
 }
@@ -333,7 +304,7 @@ void _handle_interrupt() {
 u8 rx_next = 0;
 
 
-void receive_packet(void** out_buffer, int* out_size) {
+void i8254x_receive_packet(void** out_buffer, int* out_size) {
     // printf("RECV packets!\n");
 
     // @TODO make this thread safe
@@ -402,7 +373,7 @@ void send_data(void* data, u32 size, bool EOP){
     write_register(CARD_REG_TDT, tail); // Increment and write the tail
 }
 
-int send_packet(void* data, int length){
+int i8254x_send_packet(void* data, int length){
     int sent = 0;
     // split the data into chunks and send them
     while (sent < length){

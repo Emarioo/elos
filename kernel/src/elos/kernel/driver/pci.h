@@ -310,3 +310,7 @@ u16 pciConfig_readw(u8 bus, u8 slot, u8 func, u8 offset);
 u32 pciConfig_readl(u8 bus, u8 slot, u8 func, u8 offset);
 void pciConfig_writew(u8 bus, u8 slot, u8 func, u8 offset, u16 data);
 void pciConfig_writel(u8 bus, u8 slot, u8 func, u8 offset, u32 data);
+
+
+void decode_bar_size(PCI_ConfigSpace* config, int bar_index, u64* bar_size);
+void decode_bar(PCI_ConfigSpace* config, u64* first_ioaddr, u64* out_first_ioaddr_size, u64* first_maddr, u64* out_first_maddr_size);

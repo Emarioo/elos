@@ -7,6 +7,8 @@
 
 #include "elos/common/types.h"
 
+#include "elos/kernel_console.h"
+
 
 static inline u64 read_cr3() {
     u64 reg;
@@ -31,7 +33,7 @@ static inline void flush_tlb(void* addr) {
     );
 }
 
-// These are already identity mapped by UEFI
+// These are already identity mapped by UEFI (when we allocate pages and load the kernel)
 static u64 next_reserved_page_table;
 static u64 reserved_page_table_3[512];
 static u64 reserved_page_table_2[512];
@@ -126,37 +128,42 @@ void* alloc_page_table() {
         int lvl1 = (virt >> 12) & 0x1FF;
 
         u64* page_table_3 = fetch_page_table(page_table_4, lvl4, false);
-        if (page_table_3) {
+        if (!page_table_3) {
             kernel_bug();
             return NULL;
         }
         u64* page_table_2 = fetch_page_table(page_table_3, lvl3, false);
-        if (page_table_2) {
+        if (!page_table_2) {
             kernel_bug();
             return NULL;
         }
         u64* page_table_1 = fetch_page_table(page_table_2, lvl2, false);
-        if (page_table_1) {
+        if (!page_table_1) {
             kernel_bug();
             return NULL;
         }
 
         u64 entry = page_table_1[lvl1];
-        if ((entry & 1) == 0) {
-            index++;
-            continue;
-        }
+        // if ((entry & 1) == 0) {
+        //     index++;
+        //     continue;
+        // }
 
         if (free_mappedPageTables_len < 3) {
             // We need to refill free mapped page tables so that we don't run out of table directories
             // when allocating new page tables.
             
             void* extraTable = PMEM_allocate_phys_pages(1);
+            if (!extraTable) {
+                kernel_bug();
+                return NULL;
+            }
 
             entry = 3; // set present, read/write bit, clear user to get supervisor page (for now)
             entry |= (u64)extraTable & MASK_ENTRY_PHYS_ADDRESS;
             page_table_1[lvl1] = entry;
             free_mappedPageTables[free_mappedPageTables_len] = (u64*)virt;
+            free_mappedPageTables_len++;
             index++;
             continue;
         }
@@ -180,7 +187,7 @@ u64* fetch_page_table(u64* page_table, int index, bool alloc_missing_tables) {
     
     u64 page_table_entry = page_table[index];
 
-    if ((page_table_entry & 1) == 0) {
+    if ((page_table_entry & 1) == 0 || (page_table_entry & MASK_ENTRY_PHYS_ADDRESS) == 0) {
         // Page table is not present
 
         if (!alloc_missing_tables)
@@ -192,6 +199,9 @@ u64* fetch_page_table(u64* page_table, int index, bool alloc_missing_tables) {
         
         // Allocate Page Table
         void* allocated_page_table = alloc_page_table();
+        if (!allocated_page_table) {
+            return NULL;
+        }
         // Put new table into entry
         page_table_entry |= (u64)allocated_page_table & MASK_ENTRY_PHYS_ADDRESS; // bits 12 - 48
         // Put table entry back into page directory
@@ -295,3 +305,12 @@ bool unmap_page(void* virtual_address) {
     return true;
 }
 
+
+bool map_pages(void* virtual_address, void* physical_address, int page_count) {
+    for (int i=0;i<page_count;i++) {
+        bool yes = map_page((char*)virtual_address + i *PAGE_SIZE, (char*)physical_address + i * PAGE_SIZE);
+        if (!yes)
+            return false;
+    }
+    return true;
+}

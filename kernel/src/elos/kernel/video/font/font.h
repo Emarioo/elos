@@ -19,6 +19,7 @@ Note that characters are taller than they wide.
 #pragma once
 
 #include "elos/common/types.h"
+#include "elos/common/allocator.h"
 
 
 typedef enum GlyphFormat {
@@ -60,7 +61,7 @@ typedef struct Font {
 extern Font* g_default_font;
 
 
-bool font__load_from_bytes(const u8* data, u32 size, Font** out_font);
+bool font__load_from_bytes(const u8* data, u32 size, Font** out_font, Allocator* allocator);
 
 const Glyph* font__get_glyph(const Font* font, u32 codepoint);
 

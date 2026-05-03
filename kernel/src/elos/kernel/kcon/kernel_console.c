@@ -15,7 +15,7 @@ void serial_write(const char* buffer, int size);
 
 
 
-static FN_KCON_write _write_hooks[4];
+FN_KCON_write _write_hooks[4];
 
 void KCON_init(BootAPI* boot_api) {
     serial_init();

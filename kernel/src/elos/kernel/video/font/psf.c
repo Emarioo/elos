@@ -7,6 +7,8 @@
 
 #include "elos/kernel_console.h"
 
+#include "elos/kernel/video/frame.h"
+
 
 #define be16(X) __builtin_bswap16(X)
 #define be32(X) __builtin_bswap32(X)
@@ -45,7 +47,7 @@ typedef struct {
 
 
 
-bool font_psf__load_from_bytes(const u8* data, u32 size, Font** out_font) {
+bool font_psf__load_from_bytes(const u8* data, u32 size, Font** out_font, Allocator* allocator) {
     if (size < 4)  return false;
 
     // @TODO: Fields in Glyph uses unsigned 8-bit integers.
@@ -124,9 +126,13 @@ bool font_psf__load_from_bytes(const u8* data, u32 size, Font** out_font) {
         + numGlyphsInFont * glyphWidth * glyphHeight;
     // @TODO: Allocate user accessible memory?
     int head_data = 0;
-    u8* memory = (u8*)PMEM_allocate(memory_max, NULL);
+    u8* memory;
+    if (allocator) {
+        memory = allocator->allocate(allocator, memory_max, NULL);
+    } else {
+        memory = (u8*)PMEM_allocate(memory_max, NULL);
+    }
     if (!memory) {
-        // @TODO: Error
         return false;
     }
 

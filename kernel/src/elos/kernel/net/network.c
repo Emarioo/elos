@@ -2,6 +2,7 @@
 #include "elos/network.h"
 
 #include "elos/kernel/net/i8254x.h"
+#include "elos/kernel/net/rtl8169.h"
 
 #include "elos/kernel/net/protocol.h"
 
@@ -10,6 +11,8 @@
 #include "elos/common/string.h"
 
 #include "elos/physical_memory.h"
+
+#include "elos/kernel/net/net_internal.h"
 
 
 
@@ -20,6 +23,30 @@ u32 current_ip;
 u8 current_mac[6]; // set by card_init (at the moment)
 
 int fake_device;
+
+
+
+
+NetworkController controller;
+
+
+bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
+    if (config->classCode == PCI_CLASSCODE__NETWORK_CONTROLLER) {
+        if (config->vendorID == VENDOR_ID__INTEL && config->deviceID == DEVICE_ID__82540EM_A) {
+            controller.found = true;
+            controller.config = *config;
+            return true;
+        } else if (config->vendorID == VENDOR_ID__REALTEK && config->deviceID == DEVICE_ID__RTL8169) {
+            controller.found = true;
+            controller.config = *config;
+            return true;
+        } else {
+            printf("[INFO] NET_init: Searching PCI for network card, found device id 0x%x (vendor 0x%x), but card is not supported.\n", config->deviceID, config->vendorID);
+        }
+    }
+
+    return false;
+}
 
 void NET_scan_devices(NetDevice devices[], int* count) {
     if (!count) {
@@ -37,14 +64,72 @@ void NET_scan_devices(NetDevice devices[], int* count) {
     current_ip = ipv4_from_str("192.168.100.54");
     printf("Hardcoded IP: %s\n", ipv4_int_str(current_ip, buffer0));
 
-    bool res = card_init();
-    if (!res) {
+
+    PCI_Scanner scanner = { .func = find_device };
+
+    pci_scan_buses(&scanner);
+    
+    if (!controller.found) {
+        printf("[WARNING] NET_init: Could not find a supported Network Controller on the PCI bus.\n");
         *count = 0;
         return;
+    } else {
+        
+        // u32* bars = &controller.config.header0.bar0;
+
+        // int head = 0;
+        // while (head < 6) {
+        //     u32 bar = bars[head];
+        //     head++;
+
+        //     if (bar & 0x1) {
+        //         printf("[INFO] bar[%d] IO-mapped addr=%x\n", head, bar & ~0x3);
+        //     } else if (((bar >> 1) & 0x6) == 0) {
+        //         if (bar & 0x8) {
+        //             printf("[INFO] bar[%d] 32-bit prefetchable addr=%x\n", head, bar & ~0xf);
+        //         } else {
+        //             printf("[INFO] bar[%d] 32-bit addr=%x\n", head, bar & ~0xf);
+        //         }
+        //     } else if (((bar >> 1) & 0x3) == 2) {
+        //         u32 bar_ext = bars[head];
+        //         head++;
+        //         if (bar & 0x8) {
+        //             printf("[INFO] bar[%d] 64-bit prefetchable\n", head, ((u64)bar_ext << 32) | ((u64)bar & ~0xfLLU));
+        //         } else {
+        //             printf("[INFO] bar[%d] 64-bit addr=%x\n", head, ((u64)bar_ext << 32) | ((u64)bar & ~0xfLLU));
+        //         }
+        //     }
+        // }
+
+        switch ((controller.config.vendorID << 16) | controller.config.deviceID) {
+            case (VENDOR_ID__INTEL << 16) | DEVICE_ID__82540EM_A: {
+                // @TODO Pass NetworkController (it's globally available at the moment)
+                bool res = i8254x_init();
+                if (!res) {
+                    *count = 0;
+                    return;
+                }
+                devices[0] = &fake_device;
+                *count = 1;
+            } break;
+            case (VENDOR_ID__REALTEK << 16) | DEVICE_ID__RTL8169: {
+                // @TODO Pass NetworkController (it's globally available at the moment)
+                bool res = rtl8169_init();
+                if (!res) {
+                    *count = 0;
+                    return;
+                }
+                devices[0] = &fake_device;
+                *count = 1;
+            } break;
+            default: {
+                printf("[WARNING] NET_init: Could not find a supported Network Controller on the PCI bus.\n");
+                *count = 0;
+                break;
+            }
+        }
     }
 
-    devices[0] = &fake_device;
-    *count = 1;
     return;
 }
 
@@ -69,7 +154,15 @@ bool NET_poll_packet(NetDevice device, NET_Packet* packet) {
     
     void* buffer;
     int size;
-    receive_packet(&buffer, &size);
+
+    switch (controller.config.deviceID) {
+        case DEVICE_ID__82540EM_A: {
+            i8254x_receive_packet(&buffer, &size);
+        } break;
+        case DEVICE_ID__RTL8169: {
+            rtl8169_receive_packet(&buffer, &size);
+        } break;
+    }
 
     if (!buffer || !size)
         return false;
@@ -89,10 +182,45 @@ void NET_send_packet(NetDevice device, void* buffer, int size) {
         kernel_bug();
         return;
     }
-    send_packet(buffer, size);
+    switch (controller.config.deviceID) {
+        case DEVICE_ID__82540EM_A: {
+            i8254x_send_packet(buffer, size);
+        } break;
+        case DEVICE_ID__RTL8169: {
+            rtl8169_send_packet(buffer, size);
+        } break;
+    }
 }
 
+void NET_send_arp(NetDevice net_device, uint32_t address) {
+    
+    static u8 g_packet_buffer[1024];
+    static u8 g_broadcast_mac[6] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 
+    // ARP packet
+    int packet_size = sizeof(EtherFrame) + sizeof(ARP_Header_EthernetIPV4);
+    EtherFrame* message_frame = (EtherFrame*)g_packet_buffer;
+    memcpy(message_frame->destination, g_broadcast_mac, 6);
+    memcpy(message_frame->source, current_mac, 6);
+    message_frame->etherType = ETHER_ARP;
+    ARP_Header_EthernetIPV4* message_arp = (ARP_Header_EthernetIPV4*)(g_packet_buffer + sizeof(EtherFrame));
+    message_arp->hardware_type = ARP_ETHERNET;
+    message_arp->protocol_type = ETHER_IPV4;
+    message_arp->hardware_length = 6;
+    message_arp->protocol_length = 4;
+    message_arp->operation = ARP_REQUEST;
+    memcpy(message_arp->sender_hw_address, current_mac, 6);
+    memcpy(message_arp->sender_proto_address, &current_ip, 4);
+    // memcpy(message_arp->target_hw_address, , 6); // MAC is what we're asking for. this field is unset
+    memcpy(message_arp->target_proto_address, &address, 4);
+
+    message_frame->etherType   = bswap16(message_frame->etherType);
+    message_arp->hardware_type = bswap16(message_arp->hardware_type);
+    message_arp->protocol_type = bswap16(message_arp->protocol_type);
+    message_arp->operation     = bswap16(message_arp->operation);
+
+    NET_send_packet(net_device, g_packet_buffer, packet_size);
+}
 
 void NET_handle_packet(NetDevice device, NET_Packet* packet) {
     
@@ -134,7 +262,7 @@ void NET_handle_packet(NetDevice device, NET_Packet* packet) {
 
 
                 if (arp_ipv4->operation == ARP_REQUEST && *(u32*)arp_ipv4->target_proto_address == current_ip) {
-                    u8 message_buffer[sizeof(EtherFrame) + sizeof(ARP_Header_EthernetIPV4)] = {};
+                    u8 message_buffer[sizeof(EtherFrame) + sizeof(ARP_Header_EthernetIPV4)] = {0};
                     EtherFrame* message_frame = (EtherFrame*)message_buffer;
                     memcpy(message_frame->destination, arp_ipv4->sender_hw_address, 6);
                     memcpy(message_frame->source, current_mac, 6);
@@ -221,7 +349,7 @@ void NET_handle_packet(NetDevice device, NET_Packet* packet) {
                             return;
                         }
 
-                        u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(ICMP_Header_Echo) + 256] = {};
+                        u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(ICMP_Header_Echo) + 256] = {0};
 
                         int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + icmp_size;
 
@@ -283,7 +411,7 @@ void NET_handle_packet(NetDevice device, NET_Packet* packet) {
                     udp->length = bswap16(udp->length);
                     
                     
-                    u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + 256] = {};
+                    u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + 256] = {0};
 
                     int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + udpSize;
 
@@ -332,7 +460,7 @@ void NET_handle_packet(NetDevice device, NET_Packet* packet) {
                     *(int*)message_udp->data = value;
 
                     // @TODO Checksum. Need pseduo header for ipv4
-                    UDP_Pseudo_Header pseudo = {};
+                    UDP_Pseudo_Header pseudo = {0};
                     pseudo.sourceAddress = message_ipv4->sourceAddress;
                     pseudo.destinationAddress = message_ipv4->destinationAddress;
                     pseudo.protocol = IP_UDP;

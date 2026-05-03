@@ -116,3 +116,11 @@ void NET_set_receive_callback(NetDevice device, FN_NET_recv_packet callback, voi
 
 
 void NET_handle_packet(NetDevice device, NET_Packet* packet);
+
+
+//######################################
+//     EXTRA WILL MOVE ELSEWHERE
+//######################################
+
+
+void NET_send_arp(NetDevice device, uint32_t address);

@@ -8,6 +8,7 @@
 
 #include "elos/boot_api.h"
 #include "elos/common/string.h"
+#include "elos/common/intrinsics.h"
 
 #include "elos/netboot.h"
 
@@ -109,6 +110,7 @@ EFI_STATUS boot_init_memory() {
     // First get size we need to allocate for descriptors
     Status = ST->BootServices->GetMemoryMap(&total_size_of_descriptors, memory_descriptors, &map_key, &descriptor_size, &desc_version);
     if (Status != EFI_BUFFER_TOO_SMALL) {
+        printf("GetMemoryMap error %d\r\n", Status);
         catch_bad_status();
         return Status;
     }
@@ -119,6 +121,7 @@ EFI_STATUS boot_init_memory() {
     // Allocate memory for descriptors    
     Status = ST->BootServices->AllocatePool(EfiLoaderData, total_size_of_descriptors, (void**)&memory_descriptors);
     if (EFI_ERROR(Status)) {
+        printf("AllocatePool error %d\r\n", Status);
         catch_bad_status();
         return Status;
     }
@@ -127,6 +130,7 @@ EFI_STATUS boot_init_memory() {
     // @TODO Is EfiLoaderData the correct memory type? The 'regions' is an array of memory regions the kernel will keep using for ever.
     Status = ST->BootServices->AllocatePool(EfiLoaderData, total_size_of_descriptors / descriptor_size * sizeof(*regions), (void**)&regions);
     if (EFI_ERROR(Status)) {
+        printf("AllocatePool error %d\r\n", Status);
         catch_bad_status();
         return Status;
     }
@@ -134,11 +138,13 @@ EFI_STATUS boot_init_memory() {
     // Get map again but with descriptors this time
     Status = ST->BootServices->GetMemoryMap(&total_size_of_descriptors, memory_descriptors, &map_key, &descriptor_size, &desc_version);
     if (EFI_ERROR(Status)) {
+        printf("GetMemoryMap error %d\r\n", Status);
         catch_bad_status();
         return Status;
     }
 
     const int desc_count = total_size_of_descriptors/descriptor_size;
+    // printf("Descriptors %d\r\n", desc_count);
     for (int i = 0; i < desc_count; i++) {
         EFI_MEMORY_DESCRIPTOR* desc = (EFI_MEMORY_DESCRIPTOR*)((char*)
             memory_descriptors + i*descriptor_size);
@@ -151,7 +157,7 @@ EFI_STATUS boot_init_memory() {
         MemoryRegion* region = &regions[regions_len];
         regions_len++;
 
-        region->physical_start = desc->PhysicalStart;
+        region->physical_address = desc->PhysicalStart;
         region->page_count     = desc->NumberOfPages;
     }
 
@@ -205,7 +211,7 @@ void done_net() {
 EFI_STATUS load_kernel(void* address) {
     EFI_STATUS status;
     
-    int kernel_file_size = 4*0x100000; // 8 MB
+    int kernel_file_size = 4*0x100000; // 4 MB
     const int PAGE_SIZE = 4096;
     int pages = (kernel_file_size + PAGE_SIZE-1) / PAGE_SIZE;
 
@@ -217,10 +223,13 @@ EFI_STATUS load_kernel(void* address) {
         return status;
     }
     
+    if (!simple_network) {
+        goto local_kernel;
+    }
     
     status = simple_network->Start(simple_network);
     if (EFI_ERROR(status)) {
-        printf("Cannot start network, %d\n", status);
+        printf("Cannot start network, %d\r\n", status);
         goto local_kernel;
         // return status;
     }
@@ -228,7 +237,7 @@ EFI_STATUS load_kernel(void* address) {
     status = simple_network->Initialize(simple_network, 0x0, 0x0);
     // status = simple_network->Initialize(simple_network, 0x100000, 0x100000);
     if (EFI_ERROR(status)) {
-        printf("Cannot init network, %d\n", status);
+        printf("Cannot init network, %d\r\n", status);
         goto local_kernel;
         // return status;
     }
@@ -246,7 +255,10 @@ EFI_STATUS load_kernel(void* address) {
     return EFI_SUCCESS;
 
 local_kernel:
-    load_kernel_from_file(address);
+    status = load_kernel_from_file(address);
+    if (EFI_ERROR(status)) {
+        return status;
+    }
 
     return EFI_SUCCESS;
 }
@@ -257,6 +269,7 @@ EFI_STATUS load_kernel_from_file(void* address) {
     EFI_FILE_PROTOCOL* volume;
     Status = simple_file_system->OpenVolume(simple_file_system, &volume);
     if (EFI_ERROR(Status)) {
+        printf("OpenVolume %d\r\n", Status);
         catch_bad_status();
         return Status;
     }
@@ -267,6 +280,7 @@ EFI_STATUS load_kernel_from_file(void* address) {
     EFI_FILE_PROTOCOL* handle;
     Status = volume->Open(volume, &handle, kernel_wpath, EFI_FILE_MODE_READ, 0);
     if (EFI_ERROR(Status)) {
+        printf("Open %d\r\n", Status);
         catch_bad_status();
         return Status;
     }
@@ -277,6 +291,7 @@ EFI_STATUS load_kernel_from_file(void* address) {
 
     Status = handle->GetInfo(handle, &gEfiFileInfoGuid, &buffer_size, file_info);
     if (EFI_ERROR(Status)) {
+        printf("GetInfo %d\r\n", Status);
         catch_bad_status();
         return Status;
     }
@@ -293,15 +308,18 @@ EFI_STATUS load_kernel_from_file(void* address) {
     UINTN file_size = file_info->FileSize;
     Status = handle->Read(handle, &file_size, (void*)address);
     if (EFI_ERROR(Status)) {
+        printf("Read %d\r\n", Status);
         catch_bad_status();
         return Status;
     }
     
     printf("First word: %x\r\n", *(int*)address);
-    printf("Kernel size: %d\r\n", file_info->FileSize);
+    printf("Kernel size: %d KB\r\n", file_info->FileSize/1024);
 
     return EFI_SUCCESS;
 }
+
+#define FREEZE() while (1) pause();
 
 EFI_STATUS EFIAPI
 efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
@@ -319,15 +337,16 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     Status = BS->HandleProtocol(ImageHandle, &gEfiLoadedImageProtocolGuid, (void **)&loaded_image);
     if (EFI_ERROR(Status)) {
         catch_bad_status();
-        // printf("HandleProtocol failed: 0x%lx\n", Status);
+        printf("LoadedImageProtocol failed: %d\r\n", Status);
+        FREEZE();
         return Status;
     }
 
 
     // Print the actual base address of the loaded image
-    printf("Image loaded at: 0x%x\n", (uint32_t)(uint64_t)loaded_image->ImageBase);
+    printf("Image loaded at: 0x%x\r\n", (uint32_t)(uint64_t)loaded_image->ImageBase);
 
-    while (1);
+    // while (1);
 
     // Write image base and marker for GDB
     volatile uint64_t *marker_ptr = (uint64_t *)0x10000;
@@ -339,22 +358,26 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
 
     Status = BS->LocateProtocol(&gEfiSimpleNetworkProtocolGuid, NULL, (void**)&simple_network);
     if (EFI_ERROR(Status)) {
-        catch_bad_status();
-        printf("SimpleNetworkProtocol is not available, %d\n", Status);
-        // We should not stop here? boot from what we have?
-        return Status;
+        printf("SimpleNetworkProtocol is not available, %d\r\n", Status);
+        // We should not stop here? boot from what we have.
+        // catch_bad_status();
+        // FREEZE();
+        // return Status;
     }
 
     Status = BS->HandleProtocol(loaded_image->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (void**)&simple_file_system);
     if (EFI_ERROR(Status)) {
+        printf("gEfiSimpleFileSystemProtocolGuid failed: 0x%lx\r\n", Status);
         catch_bad_status();
-        // printf("HandleProtocol failed: 0x%lx\n", Status);
+        FREEZE();
         return Status;
     }
 
     Status = BS->LocateProtocol(&gEfiGraphicsOutputProtocolGuid, NULL, (void**)&graphics_output);
     if (EFI_ERROR(Status)) {
+        printf("gEfiGraphicsOutputProtocolGuid failed: 0x%lx\r\n", Status);
         catch_bad_status();
+        FREEZE();
         return Status;
     }
 
@@ -381,7 +404,9 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     // @TODO We need to check if memory map contains usable pages at the address.
     Status = load_kernel(address);
     if (EFI_ERROR(Status)) {
+        // Message printed in function
         catch_bad_status();
+        FREEZE();
         return Status;
     }
     kernel_entry = address; // linker script for kernel (sections.ld) defines _start at beginning of kernel image.
@@ -392,19 +417,27 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
 
     Status = boot_init_memory();
     if (EFI_ERROR(Status)) {
+        printf("boot_init_memory %d\r\n", Status);
+        FREEZE();
         return Status;
     }
+
+    // printf("Bef exit services\r\n");
 
     // We cannot print or do anything between GetMemoryMap (called in boot_init_memory) and ExitBootServices
 
     Status = ST->BootServices->ExitBootServices(ImageHandle, g_last_map_key);
     if (EFI_ERROR(Status)) {
-        catch_bad_status();
         printf("ExitBootServices failed %d\r\n", (int)Status);
+        catch_bad_status();
+        FREEZE();
         return Status;
     }
 
     kernel_entry(g_boot_api);
+
+    // printf("Returned to efi_main!?\r\n");
+    FREEZE();
 
     // Shouldn't return. We're in the hands of the OS now
     return Status;
@@ -434,69 +467,6 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     // // while ((Status = ST->ConIn->ReadKeyStroke(ST->ConIn, &Key)) == EFI_NOT_READY) ;
     // (void)Key;
 
-
-
-
-// EFI_STATUS load_font() {
-//     EFI_STATUS Status;
-//     EFI_FILE_PROTOCOL* volume;
-//     Status = kernel__core_data->simple_file_system->OpenVolume(kernel__core_data->simple_file_system, &volume);
-//     if (EFI_ERROR(Status)) {
-//         catch_bad_status();
-//         return Status;
-//     }
-    
-    
-//     // Iterate files/dirs in folder
-//     // Status = list_content(volume, 0, NULL);
-//     // if (EFI_ERROR(Status))
-//     //     return Status;
-
-//     // const char* font_path = "\\RES\\PIXELOP.TTF";
-//     const char* font_path = "\\RES\\STDFONT.PSF";
-//     u16* font_wpath = tmp_path_wstring(font_path);
-
-//     EFI_FILE_PROTOCOL* handle;
-//     Status = volume->Open(volume, &handle, font_wpath, EFI_FILE_MODE_READ, 0);
-//     if (EFI_ERROR(Status)) {
-//         catch_bad_status();
-//         return Status;
-//     }
-
-//     char temp_buffer[sizeof(EFI_FILE_INFO) + 256];
-//     EFI_FILE_INFO* file_info = (EFI_FILE_INFO*)temp_buffer;
-//     UINTN buffer_size = sizeof(EFI_FILE_INFO) + 256;
-
-//     Status = handle->GetInfo(handle, &gEfiFileInfoGuid, &buffer_size, file_info);
-//     if (EFI_ERROR(Status)) {
-//         catch_bad_status();
-//         return Status;
-//     }
-//     const int PAGE_SIZE = 4096;
-//     int pages = (file_info->FileSize + PAGE_SIZE-1) / PAGE_SIZE;
-
-//     EFI_PHYSICAL_ADDRESS address;
-//     Status = ST->BootServices->AllocatePages(AllocateAnyPages, EfiLoaderData, pages, &address);
-//     if (EFI_ERROR(Status)) {
-//         catch_bad_status();
-//         return Status;
-//     }
-
-//     UINTN file_size = file_info->FileSize;
-//     Status = handle->Read(handle, &file_size, (void*)address);
-//     if (EFI_ERROR(Status)) {
-//         catch_bad_status();
-//         return Status;
-//     }
-
-//     bool res = font__load_from_bytes((u8*)address, file_size, &g_default_font);
-//     if (!res) {
-//         printf("Could not load font");
-//         return -1;
-//     }
-
-//     return EFI_SUCCESS;
-// }
 
 
 // EFI_STATUS list_content(EFI_FILE_PROTOCOL* dir, int depth, EFI_FILE_INFO* info) {

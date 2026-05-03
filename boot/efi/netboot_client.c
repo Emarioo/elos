@@ -53,7 +53,7 @@ bool recv_packet(void* buffer, int* size) {
     }
     status = simple_network->GetStatus(simple_network, &interruptMask, &tx_buf);
 
-    EFI_NETWORK_STATISTICS stats = {};
+    EFI_NETWORK_STATISTICS stats = {0};
     UINTN stat_size = sizeof(EFI_NETWORK_STATISTICS);
     status = simple_network->Statistics(simple_network, 0, &stat_size, &stats);
     if (EFI_ERROR(status)) {
@@ -368,7 +368,7 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
         
         // printf("Memcpy %x, %d, %d\r\n", buffer, buffer_offset, sendf->size);
 
-        memcpy(buffer + buffer_offset, sendf->payload, sendf->size);
+        memcpy((char*)buffer + buffer_offset, sendf->payload, sendf->size);
 
         received_bytes += sendf->size;
 

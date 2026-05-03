@@ -25,3 +25,6 @@ bool map_page(void* virtual_address, void* physical_address);
     have already "reclaimed" that physical page (which is done in phys_allocator).
 */
 bool unmap_page(void* virtual_address);
+
+
+bool map_pages(void* virtual_address, void* physical_address, int page_count);

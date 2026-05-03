@@ -51,9 +51,15 @@ void PMEM_init(BootAPI* boot_api) {
     //   and creates config.c with the occupied address ranges
     //   instead of hardcoding this.
     Range ranges[] = {
-        { 0x0, 0x80000 }, // Skip regions below 512 KB.
-                          // We may want it for something special.
+        { 0x0, 0x100000 }, // Skip regions below 1 MB.
+                           // We may want it for something special.
+                           // I've found that kernel crashing when
+                           // mapping page tables here. Not sure why,
+                           // i'm sure I have done something strange
+                           // but don't know what.
 
+        // These are allocated and mapped by EFI application
+        // when loading kernel.
         { 0x100000, 0x100000 }, // Kernel .text
         { 0x200000, 0x400000 }, // Kernel .rodata, .data, .bss
     };
@@ -79,7 +85,7 @@ void PMEM_init(BootAPI* boot_api) {
 
         alloc->flags = FLAG_FREE;
         alloc->pageCount = reg->page_count;
-        alloc->physicalStart = reg->physical_start;
+        alloc->physicalStart = reg->physical_address;
         alloc->virtualStart = 0;
 
         while (check_index < g_num_free_regions) {
@@ -262,7 +268,7 @@ void* PMEM_allocate(u64 size, void* ptr) {
             if ((alloc->flags & FLAG_FREE) == 0)
                 continue;
 
-            if (requested_pages >= alloc->pageCount)
+            if (requested_pages > alloc->pageCount)
                 continue;
             
             found_free_index = i;
@@ -310,14 +316,14 @@ void* PMEM_allocate(u64 size, void* ptr) {
 
         // Safe to assume regions/pages from UEFI is mapped mostly?
         // Otherwise we need this:
-        // for (int i = 0; i < requested_pages; i++) {
-        //     void* addr = (char*)new_ptr + i * PAGE_SIZE;
-        //     bool yes = map_page(addr, addr);
-        //     if (!yes) {
-        //         // Bug in kernel if this doesn't work
-        //         return NULL;
-        //     }
-        // }
+        for (int i = 0; i < requested_pages; i++) {
+            void* addr = (char*)new_ptr + i * PAGE_SIZE;
+            bool yes = map_page(addr, addr);
+            if (!yes) {
+                // Bug in kernel if this doesn't work
+                return NULL;
+            }
+        }
 
         // Always initialize memory. Malicious program should not be able to read freed memory from other programs.
         memset(new_ptr, 0x9D, aligned_size);
@@ -429,7 +435,7 @@ void* PMEM_allocate_phys_pages(u64 requested_pages) {
         if ((alloc->flags & FLAG_FREE) == 0)
             continue;
 
-        if (requested_pages < alloc->pageCount)
+        if (requested_pages > alloc->pageCount)
             continue;
         
         found_free_index = i;
@@ -464,7 +470,7 @@ void* PMEM_allocate_phys_pages(u64 requested_pages) {
     used_alloc->flags         = FLAG_USED;
 
     free_alloc->pageCount     -= requested_pages;
-    free_alloc->physicalStart += requested_pages;
+    free_alloc->physicalStart += requested_pages * PAGE_SIZE;
     if (free_alloc->pageCount == 0) {
         free_alloc->flags = 0; // clear region
     }
@@ -473,6 +479,6 @@ void* PMEM_allocate_phys_pages(u64 requested_pages) {
         g_num_used_regions = found_used_index + 1;
     }
 
-    void* new_ptr = (void*)(used_alloc->physicalStart * PAGE_SIZE);
+    void* new_ptr = (void*)(used_alloc->physicalStart);
     return new_ptr;
 }

@@ -175,9 +175,9 @@ typedef struct ReceiveDescriptor {
 #define CARD_BIT_RD_ERRORS_IPE  (1 << 6)
 #define CARD_BIT_RD_ERRORS_RXE  (1 << 7)
 
-bool card_init();
+bool i8254x_init();
 
-void receive_packet(void** out_buffer, int* out_size);
+void i8254x_receive_packet(void** out_buffer, int* out_size);
 
-int send_packet(void* data, int size);
+int i8254x_send_packet(void* data, int size);
 

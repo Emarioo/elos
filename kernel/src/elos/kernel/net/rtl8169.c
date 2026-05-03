@@ -1,0 +1,250 @@
+#include "elos/kernel/net/rtl8169.h"
+
+#include "elos/kernel/net/net_internal.h"
+
+#include "elos/common/string.h"
+#include "elos/common/intrinsics.h"
+#include "elos/kernel_console.h"
+#include "elos/physical_memory.h"
+#include "elos/kernel/pmem/paging.h"
+
+
+
+#define printf(...) KCON_printf(__VA_ARGS__)
+
+static bool reset_nic();
+
+bool rtl8169_init() {
+    
+    decode_bar(&controller.config, &controller.ioaddr, &controller.ioaddr_size, &controller.maddr, &controller.maddr_size);
+
+    u64 ioaddr = controller.ioaddr;
+    if(!ioaddr) {
+        printf("[ERROR] rtl8169 BARS does not have IO bar, might have memory bar: %x\n", ioaddr, controller.maddr);
+        return false;
+    }
+
+
+    bool yes = reset_nic();
+    if (!yes) {
+        return false;
+    }
+
+    printf("Reset success?\n");
+
+
+
+    return true;
+}
+
+
+#define rx_buffer_len 2048
+#define rx_descriptors_len 128
+
+
+Descriptor* rx_descriptors;
+u8* rx_packet_buffer;
+
+Descriptor* tx_descriptors;
+u8* tx_packet_buffer;
+
+static bool prepare_buffers() {
+    #define RAW_BUFFER_SIZE (2*256 + 2*8 + 2 * rx_buffer_len * rx_descriptors_len)
+    // static u8 _raw_buffer[2*256 + 2*8 + 2 * rx_buffer_len * rx_descriptors_len];
+
+    u8* _raw_buffer = PMEM_allocate_phys_pages(RAW_BUFFER_SIZE / PAGE_SIZE);
+    // PMEM_alloc currently identitiy maps memory, will it in the future?
+    // we manually allcoate phys pages and map them because of this.
+
+    // @TODO Some memory virtual memory may be mapped to this region.
+    //  From EFI, stack or frame buffer for example. Kernel is loaded at 1-3 MB so that's fine.
+    bool yes = map_pages(_raw_buffer, _raw_buffer, RAW_BUFFER_SIZE / PAGE_SIZE);
+    if (yes) {
+        printf("rtl8169: Could not map pages at %x.\n", _raw_buffer);
+        return false;
+    }
+
+    // Descriptors should be 256-byte aligned.
+    // Buffers should be 8-byte aligned.
+    u64 next_address = ((u64)_raw_buffer + 255) % 256;
+    rx_descriptors = (void*)next_address;
+    next_address = ((u64)next_address + sizeof(Descriptor) * rx_descriptors_len + 255) % 256;
+    tx_descriptors = (void*)next_address;
+    next_address = ((u64)next_address + sizeof(Descriptor) * rx_descriptors_len + 255) % 256;
+    rx_packet_buffer = (void*)next_address;
+    next_address = ((u64)next_address + rx_buffer_len * rx_descriptors_len + 8) % 8;
+    tx_packet_buffer = (void*)next_address;
+    next_address = ((u64)next_address + rx_buffer_len * rx_descriptors_len + 8) % 8;
+
+    memset(rx_descriptors, 0, sizeof(Descriptor) * rx_descriptors_len);
+    memset(tx_descriptors, 0, sizeof(Descriptor) * rx_descriptors_len);
+
+    return true;
+}
+
+static bool reset_nic() {
+
+    u64 ioaddr = controller.ioaddr;
+
+    outb(ioaddr + 0x37, 0x10); /*set the Reset bit (0x10) to the Command Register (0x37)*/
+    
+    // Prepare buffers while card is resetting
+    bool res = prepare_buffers();
+    if (!res) {
+        return false;
+    }
+
+    while(inb(ioaddr + 0x37) & 0x10) ;
+    /*setting a timeout could be useful if the card is problematic*/
+
+    
+    for (int i=0;i<6;i++) {
+        controller.mac_address[i] = inb(ioaddr + i);
+    }
+    memcpy(current_mac, controller.mac_address, 6);
+
+
+    printf("NET_init: MAC Address: %x%x:%x%x:%x%x:%x%x:%x%x:%x%x\n",
+        controller.mac_address[0] >> 4, controller.mac_address[0] & 0xF,
+        controller.mac_address[1] >> 4, controller.mac_address[1] & 0xF,
+        controller.mac_address[2] >> 4, controller.mac_address[2] & 0xF,
+        controller.mac_address[3] >> 4, controller.mac_address[3] & 0xF,
+        controller.mac_address[4] >> 4, controller.mac_address[4] & 0xF,
+        controller.mac_address[5] >> 4, controller.mac_address[5] & 0xF
+        );
+
+
+    for (int i=0;i<rx_descriptors_len;i++) {
+        u64 packet_buffer = (u64)rx_packet_buffer + i * rx_buffer_len;
+        rx_descriptors[i].low_buf = packet_buffer & 0xFFFFFFFF;
+        rx_descriptors[i].high_buf = packet_buffer >> 32;
+        rx_descriptors[i].command = DESCRIPTOR_COMMAND_OWN | (rx_buffer_len & 0x1FF8);
+        if (i == rx_descriptors_len-1) {
+            rx_descriptors[i].command |= DESCRIPTOR_COMMAND_EOR;
+        }
+    }
+
+    // for (int i=0;i<rx_descriptors_len;i++) {
+    //     tx_descriptors[i].command = DESCRIPTOR_COMMAND_OWN | (rx_buffer_len & 0x3FFF);
+    //     if (i == rx_descriptors_len-1) {
+    //         tx_descriptors[i].command |= DESCRIPTOR_COMMAND_EOR;
+    //     }
+    //     u64 packet_buffer = tx_packet_buffer + i * rx_buffer_len;
+    //     tx_descriptors[i].low_buf = packet_buffer & 0xFFFFFFFF;
+    //     tx_descriptors[i].high_buf = packet_buffer >> 32;
+    // }
+
+    outb(ioaddr + 0x50, 0xC0); /* Unlock config registers */
+    outl(ioaddr + 0x44, 0x0000E70F); /* RxConfig = RXFTH: unlimited, MXDMA: unlimited, AAP: set (promisc. mode set) */
+    outb(ioaddr + 0x37, 0x04); /* Enable Tx in the Command register, required before setting TxConfig */
+    outl(ioaddr + 0x40, 0x03000700); /* TxConfig = IFG: normal, MXDMA: unlimited */
+    outw(ioaddr + 0xDA, rx_buffer_len-1); /* Max rx packet size */
+    #define TX_UNIT_SIZE 32
+    outb(ioaddr + 0xEC, (rx_buffer_len + TX_UNIT_SIZE-1)/TX_UNIT_SIZE); /* max tx packet size */
+
+
+    outl(ioaddr + 0x20, (u64)tx_descriptors & 0xFFFFFFFF); // Tell the NIC where the first Tx descriptor is.
+    outl(ioaddr + 0x24, (u64)tx_descriptors >> 32);
+    outl(ioaddr + 0xE4, (u64)rx_descriptors & 0xFFFFFFFF); // Tell the NIC where the first Rx descriptor is.
+    outl(ioaddr + 0xE8, (u64)rx_descriptors >> 32);
+
+    outb(ioaddr + 0x37, 0x0c); /* Enable Rx/Tx in the Command register */
+    outb(ioaddr + 0x50, 0);    /* Lock config registers */
+
+    return true;
+}
+
+int next_rx_descriptor = 0;
+
+void rtl8169_receive_packet(void** out_buffer, int* out_size) {
+    
+    if (rx_descriptors[next_rx_descriptor].command & DESCRIPTOR_COMMAND_OWN) {
+        // No packets to read
+        *out_buffer = NULL;
+        *out_size = 0;
+        return;
+    }
+
+    // while (1) {
+    //     u32 cmd = rx_descriptors[next_rx_descriptor].command;
+    //     if ((cmd & DESCRIPTOR_COMMAND_FS) == 0) {
+    //         // We expect descriptor FS to be set to indicate that this descriptor
+    //         // is first segment of descriptor.
+    //         if ((cmd & DESCRIPTOR_COMMAND_OWN) == 0) {
+    //             cmd |= DESCRIPTOR_COMMAND_OWN;
+    //             rx_descriptors[next_rx_descriptor].command = cmd;
+    //         }
+    //         next_rx_descriptor = (next_rx_descriptor + 1) % rx_descriptors_len;
+    //     } else {
+    //         break;
+    //     }
+    // }
+
+    int index = next_rx_descriptor;
+    void* buffer = NULL; // use this to store the buffer.
+    size_t buffer_len = 0; 
+
+    while (1) {
+        // This descriptor has been filled
+        
+        bool last_segment = rx_descriptors[index].command & DESCRIPTOR_COMMAND_LS;
+        u16 len = rx_descriptors[index].command & 0x3FFF;
+        void* data = (void*)((u64)rx_descriptors[index].low_buf | ((u64)rx_descriptors[index].high_buf << 32));
+        
+        // Handle multiple-descriptor packets
+        if (buffer == NULL){ // This is the first descriptor of the packet
+            buffer = PMEM_alloc(len); // use your kernel's heap allocator
+            buffer_len = len;
+            memcpy(buffer, data, len);
+        }else{
+            // Its the next part of the packet, add it to the packet
+            void* new_buffer = PMEM_alloc(buffer_len + len); // allocate a bigger buffer
+            memcpy(new_buffer, buffer, buffer_len); // copy the previous data
+            PMEM_free(buffer); // free the old buffer
+    
+            // copy the new data
+            memcpy((void*)((uint64_t)new_buffer + buffer_len), data, len);
+            
+            // Set the new buffer into the variables
+            buffer_len += len;
+            buffer = new_buffer;
+        }
+    
+        // Set OWN bit (To give ownership back to the controller)
+        rx_descriptors[index].command |= DESCRIPTOR_COMMAND_OWN;
+
+        index = (index + 1) % rx_descriptors_len;
+
+        if (last_segment) {
+            break;
+        }
+    }
+    
+    *out_buffer = buffer;
+    *out_size = buffer_len;
+}
+
+int next_tx_descriptor = 0;
+
+
+int rtl8169_send_packet(void* data, int size) {
+    if (size > rx_buffer_len)
+        return 0;
+
+    while (tx_descriptors[next_tx_descriptor].command & DESCRIPTOR_COMMAND_OWN) pause();
+
+    void* packet_buffer = tx_packet_buffer + next_tx_descriptor * rx_buffer_len;
+    memcpy(packet_buffer, data, size);
+
+    tx_descriptors[next_tx_descriptor].low_buf = (u64)packet_buffer & 0xFFFFFFFF;
+    tx_descriptors[next_tx_descriptor].high_buf = (u64)packet_buffer >> 32;
+
+    u32 command = DESCRIPTOR_COMMAND_OWN | DESCRIPTOR_COMMAND_FS | DESCRIPTOR_COMMAND_LS | (rx_buffer_len & 0x3FFF);
+    if (next_tx_descriptor == rx_descriptors_len-1) {
+        tx_descriptors[next_tx_descriptor].command |= DESCRIPTOR_COMMAND_EOR;
+    }
+    tx_descriptors[next_tx_descriptor].command = command;
+    next_tx_descriptor = (next_tx_descriptor + 1) % rx_descriptors_len;
+    return size;
+}
+

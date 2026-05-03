@@ -14,8 +14,15 @@
 
 #include "elos/kernel/net/i8254x.h"
 
-void load_font();
+#include "elos/kernel/video/frame.h"
 
+#include "elos/kernel/net/protocol.h"
+
+bool load_font();
+
+
+
+extern FN_KCON_write _write_hooks[4];
 
 void handle_packet(NetDevice device, NET_Packet* packet, void* user_data);
 
@@ -34,30 +41,50 @@ void kernel_entry(BootAPI* boot_api) {
     // serial UART is default output.
     KCON_init(boot_api);
 
-    // Initialize physical memory component with:
-    //  - Memory regions we can access and how much RAM we have.
-    //  - Virtual Paging.
-    KCON_printf("Initializing physical memory regions\n");
-    PMEM_init(boot_api);
-
-    load_font();
-
     if (boot_api->frame_buffer_base) {
-        
-        // If frame buffer is available initialize it.
-        KCON_printf("Initializing frame buffer\n");
         FB_init(boot_api);
-        KCON_add_write_hook(FB_write);
+
+        // Write over UEFI prints
+        draw_rect(0, 0, 400, 400, DARK_BLUE);
+
+        // If frame buffer is available initialize it.
+        // KCON_printf("Initializing frame buffer\n");
         // Kernel components will now write to serial UART and
         // frame buffer whenever a Kernel Component logs anything.
         // (we see stuff on the display as well as a log file from QEMU)
+
+        bool loaded_font = load_font();
+        if (!loaded_font) {
+            draw_rect(400, 400, 25,25, RED);
+            // We are in serious trouble here.
+        } else {
+            KCON_add_write_hook(FB_write);
+            KCON_printf("Loaded default font\n");
+        }
+    } else {
+        // We are in serious trouble without frame buffer.
     }
+
+    // Initialize physical memory component with:
+    //  - Memory regions we can access and how much RAM we have.
+    //  - Virtual Paging.
+
+    KCON_printf("Initializing physical memory regions\n");
+    PMEM_init(boot_api);
+
+    // draw_rect(200, 400, 50,50, GREEN);
 
     // Initialize simple keyboard
     KBD_init(boot_api);
 
+    // draw_rect(200, 500, 50,50, GREEN);
+
     // Initialize interrupt tables
     CPU_init(boot_api);
+
+    // draw_rect(200, 600, 50,50, GREEN);
+
+    // while (1) ;
 
     // @TODO Initialize file system and disk devices
 
@@ -68,6 +95,12 @@ void kernel_entry(BootAPI* boot_api) {
 
     
     NET_set_receive_callback(net_device, handle_packet, NULL);
+
+    // u32 target_ip = ipv4_from_str("192.168.100.50");
+    // NET_send_arp(net_device, target_ip); // QEMU
+
+    // target_ip = ipv4_from_str("192.168.0.60");
+    // NET_send_arp(net_device, target_ip); // On laptop
 
     KCON_printf("END OF KERNEL_ENTRY!\n");
     while (1) {
@@ -93,13 +126,19 @@ void handle_packet(NetDevice device, NET_Packet* packet, void* user_data) {
 extern u8 __default_font_start;
 extern u8 __default_font_end;
 
-void load_font() {
-    bool res = font__load_from_bytes(&__default_font_start, &__default_font_end - &__default_font_start, &g_default_font);
-    if (!res) {
-        KCON_printf("Could not load default font\n");
-    } else {
-        KCON_printf("Loaded default font\n");
+static u8 _default_font_glyph_data[0x20000];
+
+void* _default_font_allocator(Allocator* allocator, u64 size, void* old_ptr) {
+    if (size > sizeof(_default_font_glyph_data)) {
+        return NULL;
     }
+    return _default_font_glyph_data;
+}
+
+bool load_font() {
+    Allocator allocator = { _default_font_allocator };
+    bool res = font__load_from_bytes(&__default_font_start, &__default_font_end - &__default_font_start, &g_default_font, &allocator);
+    return res;
 }
 
 
