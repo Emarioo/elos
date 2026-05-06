@@ -29,11 +29,11 @@ void acpi_init(BootAPI* boot_api) {
     //     return;
     // }
 
-    PMEM_map_memory(rsdt, rsdt, sizeof(ACPI_SDTHeader));
+    PMEM_map_memory(rsdt, rsdt, sizeof(ACPI_SDTHeader), PMEM_FLAG_NONE);
 
     ACPI_SDTHeader* sdt_header = (ACPI_SDTHeader*)rsdt;
 
-    PMEM_map_memory(rsdt, rsdt, (1+sdt_header->Length) * sizeof(ACPI_SDTHeader));
+    PMEM_map_memory(rsdt, rsdt, (1+sdt_header->Length) * sizeof(ACPI_SDTHeader), PMEM_FLAG_NONE);
 
     ACPI_SDTHeader* fadt = NULL;
     ACPI_SDTHeader* madt = NULL;

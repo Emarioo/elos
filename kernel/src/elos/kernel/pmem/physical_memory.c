@@ -315,7 +315,7 @@ void* PMEM_allocate(u64 size, void* ptr) {
         void* const new_ptr    = (void*)(used_alloc->virtualStart);
         const u64 aligned_size = ((size + PAGE_SIZE-1) / PAGE_SIZE) * PAGE_SIZE;
 
-        bool yes = PMEM_map_memory(new_ptr, new_ptr, requested_pages * PAGE_SIZE);
+        bool yes = PMEM_map_memory(new_ptr, new_ptr, requested_pages * PAGE_SIZE, PMEM_FLAG_NONE);
         if (!yes) {
             kernel_bug();
             return NULL;
@@ -480,7 +480,7 @@ void* PMEM_alloc_phys(u64 size, PMEM_Flags flags) {
     void* new_ptr = (void*)(used_alloc->physicalStart);
 
     if (flags & PMEM_FLAG_IDENTITY_MAPPED) {
-        bool yes = PMEM_map_memory(new_ptr, new_ptr, requested_pages * PAGE_SIZE);
+        bool yes = PMEM_map_memory(new_ptr, new_ptr, requested_pages * PAGE_SIZE, flags & ~PMEM_FLAG_IDENTITY_MAPPED);
         if (!yes) {
             printf("pmem: Could not identity physical pages at %x.\n", new_ptr);
             return NULL;
@@ -490,8 +490,15 @@ void* PMEM_alloc_phys(u64 size, PMEM_Flags flags) {
     return new_ptr;
 }
 
-bool PMEM_map_memory(void* virtual_address, void* physical_address, u64 size) {
-    return map_memory(rootTable, virtual_address, physical_address, size, 0);
+bool PMEM_map_memory(void* virtual_address, void* physical_address, u64 size, PMEM_Flags flags) {
+    int pflags = 0;
+    if (flags & PMEM_FLAG_NOT_CACHED) {
+        pflags |= PAGING_FLAG_NOT_CACHED;
+    }
+    if (flags & PMEM_FLAG_READ_ONLY) {
+        pflags |= PAGING_FLAG_READONLY;
+    }
+    return map_memory(rootTable, virtual_address, physical_address, size, pflags);
 }
 
 bool PMEM_unmap_memory(void* virtual_address, u64 size) {

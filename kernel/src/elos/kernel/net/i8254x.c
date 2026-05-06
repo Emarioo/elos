@@ -56,7 +56,7 @@ bool i8254x_init() {
 
     // @TODO Do i need to memory map (page tables) the base address space?
 
-    PMEM_map_memory((void*)controller.maddr, (void*)controller.maddr, controller.maddr_size);
+    PMEM_map_memory((void*)controller.maddr, (void*)controller.maddr, controller.maddr_size, PMEM_FLAG_NOT_CACHED);
 
     /*
         Reset the Network Controller
@@ -187,12 +187,12 @@ ReceiveDescriptor* receive_ring;
 void setup_transmit_ring() {
     // @TODO memory should not be cached.
     int transmit_ring_size = NUM_OF_TX_DESCRIPTORS * 16;
-    transmit_ring = PMEM_alloc_phys(transmit_ring_size, PMEM_FLAG_IDENTITY_MAPPED);
+    transmit_ring = PMEM_alloc_phys(transmit_ring_size, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
     memset(transmit_ring, 0, transmit_ring_size);
     
     for (int i = 0; i < NUM_OF_TX_DESCRIPTORS; i++){
         TransmitDescriptor* descriptor = transmit_ring + i;
-        descriptor->buffer_address = PMEM_alloc_phys(SIZE_OF_TX_DESCRIPTOR_BUFFER, PMEM_FLAG_IDENTITY_MAPPED);
+        descriptor->buffer_address = PMEM_alloc_phys(SIZE_OF_TX_DESCRIPTOR_BUFFER, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
     }
     
     write_register(CARD_REG_TDBAL, ((u64)transmit_ring) & 0xFFFFFFFF);

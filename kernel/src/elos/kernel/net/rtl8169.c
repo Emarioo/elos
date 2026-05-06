@@ -38,6 +38,8 @@ bool rtl8169_init() {
 
 #define rx_buffer_len 2048
 #define rx_descriptors_len 128
+#define tx_buffer_len 2048
+#define tx_descriptors_len 128
 
 
 Descriptor* rx_descriptors;
@@ -46,11 +48,11 @@ u8* rx_packet_buffer;
 Descriptor* tx_descriptors;
 u8* tx_packet_buffer;
 
-static bool prepare_buffers() {
-    #define RAW_BUFFER_SIZE (2*256 + 2*8 + 2 * rx_buffer_len * rx_descriptors_len)
+bool prepare_buffers() {
+    #define RAW_BUFFER_SIZE (2*256 + 2*8 + rx_buffer_len * rx_descriptors_len + tx_buffer_len * tx_descriptors_len)
     // static u8 _raw_buffer[2*256 + 2*8 + 2 * rx_buffer_len * rx_descriptors_len];
 
-    u8* _raw_buffer = PMEM_alloc_phys(RAW_BUFFER_SIZE, PMEM_FLAG_IDENTITY_MAPPED);
+    u8* _raw_buffer = PMEM_alloc_phys(RAW_BUFFER_SIZE, PMEM_FLAG_IDENTITY_MAPPED|PMEM_FLAG_NOT_CACHED);
     if (!_raw_buffer) {
         printf("rtl8169: Could not allocate physical pages for buffers. %d KB\n", RAW_BUFFER_SIZE/1024);
         return false;
@@ -60,20 +62,20 @@ static bool prepare_buffers() {
 
     // Descriptors should be 256-byte aligned.
     // Buffers should be 8-byte aligned.
-    u64 next_address = ((u64)_raw_buffer + 255) % 256;
+    u64 next_address = ((u64)_raw_buffer + 255) & ~0xFF;
     rx_descriptors = (void*)next_address;
-    next_address = ((u64)next_address + sizeof(Descriptor) * rx_descriptors_len + 255) % 256;
+    next_address = ((u64)next_address + sizeof(Descriptor) * rx_descriptors_len + 255) & ~0xFF;
     tx_descriptors = (void*)next_address;
-    next_address = ((u64)next_address + sizeof(Descriptor) * rx_descriptors_len + 255) % 256;
+    next_address = ((u64)next_address + sizeof(Descriptor) * tx_descriptors_len + 255) & ~0xFF;
     rx_packet_buffer = (void*)next_address;
-    next_address = ((u64)next_address + rx_buffer_len * rx_descriptors_len + 8) % 8;
+    next_address = ((u64)next_address + rx_buffer_len * rx_descriptors_len + 8) & ~7;
     tx_packet_buffer = (void*)next_address;
-    next_address = ((u64)next_address + rx_buffer_len * rx_descriptors_len + 8) % 8;
+    next_address = ((u64)next_address + tx_buffer_len * tx_descriptors_len + 8) & ~7;
 
     printf("Mapping out addresses, rawaddr=%x\n", _raw_buffer);
 
     memset(rx_descriptors, 0, sizeof(Descriptor) * rx_descriptors_len);
-    memset(tx_descriptors, 0, sizeof(Descriptor) * rx_descriptors_len);
+    memset(tx_descriptors, 0, sizeof(Descriptor) * tx_descriptors_len);
 
     printf("Prepared buffers\n");
 
@@ -117,12 +119,16 @@ static bool reset_nic() {
         u64 packet_buffer = (u64)rx_packet_buffer + i * rx_buffer_len;
         rx_descriptors[i].low_buf = packet_buffer & 0xFFFFFFFF;
         rx_descriptors[i].high_buf = packet_buffer >> 32;
+        rx_descriptors[i].vlan = 0;
         // The bitwise and for buffer length is problematic if rx_buffer_len is 0x2000 (8 KB)
         rx_descriptors[i].command = DESCRIPTOR_COMMAND_OWN | ((rx_buffer_len-1) & 0x1FF8);
         if (i == rx_descriptors_len-1) {
             rx_descriptors[i].command |= DESCRIPTOR_COMMAND_EOR;
         }
     }
+
+    // Fill in descriptors as we transmit. We set EOR at the very least.
+    tx_descriptors[tx_descriptors_len-1].command = DESCRIPTOR_COMMAND_EOR;
 
     // We create tx descriptors when we transmit packets.
 
@@ -132,7 +138,7 @@ static bool reset_nic() {
     outl(ioaddr + 0x40, 0x03000700); /* TxConfig = IFG: normal, MXDMA: unlimited */
     outw(ioaddr + 0xDA, rx_buffer_len-1); /* Max rx packet size */
     #define TX_UNIT_SIZE 32
-    outb(ioaddr + 0xEC, (rx_buffer_len + TX_UNIT_SIZE-1)/TX_UNIT_SIZE); /* max tx packet size */
+    outb(ioaddr + 0xEC, (tx_buffer_len + TX_UNIT_SIZE-1)/TX_UNIT_SIZE); /* max tx packet size */
 
 
     outl(ioaddr + 0x20, (u64)tx_descriptors & 0xFFFFFFFF); // Tell the NIC where the first Tx descriptor is.
@@ -226,23 +232,34 @@ int next_tx_descriptor = 0;
 
 
 int rtl8169_send_packet(void* data, int size) {
-    if (size > rx_buffer_len)
+    u64 ioaddr = controller.ioaddr;
+
+    if (size > tx_buffer_len)
         return 0;
 
     while (tx_descriptors[next_tx_descriptor].command & DESCRIPTOR_COMMAND_OWN) pause();
 
-    void* packet_buffer = tx_packet_buffer + next_tx_descriptor * rx_buffer_len;
+    void* packet_buffer = tx_packet_buffer + next_tx_descriptor * tx_buffer_len;
     memcpy(packet_buffer, data, size);
 
     tx_descriptors[next_tx_descriptor].low_buf = (u64)packet_buffer & 0xFFFFFFFF;
     tx_descriptors[next_tx_descriptor].high_buf = (u64)packet_buffer >> 32;
+    tx_descriptors[next_tx_descriptor].vlan = 0;
 
-    u32 command = DESCRIPTOR_COMMAND_OWN | DESCRIPTOR_COMMAND_FS | DESCRIPTOR_COMMAND_LS | (rx_buffer_len & 0x3FFF);
-    if (next_tx_descriptor == rx_descriptors_len-1) {
-        tx_descriptors[next_tx_descriptor].command |= DESCRIPTOR_COMMAND_EOR;
+    u32 command = DESCRIPTOR_COMMAND_OWN | DESCRIPTOR_COMMAND_FS | DESCRIPTOR_COMMAND_LS | (size & 0x3FFF);
+    if (next_tx_descriptor == tx_descriptors_len-1) {
+        command |= DESCRIPTOR_COMMAND_EOR;
     }
     tx_descriptors[next_tx_descriptor].command = command;
-    next_tx_descriptor = (next_tx_descriptor + 1) % rx_descriptors_len;
+
+    outb(ioaddr + 0x38, 0x40); // Normal priority poll
+
+    // while (tx_descriptors[next_tx_descriptor].command & DESCRIPTOR_COMMAND_OWN) {
+    //     pause();
+    // }
+    // printf("Transmitted %d?\n", size);
+
+    next_tx_descriptor = (next_tx_descriptor + 1) % tx_descriptors_len;
     return size;
 }
 

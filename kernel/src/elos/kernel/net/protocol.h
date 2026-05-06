@@ -137,6 +137,7 @@ typedef struct ICMP_Header_Echo {
     User Datagram Protocol (UDP)
 */
 
+
 #pragma pack(push, 1)
 typedef struct UDP_Header {
     u16 sourcePort;
@@ -156,6 +157,53 @@ typedef struct UDP_Pseudo_Header {
     u16 udpLength;
 } UDP_Pseudo_Header;
 #pragma pack(pop)
+
+
+
+
+/*
+    Dynamic Host Configuration Protocol (DHCP)
+*/
+
+#define DHCP_MAGIC_COOKIE 0x63825363
+
+#define DHCP_OPTION_SUBNET_MASK        1
+#define DHCP_OPTION_ROUTER             3
+#define DHCP_OPTION_DOMAIN_SERVER      6
+#define DHCP_OPTION_REQUEST_IP         50
+#define DHCP_OPTION_ADDRESS_TIME       51
+#define DHCP_OPTION_TYPE               53
+    #define DHCP_DISCOVER 1
+    #define DHCP_OFFER    2
+    #define DHCP_REQUEST  3
+    #define DHCP_DECLINE  4
+    #define DHCP_ACK      5
+#define DHCP_OPTION_DHCP_SERVER        54
+#define DHCP_OPTION_PARAM_REQUEST_LIST 55
+
+#pragma pack(push, 1)
+typedef struct DHCP_Discover {
+    u8  op;    // 1
+    u8  htype; // 1
+    u8  hlen;  // 6
+    u8  hops;  // 0
+    u32 xid;   // 0x3903F326
+    u16 secs;  // 0
+    u16 flags; // 0
+    u32 ciaddr;
+    u32 yiaddr;
+    u32 siaddr;
+    u32 giaddr;
+    u8  chaddr[16]; // MAC
+    u8  zeros[192];
+    u32 magicCookie; // 0x63825363
+    u8  options[];
+} DHCP_Discover;
+#pragma pack(pop)
+
+
+
+
 
 
 const char* htype_str(ARP_HardwareType type);

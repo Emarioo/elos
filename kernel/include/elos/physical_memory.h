@@ -9,7 +9,9 @@
 
 typedef enum PMEM_Flags {
     PMEM_FLAG_NONE,
-    PMEM_FLAG_IDENTITY_MAPPED,
+    PMEM_FLAG_IDENTITY_MAPPED = 0x1,
+    PMEM_FLAG_NOT_CACHED      = 0x2,
+    PMEM_FLAG_READ_ONLY       = 0x4,
 } PMEM_Flags;
 
 void PMEM_init(BootAPI* boot_api);
@@ -32,7 +34,7 @@ void* PMEM_allocate(u64 bytes, void* ptr);
 void* PMEM_alloc_phys(u64 size, PMEM_Flags flags);
 
 // @TODO Cacheable, prefetachable, write through flags.
-bool PMEM_map_memory(void* virtual_address, void* physical_address, u64 size);
+bool PMEM_map_memory(void* virtual_address, void* physical_address, u64 size, PMEM_Flags flags);
 
 bool PMEM_unmap_memory(void* virtual_address, u64 size);
 

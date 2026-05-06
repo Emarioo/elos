@@ -124,3 +124,6 @@ void NET_handle_packet(NetDevice device, NET_Packet* packet);
 
 
 void NET_send_arp(NetDevice device, uint32_t address);
+
+void NET_send_dhcp_discover(NetDevice device);
+void NET_send_dhcp_request(NetDevice device, u32 request_address, u32 dhcp_server);
