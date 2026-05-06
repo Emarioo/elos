@@ -9,9 +9,12 @@
 .section .text
 
 .global _start
-_start:
+_start: # void _start(BootAPI*)
     # rcx = pointer to BootAPI
-    push rbp # push to align stack to 16 bytes
+    push rbp # push to align stack to 16 bytes, not needed since we replace stack below BUT in case we decide not to do that
+             # anymore i'm keeping this line here so we don't forget to ensure 16-byte alignment.
+
+    lea rsp, __stack_end
 
     # Save BootAPI to non-volatile register
     mov rbx, rcx
@@ -32,7 +35,7 @@ zero_bss:
 
 .zero_loop:
     cmp rsi, rdi
-    je .end
+    jge .end
 
     mov [rsi], rax
     add rsi, 8

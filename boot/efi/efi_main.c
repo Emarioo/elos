@@ -17,9 +17,42 @@
 */
 
 
+// structure for revision 0 (version 1.0)
+#pragma pack(push, 1)
+typedef struct RSDP {
+    char Signature[8];
+    u8   Checksum;
+    char OEMID[6];
+    u8   Revision;
+    u32  RsdtAddress;
+} RSDP;
+#pragma pack(pop)
+
+// structure for revision 2 (version 2.0+)
+#pragma pack(push, 1)
+typedef struct XSDP {
+ char Signature[8];
+ u8   Checksum;
+ char OEMID[6];
+ u8   Revision;
+ u32  RsdtAddress;      // deprecated since version 2.0
+
+ u32  Length;
+ u64  XsdtAddress;
+ u8   ExtendedChecksum;
+ u8   reserved[3];
+} XSDP;
+#pragma pack(pop)
+
 /*
     Constants
 */
+
+// linker script hardcodes kernel at address 2 MB
+#define __kernel_start ((void*)0x200000)
+#define __kernel_end   ((void*)(0x200000 + 0x200000))
+#define __stack_start ((void*)0x1800000)
+#define __stack_end   ((void*)(0x1800000 + 0x200000))
 
 
 const char* efi_memory_type_names[EfiMaxMemoryType] = {
@@ -143,13 +176,15 @@ EFI_STATUS boot_init_memory() {
         return Status;
     }
 
+    int total_pages = 0;
+
     const int desc_count = total_size_of_descriptors/descriptor_size;
     // printf("Descriptors %d\r\n", desc_count);
     for (int i = 0; i < desc_count; i++) {
         EFI_MEMORY_DESCRIPTOR* desc = (EFI_MEMORY_DESCRIPTOR*)((char*)
             memory_descriptors + i*descriptor_size);
         
-        if (desc->Type != EfiConventionalMemory)
+        if (desc->Type != EfiConventionalMemory && desc->Type != EfiLoaderData)
             continue;
 
         // TODO: Do something with attributes?
@@ -159,7 +194,12 @@ EFI_STATUS boot_init_memory() {
 
         region->physical_address = desc->PhysicalStart;
         region->page_count     = desc->NumberOfPages;
+        total_pages += region->page_count;
+
+        // printf("0x%x %d KB\r\n", region->physical_address, region->page_count * 4);
     }
+
+    // printf("Total size: %d MB\r\n", total_pages / 0x100);
 
     g_boot_api.regions     = regions;
     g_boot_api.regions_len = regions_len;
@@ -211,6 +251,9 @@ void done_net() {
 EFI_STATUS load_kernel(void* address) {
     EFI_STATUS status;
     
+    // @TODO Don't hardcode size. Or maybe that's fine?
+    //    Text section is maxmium 1 MB in linker script.
+    //    Data and bss cover the rest.
     int kernel_file_size = 4*0x100000; // 4 MB
     const int PAGE_SIZE = 4096;
     int pages = (kernel_file_size + PAGE_SIZE-1) / PAGE_SIZE;
@@ -386,32 +429,50 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     for (int i=0;i<SystemTable->NumberOfTableEntries;i++) {
         EFI_CONFIGURATION_TABLE* table = &SystemTable->ConfigurationTable[i];
         if (!memcmp(&table->VendorGuid, &AcpiTableGuid, sizeof(EFI_GUID))) {
-            g_boot_api.rsdp = table->VendorTable;
-            printf("BOOT: Found ACPI 1.0, RSDP at %x.\r\n", g_boot_api.rsdp);
+            RSDP* rsdp = table->VendorTable;
+            // We extract physical address from RSDP because pointer to RSDP is virtual address
+            // and we need physical address when setting up our own page tables.
+            g_boot_api.rsdt = (void*)(u64)rsdp->RsdtAddress;
+            printf("BOOT: Found ACPI 1.0, RSDP at %x.\r\n", rsdp);
         } else if (!memcmp(&table->VendorGuid, &acpi20, sizeof(EFI_GUID))) {
-            g_boot_api.rsdp = table->VendorTable;
-            printf("BOOT: Found ACPI 2.0, RSDP at %x.\r\n", g_boot_api.rsdp);
+            XSDP* xsdp = table->VendorTable;
+            g_boot_api.rsdt = (void*)xsdp->XsdtAddress;
+            printf("BOOT: Found ACPI 2.0, XSDP at %x.\r\n", xsdp);
             break;
         }
     }
-    if (!g_boot_api.rsdp) {
+    if (!g_boot_api.rsdt) {
         printf("BOOT: Could not find RSDP in EFI System Table.\r\n");
     }
 
     FN_BootAPI kernel_entry = NULL;
 
-    void* address = (void*)0x00100000; // linker script hardcodes kernel at address 1 MB
+    void* kernel_address = __kernel_start;
+
     // @TODO We need to check if memory map contains usable pages at the address.
-    Status = load_kernel(address);
+    Status = load_kernel(kernel_address);
     if (EFI_ERROR(Status)) {
         // Message printed in function
         catch_bad_status();
         FREEZE();
         return Status;
     }
-    kernel_entry = address; // linker script for kernel (sections.ld) defines _start at beginning of kernel image.
+    kernel_entry = kernel_address; // linker script for kernel (sections.ld) defines _start at beginning of kernel image.
 
     boot_init_frame_buffer();
+
+    EFI_PHYSICAL_ADDRESS stack = (u64)__stack_start;
+    int stack_size = (u64)__stack_end - (u64)__stack_start;
+    // int stack_size = 10000;
+
+    Status = ST->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, stack_size / EFI_PAGE_SIZE, &stack);
+    if (EFI_ERROR(Status)) {
+        // Message printed in function
+        printf("Could not allocate stack at 0x%x (size %d KB), %d", stack, stack_size / 1024, Status);
+        catch_bad_status();
+        FREEZE();
+        return Status;
+    }
 
     printf("UEFI - Exit boot services\r\n");
 
@@ -421,8 +482,6 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
         FREEZE();
         return Status;
     }
-
-    // printf("Bef exit services\r\n");
 
     // We cannot print or do anything between GetMemoryMap (called in boot_init_memory) and ExitBootServices
 
@@ -436,9 +495,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
 
     kernel_entry(g_boot_api);
 
-    // printf("Returned to efi_main!?\r\n");
     FREEZE();
-
     // Shouldn't return. We're in the hands of the OS now
     return Status;
 }

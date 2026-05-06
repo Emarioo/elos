@@ -11,12 +11,15 @@
 #include "elos/cpu.h"
 
 #include "elos/common/intrinsics.h"
+#include "elos/common/string.h"
 
 #include "elos/kernel/net/i8254x.h"
 
 #include "elos/kernel/video/frame.h"
 
 #include "elos/kernel/net/protocol.h"
+
+#include "elos/kernel/pmem/paging.h"
 
 bool load_font();
 
@@ -26,7 +29,12 @@ extern FN_KCON_write _write_hooks[4];
 
 void handle_packet(NetDevice device, NET_Packet* packet, void* user_data);
 
-void kernel_entry(BootAPI* boot_api) {
+BootAPI _boot_api;
+BootAPI* boot_api;
+void kernel_entry(BootAPI* in_boot_api) {
+    _boot_api = *in_boot_api;
+    boot_api = &_boot_api; // Put it in the kernel's memory space. When mapping pages we don't have to specifically map BootAPI too. We actually don't know which
+    // physical address boot_api has anyway. Maybe on the stack allocated by EFI but we don't know which physical address still.
 
     // Have .bss section in kernel image been memory mapped?
     // In theory the .data, .rodata, .text should be mapped because we allocate memory for kernel image from
@@ -84,7 +92,9 @@ void kernel_entry(BootAPI* boot_api) {
 
     // draw_rect(200, 600, 50,50, GREEN);
 
-    // while (1) ;
+    int size = 2048*128+48;
+    int* buffer = PMEM_alloc_phys(size, PMEM_FLAG_IDENTITY_MAPPED);
+    memset(buffer, 0, size);
 
     // @TODO Initialize file system and disk devices
 
@@ -96,11 +106,8 @@ void kernel_entry(BootAPI* boot_api) {
     
     NET_set_receive_callback(net_device, handle_packet, NULL);
 
-    // u32 target_ip = ipv4_from_str("192.168.100.50");
-    // NET_send_arp(net_device, target_ip); // QEMU
-
-    // target_ip = ipv4_from_str("192.168.0.60");
-    // NET_send_arp(net_device, target_ip); // On laptop
+    u32 target_ip = ipv4_from_str("192.168.0.60");
+    NET_send_arp(net_device, target_ip);
 
     KCON_printf("END OF KERNEL_ENTRY!\n");
     while (1) {
@@ -144,6 +151,28 @@ bool load_font() {
 
 int bugs;
 void kernel_bug() {
-    KCON_printf("KERNEL BUG");
+    KCON_printf("KERNEL BUG\n");
     bugs++;
 }
+
+
+/*
+
+Code to test paging
+
+    KCON_printf("Before crash\n");
+    void* phys_ptr = PMEM_alloc_phys(PAGE_SIZE, PMEM_FLAG_NONE);
+    int* v1_ptr = (void*)0xa000000;
+    int* v2_ptr = (void*)0xc001000;
+    bool yes = PMEM_map_memory(v1_ptr, phys_ptr, PAGE_SIZE);
+    if (!yes) {
+        KCON_printf("BAD\n");
+    }
+    yes = PMEM_map_memory(v2_ptr, phys_ptr, PAGE_SIZE);
+    if (!yes) {
+        KCON_printf("BAD2\n");
+    }
+    v1_ptr[0] = 99;
+    int value = v2_ptr[0];
+    KCON_printf("After crash %d\n", value);
+*/

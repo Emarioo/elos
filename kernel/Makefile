@@ -65,8 +65,8 @@ $(INT_DIR)/%.o: $(INT_DIR)/%.c | $(INT_DIR)
 $(INT_DIR)/%.o: $(ROOT)/kernel/%.s | $(INT_DIR)
 	$(SILENT) $(AS) $(ASFLAGS) -c -MD $(patsubst %.o,%.d,$@) -o $@ $<
 
-$(KERNEL_ELF): $(OBJ_FILES) | $(INT_DIR)
-	$(SILENT) $(LD) $(LDFLAGS) -o $@ $^
+$(KERNEL_ELF): $(OBJ_FILES) $(ROOT)/kernel/sections.ld | $(INT_DIR)
+	$(SILENT) $(LD) $(LDFLAGS) -o $@ $(OBJ_FILES)
 	
 $(KERNEL_IMAGE): $(KERNEL_ELF) | $(INT_DIR)
 	$(SILENT) $(OBJCOPY) -O binary $< $@

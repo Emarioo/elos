@@ -92,9 +92,9 @@ void send_packet(const void* buffer, int size) {
 void NETBOOT_init() {
     memcpy(my_mac_address, simple_network->Mode->CurrentAddress.Addr, 6);
 
-    my_ip_address = ipv4_from_str("192.168.100.54"); // @TODO Don't harcode IP
+    my_ip_address = ipv4_from_str("192.168.0.68"); // @TODO Don't harcode IP
 
-    target_ip_address = ipv4_from_str("192.168.100.50"); // @TODO Don't harcode target IP
+    target_ip_address = ipv4_from_str("192.168.0.60"); // @TODO Don't harcode target IP
     
     NETBOOT_query_mac(target_ip_address, target_mac_address);
 }

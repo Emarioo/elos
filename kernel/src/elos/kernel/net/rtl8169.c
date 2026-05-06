@@ -18,9 +18,8 @@ bool rtl8169_init() {
     
     decode_bar(&controller.config, &controller.ioaddr, &controller.ioaddr_size, &controller.maddr, &controller.maddr_size);
 
-    u64 ioaddr = controller.ioaddr;
-    if(!ioaddr) {
-        printf("[ERROR] rtl8169 BARS does not have IO bar, might have memory bar: %x\n", ioaddr, controller.maddr);
+    if(!controller.ioaddr) {
+        printf("[ERROR] rtl8169 BARS does not have IO bar, might have memory bar: %x\n", controller.ioaddr, controller.maddr);
         return false;
     }
 
@@ -32,8 +31,6 @@ bool rtl8169_init() {
     }
 
     printf("Reset success?\n");
-
-
 
     return true;
 }
@@ -73,8 +70,12 @@ static bool prepare_buffers() {
     tx_packet_buffer = (void*)next_address;
     next_address = ((u64)next_address + rx_buffer_len * rx_descriptors_len + 8) % 8;
 
+    printf("Mapping out addresses, rawaddr=%x\n", _raw_buffer);
+
     memset(rx_descriptors, 0, sizeof(Descriptor) * rx_descriptors_len);
     memset(tx_descriptors, 0, sizeof(Descriptor) * rx_descriptors_len);
+
+    printf("Prepared buffers\n");
 
     return true;
 }
@@ -111,25 +112,19 @@ static bool reset_nic() {
         );
 
 
+    // Prepare RX descriptors and buffers
     for (int i=0;i<rx_descriptors_len;i++) {
         u64 packet_buffer = (u64)rx_packet_buffer + i * rx_buffer_len;
         rx_descriptors[i].low_buf = packet_buffer & 0xFFFFFFFF;
         rx_descriptors[i].high_buf = packet_buffer >> 32;
-        rx_descriptors[i].command = DESCRIPTOR_COMMAND_OWN | (rx_buffer_len & 0x1FF8);
+        // The bitwise and for buffer length is problematic if rx_buffer_len is 0x2000 (8 KB)
+        rx_descriptors[i].command = DESCRIPTOR_COMMAND_OWN | ((rx_buffer_len-1) & 0x1FF8);
         if (i == rx_descriptors_len-1) {
             rx_descriptors[i].command |= DESCRIPTOR_COMMAND_EOR;
         }
     }
 
-    // for (int i=0;i<rx_descriptors_len;i++) {
-    //     tx_descriptors[i].command = DESCRIPTOR_COMMAND_OWN | (rx_buffer_len & 0x3FFF);
-    //     if (i == rx_descriptors_len-1) {
-    //         tx_descriptors[i].command |= DESCRIPTOR_COMMAND_EOR;
-    //     }
-    //     u64 packet_buffer = tx_packet_buffer + i * rx_buffer_len;
-    //     tx_descriptors[i].low_buf = packet_buffer & 0xFFFFFFFF;
-    //     tx_descriptors[i].high_buf = packet_buffer >> 32;
-    // }
+    // We create tx descriptors when we transmit packets.
 
     outb(ioaddr + 0x50, 0xC0); /* Unlock config registers */
     outl(ioaddr + 0x44, 0x0000E70F); /* RxConfig = RXFTH: unlimited, MXDMA: unlimited, AAP: set (promisc. mode set) */
@@ -162,6 +157,9 @@ void rtl8169_receive_packet(void** out_buffer, int* out_size) {
         return;
     }
 
+
+    // Some handling of corrupt RX descriptor state when first descriptor isn't FS.
+    // Shouldn't happen so no need to handle it?
     // while (1) {
     //     u32 cmd = rx_descriptors[next_rx_descriptor].command;
     //     if ((cmd & DESCRIPTOR_COMMAND_FS) == 0) {
@@ -188,6 +186,9 @@ void rtl8169_receive_packet(void** out_buffer, int* out_size) {
         u16 len = rx_descriptors[index].command & 0x3FFF;
         void* data = (void*)((u64)rx_descriptors[index].low_buf | ((u64)rx_descriptors[index].high_buf << 32));
         
+        printf("GOT SOMETHING! cmd=%x len=%d ptr=%x\n", rx_descriptors[index].command, len, data);
+
+
         // Handle multiple-descriptor packets
         if (buffer == NULL){ // This is the first descriptor of the packet
             buffer = PMEM_alloc(len); // use your kernel's heap allocator

@@ -56,7 +56,7 @@ bool i8254x_init() {
 
     // @TODO Do i need to memory map (page tables) the base address space?
 
-    map_pages((void*)controller.maddr, (void*)controller.maddr, controller.maddr_size/PAGE_SIZE);
+    PMEM_map_memory((void*)controller.maddr, (void*)controller.maddr, controller.maddr_size);
 
     /*
         Reset the Network Controller

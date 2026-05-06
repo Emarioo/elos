@@ -9,6 +9,7 @@
 
 #include "elos/kernel_console.h"
 
+#include "elos/kernel/config.h"
 
 
 #define MAX_REGIONS 1000
@@ -41,7 +42,6 @@ PhysicalMemoryRegion g_used_regions[MAX_REGIONS];
 
 
 void PMEM_init(BootAPI* boot_api) {
-    
     typedef struct Range {
         u64 address;
         u64 size;
@@ -60,8 +60,8 @@ void PMEM_init(BootAPI* boot_api) {
 
         // These are allocated and mapped by EFI application
         // when loading kernel.
-        { 0x100000, 0x100000 }, // Kernel .text
-        { 0x200000, 0x400000 }, // Kernel .rodata, .data, .bss
+        { (u64)__kernel_start, (u64)__kernel_end }, // Kernel .text, .rodata, .data, .bss
+        { (u64)__stack_start,  (u64)__stack_end }, // Kernel stack
     };
 
     // @TODO If we run out of static g_free_regions then
@@ -147,6 +147,9 @@ void PMEM_init(BootAPI* boot_api) {
             }
         }
     }
+
+    // Must be called after physical regions have been created.
+    init_paging(boot_api);
 }
 
 
@@ -248,13 +251,11 @@ void* PMEM_allocate(u64 size, void* ptr) {
             g_num_free_regions = found_free_index + 1;
         }
 
-        for (int i = 0; i < requested_pages; i++) {
-            void* addr = (char*)old_virtual_address + used_alloc->pageCount * PAGE_SIZE;
-            bool yes = unmap_page(addr);
-            if (!yes) {
-                // Bug in kernel if this doesn't work
-                return NULL;
-            }
+        bool yes = PMEM_unmap_memory((void*)old_virtual_address, used_alloc->pageCount * PAGE_SIZE);
+        if (!yes) {
+            kernel_bug();
+            // Bug in kernel if this doesn't work
+            return NULL;
         }
 
         return NULL; // we return NULL on success when freeing
@@ -314,9 +315,7 @@ void* PMEM_allocate(u64 size, void* ptr) {
         void* const new_ptr    = (void*)(used_alloc->virtualStart);
         const u64 aligned_size = ((size + PAGE_SIZE-1) / PAGE_SIZE) * PAGE_SIZE;
 
-        // Safe to assume regions/pages from UEFI is mapped mostly?
-        // Otherwise we need this:
-        bool yes = map_pages(new_ptr, new_ptr, requested_pages);
+        bool yes = PMEM_map_memory(new_ptr, new_ptr, requested_pages * PAGE_SIZE);
         if (!yes) {
             kernel_bug();
             return NULL;
@@ -481,7 +480,7 @@ void* PMEM_alloc_phys(u64 size, PMEM_Flags flags) {
     void* new_ptr = (void*)(used_alloc->physicalStart);
 
     if (flags & PMEM_FLAG_IDENTITY_MAPPED) {
-        bool yes = map_pages(new_ptr, new_ptr, requested_pages);
+        bool yes = PMEM_map_memory(new_ptr, new_ptr, requested_pages * PAGE_SIZE);
         if (!yes) {
             printf("pmem: Could not identity physical pages at %x.\n", new_ptr);
             return NULL;
@@ -489,4 +488,12 @@ void* PMEM_alloc_phys(u64 size, PMEM_Flags flags) {
     }
 
     return new_ptr;
+}
+
+bool PMEM_map_memory(void* virtual_address, void* physical_address, u64 size) {
+    return map_memory(rootTable, virtual_address, physical_address, size, 0);
+}
+
+bool PMEM_unmap_memory(void* virtual_address, u64 size) {
+    return unmap_memory(rootTable, virtual_address, size, 0);
 }

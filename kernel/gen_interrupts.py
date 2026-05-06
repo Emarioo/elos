@@ -7,6 +7,12 @@ spath = sys.argv[1]
 
 text = f'''
 .intel_syntax noprefix
+
+# .section .bss
+# isr_stack:
+#     .fill 4096, 1, 0
+# isr_stack_end:
+
 .section .text
 '''
 
@@ -15,8 +21,31 @@ text = f'''
 for i in range(32):
     text += f'''
 isr_stub_{i}:
-    mov rdi, {i}
-    { 'pop rsi' if i == 13 else '' }
+    cli
+    # don't assume stack is ok?
+    # lea rsp, isr_stack
+
+    { 'pop rdx' if i == 13 else '' }
+
+    // error code is pushed by CPU
+
+    push rbp
+    mov rbp, rsp
+
+    # push rax
+    # push rbx
+    # push rcx
+    # push rdx
+    # push rsi
+    # push rdi
+    # push r8
+    # push r9
+    # push r10
+    # push r11
+
+    mov rdi, {i}  # isr number
+    mov rsi, rsp  # pass pointer to stack frame
+
     call exception_handler
     retq
     '''

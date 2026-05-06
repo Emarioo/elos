@@ -6,6 +6,8 @@
 
 #include "elos/kernel/driver/acpi.h"
 
+#include "elos/common/intrinsics.h"
+
 
 
 void init_gdt_idt();
@@ -52,13 +54,31 @@ static IDT_Register _idt_register;
 
 static u64 _gdt[3];
 
-__attribute__((aligned(0x10)))
+_align(16)
 static IDT_Entry _idt[256];
 
 #define printf(...) KCON_printf(__VA_ARGS__)
 
-void exception_handler(int vector, int error_code) {
-    printf("EXCEPTION #%d (error code %d)\nHALTING\n", vector, error_code);
+typedef struct {
+    // uint64_t r11, r10, r9, r8;
+    // uint64_t rdi, rsi, rdx, rcx, rbx, rax;
+    uint64_t rbp;
+
+    uint64_t error_code;
+    uint64_t rip;
+    uint64_t cs;
+    uint64_t rflags;
+    uint64_t rsp;
+    uint64_t ss;
+} PageFaultFrame;
+
+void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
+    if (isr_number == 14) {
+        u64 fault_address = read_cr2();
+        printf("EXCEPTION #%d (rip=0x%x addr=0x%x err=0x%x)", isr_number, frame->rip, fault_address, frame->error_code);
+    } else {
+        printf("EXCEPTION #%d (error code=0x%x)\nHALTING\n", isr_number, frame->error_code);
+    }
     while (1) asm ( "cli\n" );
 }
 

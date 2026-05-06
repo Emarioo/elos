@@ -31,6 +31,11 @@ void* PMEM_allocate(u64 bytes, void* ptr);
 */
 void* PMEM_alloc_phys(u64 size, PMEM_Flags flags);
 
+// @TODO Cacheable, prefetachable, write through flags.
+bool PMEM_map_memory(void* virtual_address, void* physical_address, u64 size);
+
+bool PMEM_unmap_memory(void* virtual_address, u64 size);
+
 /*
     TODO: Allocates contiguous pages with some optional flags
     
@@ -43,6 +48,7 @@ void* PMEM_alloc_phys(u64 size, PMEM_Flags flags);
 
 
 */
+
 // void* kerneL_alloc_pages(u64 size, void* ptr, u32 flags);
 
 

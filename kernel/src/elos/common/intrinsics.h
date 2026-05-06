@@ -69,3 +69,41 @@ static inline uint64_t rtdsc() {
     );
     return value;
 }
+
+
+static inline u64 read_cr2() {
+    u64 reg;
+    asm (
+        "mov %%cr2, %0\n"
+        : "=r" (reg)
+    );
+    return reg;
+}
+static inline u64 read_cr3() {
+    u64 reg;
+    asm (
+        "mov %%cr3, %0\n"
+        : "=r" (reg)
+    );
+    return reg;
+}
+static inline void write_cr3(u64 reg) {
+    asm (
+        "mov %0, %%cr3\n"
+        :
+        : "r" (reg)
+    );
+}
+static inline void flush_tlb_entry(void* addr) {
+    asm (
+        "invlpg (%0)\n"
+        :
+        : "r" (addr)
+    );
+}
+
+static inline void flush_tlb_full() {
+    asm (
+        "mov cr3, cr3\n"
+    );
+}

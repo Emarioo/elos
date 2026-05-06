@@ -12,18 +12,18 @@ typedef struct {
     //
     // Other stuff
     //
-    void* rsdp;
+    void* rsdt; // or xsdt
 
     //
     //  Accessible Memory Regions
     // 
-    MemoryRegion* regions;
+    MemoryRegion* regions; // Virtually mapped, needs to be remapped
     int           regions_len;
 
     // 
     //  Frame buffer we can draw to
     //
-    uint8_t*  frame_buffer_base;
+    uint8_t*  frame_buffer_base; // Virtually mapped, needs to be remapped
     uint32_t  frame_buffer_size;      // in bytes
     uint32_t  frame_buffer_width;     // in pixels
     uint32_t  frame_buffer_height;    // in pixels

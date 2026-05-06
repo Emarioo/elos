@@ -228,6 +228,7 @@ def package_elos(release_dir):
         cmd(f"cp {bootx64_path} bin/boot.elf")
     if os.path.exists(kernel_elf_path):
         cmd(f"cp {kernel_elf_path} bin/kernel.elf")
+        cmd(f"objdump -Sr bin/kernel.elf > bin/kernel.dis")
     if os.path.exists(iso_path):
         cmd(f"cp {iso_path} bin/elos.iso")
 

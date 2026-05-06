@@ -61,7 +61,7 @@ void NET_scan_devices(NetDevice devices[], int* count) {
     
     char buffer0[24];
 
-    current_ip = ipv4_from_str("192.168.100.54");
+    current_ip = ipv4_from_str("192.168.0.68");
     printf("Hardcoded IP: %s\n", ipv4_int_str(current_ip, buffer0));
 
 

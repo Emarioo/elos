@@ -39,3 +39,9 @@ void kernel_bug();
 #define max(X,Y) ( (X) < (Y) ? (Y) : (X) )
 
 #define ARRAY_LENGTH(ARR) sizeof(ARR)/sizeof(*ARR)
+
+#ifdef _WIN32
+#define _align(N) __declspec(align(4096))
+#else
+#define _align(N) __attribute__ ((aligned(4096)))
+#endif
