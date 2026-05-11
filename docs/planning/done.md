@@ -1,6 +1,8 @@
 
 Completed todos
 
+- 2026-05-11, Boot from network by download kernel.img in EFI application on laptop.
+- 2026-04-XX, Bare bones network driver for i8254x and rtl8169.
 
 - 2025-10-18, boot UEFI application with "Hello world" on a modern computer.
 - 2025-10-18, see text on screen from boot loader with MBR and FAT16 on legacy BIOS (old computer).

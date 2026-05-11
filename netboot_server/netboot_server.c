@@ -9,7 +9,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "elos/netboot.h"
+#include "netboot/netboot.h"
 
 #ifdef _WIN32
     #include <winsock2.h>
@@ -55,7 +55,7 @@ char g_thread_send_buffer[0x10000];
 // I will try on real hardware.
 #define MAX_TRANSFER_INFOS 8
 #define MAX_SESSIONS 10
-#define SESSION_IDLE_TIME (10 * TIME_RESOLUTION)
+#define SESSION_IDLE_TIME (5 * TIME_RESOLUTION)
 #define RESEND_IDLE_TIME (TIME_RESOLUTION / 3) // if server is in australia and client in sweden then you will need to increase this value
 #define MAX_RESEND_ATTEMPTS 5
 
@@ -124,6 +124,7 @@ int main(int argc, char** argv) {
     struct sockaddr_in addr = {0};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(PORT);
+    // addr.sin_addr.s_addr = inet_addr("192.168.100.50");
     addr.sin_addr.s_addr = INADDR_ANY;
 
     res = bind(listenSocket, (struct sockaddr*)&addr, sizeof(addr));
@@ -329,7 +330,7 @@ void work() {
     }
 }
 
-void thread_loss_detection(void*) {
+void thread_loss_detection(void* arg) {
     while (1) {
         uint64_t now = access_time_now();
         
@@ -395,6 +396,7 @@ void refresh_transfers(Session* session) {
         // debug("DECR %d %d\n", session->file_offset, session->file_size);
         // printf("Completion %d (%d)\n", session->file_size, session->file_offset);
 
+        session->lastAccessTime = access_time_now();
         send_file_packet(session, info, g_send_buffer);
 
         info->active = true;
@@ -407,7 +409,6 @@ void send_file_packet(Session* session, TransferInfo* info, void* send_buffer) {
     sendf->header.version = 1;
     sendf->header.type = NETBOOT_SEND_FILE;
 
-    session->lastAccessTime = access_time_now();
     sendf->totalFileSize = session->fileTotalSize;
     sendf->offset = info->offset;
     sendf->size = info->size;

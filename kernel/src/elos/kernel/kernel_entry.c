@@ -103,14 +103,15 @@ void kernel_entry(BootAPI* in_boot_api) {
     
     NET_set_receive_callback(net_device, handle_packet, NULL);
 
-    u32 target_ip = ipv4_from_str("192.168.0.60");
+    u32 target_ip = ipv4_from_str("192.168.100.50");
 
+    // In QEMU you need to setup DHCP server or use "-netdev user,id=net0"
+    NET_send_dhcp_discover(net_device);
+    
     // In QEMU you cannot use "-netdev user,id=net0".
     // You must setup tap device (which is preferably anyway because you can use wireshark)
     NET_send_arp(net_device, target_ip);
 
-    // In QEMU you need to setup DHCP server or use "-netdev user,id=net0"
-    NET_send_dhcp_discover(net_device);
 
     KCON_printf("END OF KERNEL_ENTRY!\n");
     while (1) {

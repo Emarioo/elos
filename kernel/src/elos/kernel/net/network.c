@@ -61,7 +61,7 @@ void NET_scan_devices(NetDevice devices[], int* count) {
     
     char buffer0[24];
 
-    current_ip = ipv4_from_str("192.168.0.68");
+    current_ip = ipv4_from_str("192.168.100.54");
     printf("Hardcoded IP: %s\n", ipv4_int_str(current_ip, buffer0));
 
 
@@ -137,6 +137,10 @@ void NET_cleanup() {
     // @TODO implement
 }
 
+void NET_device_info(NetDevice device, NET_DeviceInfo* info) {
+    memcpy(info->mac, controller.mac_address, 6);
+}
+
 FN_NET_recv_packet g_recv_packet_callback;
 void* g_recv_packet_callback_userData;
 
@@ -147,10 +151,11 @@ void NET_set_receive_callback(NetDevice device, FN_NET_recv_packet callback, voi
 }
 
 bool NET_poll_packet(NetDevice device, NET_Packet* packet) {
-    if (!packet) {
-        kernel_bug();
-        return false;
-    }
+    // if (!packet) {
+    //     printf("NET_poll_packet: PACKET IS NULL!\n");
+    //     kernel_bug();
+    //     return false;
+    // 
     
     void* buffer;
     int size;
@@ -163,6 +168,7 @@ bool NET_poll_packet(NetDevice device, NET_Packet* packet) {
             rtl8169_receive_packet(&buffer, &size);
         } break;
     }
+
 
     if (!buffer || !size)
         return false;
@@ -178,10 +184,11 @@ void NET_free_packet(NetDevice device, NET_Packet* packet) {
 }
 
 void NET_send_packet(NetDevice device, void* buffer, int size) {
-    if (!device) {
-        kernel_bug();
-        return;
-    }
+    // if (!device) {
+    //     printf("NET_send_packet: Device is NULL!\n");
+    //     kernel_bug();
+    //     return;
+    // }
     switch (controller.config.deviceID) {
         case DEVICE_ID__82540EM_A: {
             int sent_bytes = i8254x_send_packet(buffer, size);
@@ -201,12 +208,11 @@ void NET_send_packet(NetDevice device, void* buffer, int size) {
 void NET_send_arp(NetDevice net_device, uint32_t address) {
     
     static u8 g_packet_buffer[1024];
-    static u8 g_broadcast_mac[6] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 
     // ARP packet
     int packet_size = sizeof(EtherFrame) + sizeof(ARP_Header_EthernetIPV4);
     EtherFrame* message_frame = (EtherFrame*)g_packet_buffer;
-    memcpy(message_frame->destination, g_broadcast_mac, 6);
+    memcpy(message_frame->destination, broadcast_mac, 6);
     memcpy(message_frame->source, current_mac, 6);
     message_frame->etherType = ETHER_ARP;
     ARP_Header_EthernetIPV4* message_arp = (ARP_Header_EthernetIPV4*)(g_packet_buffer + sizeof(EtherFrame));
@@ -230,10 +236,10 @@ void NET_send_arp(NetDevice net_device, uint32_t address) {
 
 void NET_send_dhcp_discover(NetDevice device) {
     
-    int dhcpSize = sizeof(DHCP_Discover) +8 +1; // +8 because of options, +1 because option end
+    int dhcpSize = sizeof(DHCP_Header) +8 +1; // +8 because of options, +1 because option end
     int udpSize = sizeof(UDP_Header) + dhcpSize;
 
-    u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + sizeof(DHCP_Discover) + 64] = {0};
+    u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + sizeof(DHCP_Header) + 64] = {0};
 
     int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + udpSize;
 
@@ -241,7 +247,6 @@ void NET_send_dhcp_discover(NetDevice device) {
         printf("NET: UDP packet data to big for static buffer, dropping\n");
         return;
     }
-    u8 broadcast_mac[6] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 
     EtherFrame* message_frame = (EtherFrame*)message_buffer;
     memcpy(message_frame->destination, broadcast_mac, 6);
@@ -276,7 +281,7 @@ void NET_send_dhcp_discover(NetDevice device) {
     message_udp->destinationPort = bswap16(message_udp->destinationPort);
     message_udp->length = bswap16(message_udp->length);
 
-    DHCP_Discover* message_dhcp = (DHCP_Discover*)((char*)message_udp + sizeof(UDP_Header));
+    DHCP_Header* message_dhcp = (DHCP_Header*)((char*)message_udp + sizeof(UDP_Header));
     message_dhcp->op = 1;
     message_dhcp->htype = 1;
     message_dhcp->hlen = 6;
@@ -319,10 +324,10 @@ void NET_send_dhcp_discover(NetDevice device) {
 
 void NET_send_dhcp_request(NetDevice device, u32 request_address, u32 dhcp_server) {
     
-    int dhcpSize = sizeof(DHCP_Discover) +15 +1; // +15 because of options, +1 because option end
+    int dhcpSize = sizeof(DHCP_Header) +15 +1; // +15 because of options, +1 because option end
     int udpSize = sizeof(UDP_Header) + dhcpSize;
 
-    u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + sizeof(DHCP_Discover) + 64] = {0};
+    u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + sizeof(DHCP_Header) + 64] = {0};
 
     int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + udpSize;
 
@@ -330,7 +335,6 @@ void NET_send_dhcp_request(NetDevice device, u32 request_address, u32 dhcp_serve
         printf("NET: UDP packet data to big for static buffer, dropping\n");
         return;
     }
-    u8 broadcast_mac[6] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 
     EtherFrame* message_frame = (EtherFrame*)message_buffer;
     memcpy(message_frame->destination, broadcast_mac, 6);
@@ -365,7 +369,7 @@ void NET_send_dhcp_request(NetDevice device, u32 request_address, u32 dhcp_serve
     message_udp->destinationPort = bswap16(message_udp->destinationPort);
     message_udp->length = bswap16(message_udp->length);
 
-    DHCP_Discover* message_dhcp = (DHCP_Discover*)((char*)message_udp + sizeof(UDP_Header));
+    DHCP_Header* message_dhcp = (DHCP_Header*)((char*)message_udp + sizeof(UDP_Header));
     message_dhcp->op = 1;
     message_dhcp->htype = 1;
     message_dhcp->hlen = 6;
@@ -409,12 +413,12 @@ void NET_send_dhcp_request(NetDevice device, u32 request_address, u32 dhcp_serve
     NET_send_packet(device, message_buffer, packet_size);
 }
 
-void NET_handle_packet(NetDevice device, NET_Packet* packet) {
+bool NET_handle_packet(NetDevice device, NET_Packet* packet) {
     
     // @NOCHECKIN We need to check that lengths specified in packet doesn't extend the length of the whole packet. Malicious or corrupt packet should be dropped if so.
 
     if (!packet->buffer || !packet->size)
-        return;
+        return true;
 
     void* buffer = packet->buffer;
     int size = packet->size;
@@ -437,15 +441,15 @@ void NET_handle_packet(NetDevice device, NET_Packet* packet) {
                 char buffer2[20];
                 char buffer3[20];
                 ARP_Header_EthernetIPV4* arp_ipv4 = (ARP_Header_EthernetIPV4*)arp;
-                printf("ARP hw=%s proto=%s oper=%s senderMAC=%s senderIP=%s targetMAC=%s targetIP=%s\n",
-                    htype_str(arp_ipv4->hardware_type),
-                    ether_str(arp_ipv4->protocol_type),
-                    oper_str(arp_ipv4->operation),
-                    mac_str(arp_ipv4->sender_hw_address, buffer0),
-                    ipv4_str(arp_ipv4->sender_proto_address, buffer1),
-                    mac_str(arp_ipv4->target_hw_address, buffer2),
-                    ipv4_str(arp_ipv4->target_proto_address, buffer3)
-                    );
+                // printf("ARP hw=%s proto=%s oper=%s senderMAC=%s senderIP=%s targetMAC=%s targetIP=%s\n",
+                //     htype_str(arp_ipv4->hardware_type),
+                //     ether_str(arp_ipv4->protocol_type),
+                //     oper_str(arp_ipv4->operation),
+                //     mac_str(arp_ipv4->sender_hw_address, buffer0),
+                //     ipv4_str(arp_ipv4->sender_proto_address, buffer1),
+                //     mac_str(arp_ipv4->target_hw_address, buffer2),
+                //     ipv4_str(arp_ipv4->target_proto_address, buffer3)
+                //     );
 
 
                 if (arp_ipv4->operation == ARP_REQUEST && *(u32*)arp_ipv4->target_proto_address == current_ip) {
@@ -471,13 +475,14 @@ void NET_handle_packet(NetDevice device, NET_Packet* packet) {
                     message_arp->operation     = bswap16(message_arp->operation);
 
                     NET_send_packet(device, message_buffer, sizeof(message_buffer));
+                    return true;
                 }
             } else {
-                printf("ARP hw=%s proto=%s oper=%s\n",
-                    htype_str(arp->hardware_type),
-                    ether_str(arp->protocol_type),
-                    oper_str(arp->operation)
-                );
+                // printf("ARP hw=%s proto=%s oper=%s\n",
+                //     htype_str(arp->hardware_type),
+                //     ether_str(arp->protocol_type),
+                //     oper_str(arp->operation)
+                // );
             }
         } break;
         case ETHER_IPV4: {
@@ -493,16 +498,16 @@ void NET_handle_packet(NetDevice device, NET_Packet* packet) {
 
             char buffer0[20];
             char buffer1[20];
-            printf("IP size=%d foffset=%d ttl=%d proto=%s chksum=%d (computed %d) src=%s dst=%s\n",
-                ip->totalLength,
-                ip->fragmentPart & IPV4_FRAGMENT_OFFSET_MASK,
-                ip->timeToLive,
-                ipproto_str(ip->protocol),
-                ip->headerChecksum,
-                computed_checksum,
-                ipv4_int_str(ip->sourceAddress, buffer0),
-                ipv4_int_str(ip->destinationAddress, buffer1)
-                );
+            // printf("IP size=%d foffset=%d ttl=%d proto=%s chksum=%d (computed %d) src=%s dst=%s\n",
+            //     ip->totalLength,
+            //     ip->fragmentPart & IPV4_FRAGMENT_OFFSET_MASK,
+            //     ip->timeToLive,
+            //     ipproto_str(ip->protocol),
+            //     ip->headerChecksum,
+            //     computed_checksum,
+            //     ipv4_int_str(ip->sourceAddress, buffer0),
+            //     ipv4_int_str(ip->destinationAddress, buffer1)
+            //     );
             
             int ipHeaderSize = ip->headerLength * 4;
 
@@ -522,18 +527,18 @@ void NET_handle_packet(NetDevice device, NET_Packet* packet) {
                         echo->identifier = bswap16(echo->identifier);
                         echo->sequence_number = bswap16(echo->sequence_number);
 
-                        printf("ICMP type=%d code=%d chksum=%d (computed %d) ident=%d seq=%d\n",
-                            echo->type,
-                            echo->code,
-                            echo->checksum,
-                            computed_checksum,
-                            echo->identifier,
-                            echo->sequence_number
-                            );
+                        // printf("ICMP type=%d code=%d chksum=%d (computed %d) ident=%d seq=%d\n",
+                        //     echo->type,
+                        //     echo->code,
+                        //     echo->checksum,
+                        //     computed_checksum,
+                        //     echo->identifier,
+                        //     echo->sequence_number
+                        //     );
                         
                         if (computed_checksum != 0) {
                             // Don't send anything back, checksum is bad (or my implementation is bad)
-                            return;
+                            return true;
                         }
 
                         u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(ICMP_Header_Echo) + 256] = {0};
@@ -542,7 +547,7 @@ void NET_handle_packet(NetDevice device, NET_Packet* packet) {
 
                         if (packet_size > sizeof(message_buffer)) {
                             printf("NET: ICMP packet payload to big for static buffer, dropping\n");
-                            return;
+                            return true;
                         }
 
                         EtherFrame* message_frame = (EtherFrame*)message_buffer;
@@ -583,6 +588,7 @@ void NET_handle_packet(NetDevice device, NET_Packet* packet) {
                         message_echo->checksum = bswap16(compute_internet_checksum(message_echo, icmp_size));
 
                         NET_send_packet(device, message_buffer, packet_size); 
+                        return true;
                     } else {
                         // ignore for now
                     }
@@ -597,10 +603,10 @@ void NET_handle_packet(NetDevice device, NET_Packet* packet) {
                     udp->destinationPort = bswap16(udp->destinationPort);
                     udp->length = bswap16(udp->length);
                     
-                    DHCP_Discover* dhcp = (DHCP_Discover*)((char*)udp + sizeof(UDP_Header));
+                    DHCP_Header* dhcp = (DHCP_Header*)((char*)udp + sizeof(UDP_Header));
                     
-                    if (udpSize >= sizeof(UDP_Header) + sizeof(DHCP_Discover) && bswap32(dhcp->magicCookie) == DHCP_MAGIC_COOKIE) {
-                        int opt_length = udp->length - sizeof(UDP_Header) + sizeof(DHCP_Discover);
+                    if (udpSize >= sizeof(UDP_Header) + sizeof(DHCP_Header) && bswap32(dhcp->magicCookie) == DHCP_MAGIC_COOKIE) {
+                        int opt_length = udp->length - sizeof(UDP_Header) + sizeof(DHCP_Header);
                         u8  msg_type = 0xFF;
                         u32 offered_address = dhcp->yiaddr;
                         u32 subnet_mask = 0;
@@ -637,8 +643,10 @@ void NET_handle_packet(NetDevice device, NET_Packet* packet) {
                                 (offered_address>>24)&0xFF);
                             current_ip = offered_address; // can't set this yet, we need to wait for ACK
                             NET_send_dhcp_request(device, offered_address, dhcp->siaddr);
+                            return true;
                         } else  if (msg_type == DHCP_ACK) {
                             printf("DHCP ACK\n");
+                            return true;
                         } else {
                             printf("Unhandled DHCP, type=%d\n", msg_type);
                         }
@@ -646,92 +654,38 @@ void NET_handle_packet(NetDevice device, NET_Packet* packet) {
                         break;
                     }
 
-                    printf("  UDP srcPort=%d dstPort=%d \n", udp->sourcePort, udp->destinationPort);
-
                     int body_size = udpSize - sizeof(UDP_Header);
                     u8* body = (u8*)udp + sizeof(UDP_Header);
-                    int head = 0;
-                    printf(" %x: ", head);
-                    while (head < body_size) {
-                        u8 byte = body[head];
-                        head++;
 
-                        printf("%x%x ", byte>>4, byte&0xF);
-                        if (head % 8 == 7)
-                            printf(" ");
-                        if (head % 32 == 31)
-                            printf("\n 0x%x: ", head);
+                    if (!memcmp(body, "ism", 3)) {
+                        // some message from router?
+                        return true;
+                        break;
                     }
-                    printf("\n");
-                    printf("As text:\n");
-                    body[body_size] = 0; // ensure null termination
-                    printf("%s\n", body);
-                    printf("\n");
-                    
-                    // u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + 256] = {0};
 
-                    // int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + udpSize;
+                    // printf("  UDP srcPort=%d dstPort=%d \n", udp->sourcePort, udp->destinationPort);
 
-                    // if (packet_size > sizeof(message_buffer)) {
-                    //     printf("NET: UDP packet data to big for static buffer, dropping\n");
-                    //     return;
+                    // int head = 0;
+                    // printf(" %x: ", head);
+                    // while (head < body_size) {
+                    //     u8 byte = body[head];
+                    //     head++;
+
+                    //     printf("%x%x ", byte>>4, byte&0xF);
+                    //     if (head % 8 == 7)
+                    //         printf(" ");
+                    //     if (head % 32 == 31)
+                    //         printf("\n 0x%x: ", head);
                     // }
-
-                    // int message_udpSize = sizeof(UDP_Header) + 4;
-
-                    // EtherFrame* message_frame = (EtherFrame*)message_buffer;
-                    // memcpy(message_frame->destination, frame->source, 6);
-                    // memcpy(message_frame->source, current_mac, 6);
-                    // message_frame->etherType = ETHER_IPV4;
-                    // IPV4_Header* message_ipv4 = (IPV4_Header*)(message_buffer + sizeof(EtherFrame));
-                    // message_ipv4->headerLength = sizeof(IPV4_Header) / 4;
-                    // message_ipv4->version = 4;
-                    // message_ipv4->totalLength = sizeof(IPV4_Header) + message_udpSize;
-                    // message_ipv4->identification = ip->identification;
-                    // message_ipv4->fragmentPart = IPV4_FLAG_DONT_FRAGMENT;
-                    // message_ipv4->headerChecksum = 0;
-                    // message_ipv4->timeToLive = 64;
-                    // message_ipv4->protocol = IP_UDP;
-                    // memcpy(&message_ipv4->sourceAddress, &current_ip, 4);
-                    // memcpy(&message_ipv4->destinationAddress, &ip->sourceAddress, 4);
-
-                    // message_frame->etherType = bswap16(message_frame->etherType);
-                    // message_ipv4->totalLength = bswap16(message_ipv4->totalLength);
-                    // message_ipv4->identification = bswap16(message_ipv4->identification);
-                    // message_ipv4->fragmentPart = bswap16(message_ipv4->fragmentPart);
-
-                    // message_ipv4->headerChecksum = bswap16(compute_internet_checksum(message_ipv4, sizeof(IPV4_Header)));
-
-                    // UDP_Header* message_udp = (UDP_Header*)(message_buffer + sizeof(EtherFrame) + sizeof(IPV4_Header));
-                    // message_udp->sourcePort = udp->destinationPort;
-                    // message_udp->destinationPort = udp->sourcePort;
-                    // message_udp->checksum = 0;
-                    // message_udp->length = message_udpSize;
-
-                    // message_udp->sourcePort = bswap16(message_udp->sourcePort);
-                    // message_udp->destinationPort = bswap16(message_udp->destinationPort);
-                    // message_udp->length = bswap16(message_udp->length);
-
-                    // int value = *(int*)udp->data;
-                    // value += 1;
-                    // *(int*)message_udp->data = value;
-
-                    // // @TODO Checksum. Need pseduo header for ipv4
-                    // UDP_Pseudo_Header pseudo = {0};
-                    // pseudo.sourceAddress = message_ipv4->sourceAddress;
-                    // pseudo.destinationAddress = message_ipv4->destinationAddress;
-                    // pseudo.protocol = IP_UDP;
-                    // pseudo.udpLength = bswap16(message_udpSize);
-
-                    // message_udp->checksum = bswap16(~compute_internet_checksum(&pseudo, sizeof(UDP_Pseudo_Header)));
-
-                    // message_udp->checksum = bswap16(compute_internet_checksum(message_udp, message_udpSize));
-
-                    // NET_send_packet(device, message_buffer, sizeof(EtherFrame) + sizeof(IPV4_Header) + message_udpSize);
+                    // printf("\n");
+                    // printf("As text:\n");
+                    // body[body_size] = 0; // ensure null termination
+                    // printf("%s\n", body);
+                    // printf("\n");
 
                 } break;
                 default: {
-
+                    
                 } break;
             }
 
@@ -747,5 +701,6 @@ void NET_handle_packet(NetDevice device, NET_Packet* packet) {
         } break;
     }
 
+    return false;
 }
 

@@ -14,7 +14,7 @@ These are the dependencies:
 - `qemu-system-x86_64`     (Virtual Machine to run OS)
 - `Rufus`                  (To flash USB with OS, Windows)
 - `dd`                     (To flash USB with OS, Linux)
-- `mkgpt`                  (Build image with GUID Partition Table, you have to compile it yourself)
+- `mkgpt`                  (Build image with GUID Partition Table, you have to clone and compile it yourself, easy install WIP)
 
 
 

@@ -80,7 +80,7 @@ def main():
         shutil.rmtree("releases")
         return 0
 
-    cmd(f"make -f {ROOT}/boot/netboot_server/Makefile")
+    cmd(f"make -f {ROOT}/netboot_server/Makefile")
 
     if vbox:
         build_elos("bin/elos.img")
@@ -183,9 +183,9 @@ def package_elos(release_dir):
 
     INT_DIR=f"{ROOT}/int"
 
-    cmd(f"make -f {ROOT}/boot/Makefile INT_DIR={INT_DIR} BOOT_EFI={bootx64_path}")
+    cmd(f"make -f {ROOT}/boot/Makefile INT_DIR={INT_DIR}/boot BOOT_EFI={bootx64_path}")
     
-    cmd(f"make -f {ROOT}/kernel/Makefile INT_DIR={INT_DIR} KERNEL_IMAGE={kernel_path} KERNEL_ELF={kernel_elf_path}")
+    cmd(f"make -f {ROOT}/kernel/Makefile INT_DIR={INT_DIR}/kernel KERNEL_IMAGE={kernel_path} KERNEL_ELF={kernel_elf_path}")
 
     fat_path = f"{INT_DIR}/fat.img"
 

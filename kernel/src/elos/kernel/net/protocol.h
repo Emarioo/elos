@@ -182,7 +182,7 @@ typedef struct UDP_Pseudo_Header {
 #define DHCP_OPTION_PARAM_REQUEST_LIST 55
 
 #pragma pack(push, 1)
-typedef struct DHCP_Discover {
+typedef struct DHCP_Header {
     u8  op;    // 1
     u8  htype; // 1
     u8  hlen;  // 6
@@ -198,11 +198,19 @@ typedef struct DHCP_Discover {
     u8  zeros[192];
     u32 magicCookie; // 0x63825363
     u8  options[];
-} DHCP_Discover;
+} DHCP_Header;
 #pragma pack(pop)
 
 
+extern uint8_t broadcast_mac[6];
 
+
+void construct_arp_reply(u8* message_buffer, int* buffer_len, u8 my_mac[6], uint32_t my_address, u8 target_mac[6], uint32_t target_address);
+void construct_arp(u8* message_buffer, int* buffer_len, u8 my_mac[6], uint32_t my_address, uint32_t target_address);
+
+void construct_dhcp_discover(u8* buffer, int* buffer_len, u8 mac[6]);
+void construct_dhcp_request(u8* buffer, int* buffer_len, u8 mac[6], u32 request_address, u32 dhcp_server);
+    
 
 
 

@@ -58,7 +58,7 @@ static inline void pause() {
     );
 }
 
-static inline uint64_t rtdsc() {
+static inline uint64_t rdtsc() {
     uint64_t value;
     asm(
         "rdtsc\n"

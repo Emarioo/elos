@@ -9,6 +9,20 @@
 #include "elos/kernel/pmem/paging.h"
 
 
+typedef struct Descriptor {
+    u32 command;
+    u32 vlan;
+    u32 low_buf;
+    u32 high_buf;
+} Descriptor;
+
+
+
+#define DESCRIPTOR_COMMAND_OWN (1 << 31)
+#define DESCRIPTOR_COMMAND_EOR (1 << 30)
+#define DESCRIPTOR_COMMAND_FS (1 << 29)
+#define DESCRIPTOR_COMMAND_LS (1 << 28)
+
 
 #define printf(...) KCON_printf(__VA_ARGS__)
 
@@ -72,12 +86,12 @@ bool prepare_buffers() {
     tx_packet_buffer = (void*)next_address;
     next_address = ((u64)next_address + tx_buffer_len * tx_descriptors_len + 8) & ~7;
 
-    printf("Mapping out addresses, rawaddr=%x\n", _raw_buffer);
+    // printf("Mapping out addresses, rawaddr=%x\n", _raw_buffer);
 
     memset(rx_descriptors, 0, sizeof(Descriptor) * rx_descriptors_len);
     memset(tx_descriptors, 0, sizeof(Descriptor) * tx_descriptors_len);
 
-    printf("Prepared buffers\n");
+    // printf("Prepared buffers\n");
 
     return true;
 }
@@ -134,7 +148,7 @@ static bool reset_nic() {
 
     outb(ioaddr + 0x50, 0xC0); /* Unlock config registers */
     outl(ioaddr + 0x44, 0x0000E70F); /* RxConfig = RXFTH: unlimited, MXDMA: unlimited, AAP: set (promisc. mode set) */
-    outb(ioaddr + 0x37, 0x04); /* Enable Tx in the Command register, required before setting TxConfig */
+    outb(ioaddr + 0x37, 0x04); /* Enable Tx in the Command register, required before setting TxConfig, NOTE: osdev did this so we do as well just in case. It works if we enable first. May work if we don't on my laptop? */
     outl(ioaddr + 0x40, 0x03000700); /* TxConfig = IFG: normal, MXDMA: unlimited */
     outw(ioaddr + 0xDA, rx_buffer_len-1); /* Max rx packet size */
     #define TX_UNIT_SIZE 32
@@ -223,6 +237,7 @@ void rtl8169_receive_packet(void** out_buffer, int* out_size) {
             break;
         }
     }
+    next_rx_descriptor = index;
     
     *out_buffer = buffer;
     *out_size = buffer_len;
@@ -254,10 +269,7 @@ int rtl8169_send_packet(void* data, int size) {
 
     outb(ioaddr + 0x38, 0x40); // Normal priority poll
 
-    // while (tx_descriptors[next_tx_descriptor].command & DESCRIPTOR_COMMAND_OWN) {
-    //     pause();
-    // }
-    // printf("Transmitted %d?\n", size);
+    printf("rtl: sent %d\n", size);
 
     next_tx_descriptor = (next_tx_descriptor + 1) % tx_descriptors_len;
     return size;

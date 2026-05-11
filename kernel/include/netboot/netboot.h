@@ -89,6 +89,22 @@ typedef struct NetBoot_Send_File_Ack {
     uint16_t       size;
 } NetBoot_Send_File_Ack;
 
+typedef void* NetBoot_Device;
+
+typedef int(*FN_NetBoot_recv)(NetBoot_Device device, void* buffer, int* out_size);
+typedef int(*FN_NetBoot_send)(NetBoot_Device device, void* buffer, int size);
+
+typedef struct NetBoot_Impl {
+    FN_NetBoot_recv recv;
+    FN_NetBoot_send send;
+    uint8_t mac[6];
+    NetBoot_Device device;
+} NetBoot_Impl;
+
+typedef struct NetBoot_Config {
+    uint32_t* server_ips;
+    uint32_t  server_ips_len;
+} NetBoot_Config;
 
 
 //################################
@@ -96,8 +112,7 @@ typedef struct NetBoot_Send_File_Ack {
 //################################
 
 
-
-void NETBOOT_init();
+bool NETBOOT_init(NetBoot_Impl* impl, NetBoot_Config* config);
 
 // offset and size are optional
 void NETBOOT_request_file_list(const char** files, int count);

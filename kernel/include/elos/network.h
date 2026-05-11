@@ -37,6 +37,9 @@ typedef struct NET_Packet {
 
 typedef void(*FN_NET_recv_packet)(NetDevice device, NET_Packet* packet, void* user_data);
 
+typedef struct NET_DeviceInfo {
+    u8 mac[6];
+} NET_DeviceInfo;
 
 //######################################
 //     NETWORK CONTROLLER FUNCTIONS
@@ -59,6 +62,8 @@ typedef void(*FN_NET_recv_packet)(NetDevice device, NET_Packet* packet, void* us
     @param max_count Max number of devices to initialize. Returns number of devices found.
 */
 void NET_scan_devices(NetDevice devices[], int* count);
+
+void NET_device_info(NetDevice device, NET_DeviceInfo* info);
 
 /*
     Reset/turn off network controller.
@@ -115,7 +120,7 @@ void NET_set_receive_callback(NetDevice device, FN_NET_recv_packet callback, voi
 //######################################
 
 
-void NET_handle_packet(NetDevice device, NET_Packet* packet);
+bool NET_handle_packet(NetDevice device, NET_Packet* packet);
 
 
 //######################################

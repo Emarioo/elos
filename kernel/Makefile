@@ -3,7 +3,7 @@
 #
 
 # Parameters to set:
-INT_DIR      ?= int
+INT_DIR      ?= int/kernel
 KERNEL_ELF   ?= $(INT_DIR)/kernel.elf
 KERNEL_IMAGE ?= $(INT_DIR)/kernel.img
 

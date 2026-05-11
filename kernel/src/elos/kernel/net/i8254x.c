@@ -9,13 +9,14 @@
 
 #include "elos/common/string.h"
 
-#include "elos/common/string.h"
+#include "elos/common/intrinsics.h"
 
 #include "elos/kernel/net/net_internal.h"
 
 #include "elos/network.h"
 
 #include "elos/kernel/pmem/paging.h"
+
 
 
 
@@ -120,7 +121,7 @@ bool reset_nic() {
     device_control |= CARD_BIT_CTRL_RST; // Set the reset bit
     write_register(CARD_REG_CTRL, device_control);
     
-    while(read_register(CARD_REG_CTRL) & CARD_BIT_CTRL_RST) __asm__ ("hlt"); // wait for it to reset
+    while(read_register(CARD_REG_CTRL) & CARD_BIT_CTRL_RST) pause(); // wait for it to reset
     
     device_control = read_register(CARD_REG_CTRL);
     device_control |= CARD_BIT_CTRL_ASDE | CARD_BIT_CTRL_SLU; // Enable Auto Speed Detection.
@@ -190,6 +191,16 @@ void setup_transmit_ring() {
     transmit_ring = PMEM_alloc_phys(transmit_ring_size, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
     memset(transmit_ring, 0, transmit_ring_size);
     
+    if ((u64)transmit_ring_size & 127) {
+        kernel_bug();
+        return;
+    }
+    // Ring must be 16-byte aligned
+    if ((u64)transmit_ring & 15) {
+        kernel_bug();
+        return;
+    }
+
     for (int i = 0; i < NUM_OF_TX_DESCRIPTORS; i++){
         TransmitDescriptor* descriptor = transmit_ring + i;
         descriptor->buffer_address = PMEM_alloc_phys(SIZE_OF_TX_DESCRIPTOR_BUFFER, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
@@ -210,12 +221,22 @@ void setup_transmit_ring() {
 void setup_receive_ring() {
     // @TODO memory should not be cached. uncacheable pages
     int receive_ring_size = NUM_OF_RX_DESCRIPTORS * 16; // you can substitute 16 with sizeof(receive_descriptor_t)
-    receive_ring = PMEM_alloc(receive_ring_size);
+    receive_ring = PMEM_alloc_phys(receive_ring_size, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
     memset(receive_ring, 0, receive_ring_size);
+    // Ring size must be 128-byte aligned
+    if ((u64)receive_ring_size & 127) {
+        kernel_bug();
+        return;
+    }
+    // Ring must be 16-byte aligned
+    if ((u64)receive_ring & 15) {
+        kernel_bug();
+        return;
+    }
     
     for (int i = 0; i < NUM_OF_RX_DESCRIPTORS; i++){
         ReceiveDescriptor* descriptor = receive_ring + i;
-        descriptor->buffer_address = PMEM_alloc(SIZE_OF_RX_DESCRIPTOR_BUFFER);
+        descriptor->buffer_address = PMEM_alloc_phys(SIZE_OF_RX_DESCRIPTOR_BUFFER, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
     }
     
     write_register(CARD_REG_RDBAL, ((u64)receive_ring) & 0xFFFFFFFF); // Base Address Low
@@ -310,10 +331,13 @@ void i8254x_receive_packet(void** out_buffer, int* out_size) {
         }
     }
 
-    // Give the controller more free descriptors by updating RDT
-    u32 tail = (idx == 0) ? NUM_OF_RX_DESCRIPTORS - 1 : idx - 1;
-    write_register(CARD_REG_RDT, tail);
-
+    if (rx_next != idx) {
+        // printf("recv\n");
+        // Give the controller more free descriptors by updating RDT
+        u32 tail = (idx == 0) ? NUM_OF_RX_DESCRIPTORS - 1 : idx - 1;
+        write_register(CARD_REG_RDT, tail);
+        // printf("doneskies\n");
+    }
     rx_next = idx;
 
     *out_buffer = buffer;
@@ -321,8 +345,11 @@ void i8254x_receive_packet(void** out_buffer, int* out_size) {
 }
 
 void send_data(void* data, u32 size, bool EOP){
+    // @TODO We need to check if buffer is full!
+
     u32 tail = read_register(CARD_REG_TDT);
     TransmitDescriptor* tx = transmit_ring + tail; // Get the descriptor the tail is pointing at (next available descriptor)
+
 
     memcpy(tx->buffer_address, data, size); // Copy the data to the previously allocated buffer
 
