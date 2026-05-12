@@ -32,7 +32,7 @@ SRC_FILES := $(wildcard $(ROOT)/netboot_server/*.c)
 OBJ_FILES := $(patsubst $(ROOT)/netboot_server/%.c,$(INT_DIR)/%.o,$(SRC_FILES))
 DEP_FILES := $(patsubst %.o,%.d,$(OBJ_FILES))
 
-$(info $(OBJ_FILES) $(SRC_FILES))
+# $(info $(OBJ_FILES) $(SRC_FILES))
 
 ifeq ($(OS),Windows_NT)
 	RM_CMD := cmd /C del /Q

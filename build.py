@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 '''
-This script compiles all tools/binaries by default
+This script compiles all tools/binaries by default.
+For the time being we also run kernel in QEMU but we probably won't later.
 
 The following tools/binaries exist:
 - elos.img

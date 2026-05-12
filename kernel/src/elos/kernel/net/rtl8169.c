@@ -44,7 +44,7 @@ bool rtl8169_init() {
         return false;
     }
 
-    printf("Reset success?\n");
+    // printf("Reset success?\n");
 
     return true;
 }
@@ -206,7 +206,7 @@ void rtl8169_receive_packet(void** out_buffer, int* out_size) {
         u16 len = rx_descriptors[index].command & 0x3FFF;
         void* data = (void*)((u64)rx_descriptors[index].low_buf | ((u64)rx_descriptors[index].high_buf << 32));
         
-        printf("GOT SOMETHING! cmd=%x len=%d ptr=%x\n", rx_descriptors[index].command, len, data);
+        // printf("GOT SOMETHING! cmd=%x len=%d ptr=%x\n", rx_descriptors[index].command, len, data);
 
 
         // Handle multiple-descriptor packets
@@ -269,7 +269,7 @@ int rtl8169_send_packet(void* data, int size) {
 
     outb(ioaddr + 0x38, 0x40); // Normal priority poll
 
-    printf("rtl: sent %d\n", size);
+    // printf("rtl: sent %d\n", size);
 
     next_tx_descriptor = (next_tx_descriptor + 1) % tx_descriptors_len;
     return size;

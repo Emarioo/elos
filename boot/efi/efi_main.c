@@ -11,40 +11,17 @@
 #include "elos/common/intrinsics.h"
 
 #include "netboot/netboot.h"
-#include "elos/network.h"
 #include "elos/kernel/net/protocol.h"
+#include "elos/kernel/driver/acpi.h"
+#include "elos/kernel/config.h"
+
+#include "kernel_impl.h"
 
 /*
     Types
 */
 
 
-// structure for revision 0 (version 1.0)
-#pragma pack(push, 1)
-typedef struct RSDP {
-    char Signature[8];
-    u8   Checksum;
-    char OEMID[6];
-    u8   Revision;
-    u32  RsdtAddress;
-} RSDP;
-#pragma pack(pop)
-
-// structure for revision 2 (version 2.0+)
-#pragma pack(push, 1)
-typedef struct XSDP {
- char Signature[8];
- u8   Checksum;
- char OEMID[6];
- u8   Revision;
- u32  RsdtAddress;      // deprecated since version 2.0
-
- u32  Length;
- u64  XsdtAddress;
- u8   ExtendedChecksum;
- u8   reserved[3];
-} XSDP;
-#pragma pack(pop)
 
 /*
     Constants
@@ -54,11 +31,6 @@ typedef struct XSDP {
 // #define debug(...) printf(__VA_ARGS__)
 #define debug(...)
 
-// linker script hardcodes kernel at address 2 MB
-#define __kernel_start ((void*)0x200000)
-#define __kernel_end   ((void*)(0x200000 + 0x200000))
-#define __stack_start ((void*)0x1800000)
-#define __stack_end   ((void*)(0x1800000 + 0x200000))
 
 
 const char* efi_memory_type_names[EfiMaxMemoryType] = {
@@ -96,12 +68,7 @@ UINTN g_last_map_key; // needed when allocating memory and exiting boot services
 BootAPI g_boot_api;
 
 
-bool can_load_kernel_from_network;
-EFI_SIMPLE_NETWORK_PROTOCOL* simple_network;
 
-NetBoot_Impl netboot_impl;
-NetBoot_Config netboot_config;
-NetBoot_Device netboot_device;
 
 /*
     Function Declarations
@@ -113,13 +80,6 @@ void boot_init_frame_buffer();
 
 EFI_STATUS load_kernel();
 
-int efi_recv(NetBoot_Device device, void* buffer, int* out_size);
-int efi_send(NetBoot_Device device, void* buffer, int size);
-
-int netdrv_recv(NetBoot_Device device, void* buffer, int* out_size);
-int netdrv_send(NetBoot_Device device, void* buffer, int size);
-
-
 /*
     Function Definitions
 */
@@ -128,119 +88,7 @@ void catch_bad_status() {  }
 
 void kernel_bug() { }
 
-void printf(const char* format, ...) {
-    char buffer[256];
-    unsigned short w_buffer[256];
 
-    va_list va;
-    va_start(va, format);
-    const int len = vsnprintf(buffer, sizeof(buffer), format, va);
-    va_end(va);
-
-    int head=0;
-    int dst_head=0;
-    while(head < len + 1) {
-        if (buffer[head] == '\n' && (head-1 < 0 || buffer[head-1] != '\r')) {
-            w_buffer[dst_head] = '\r';
-            dst_head++;
-        }
-        w_buffer[dst_head] = buffer[head];
-        head++;
-        dst_head++;
-    }
-    EFI_STATUS status = ST->ConOut->OutputString(ST->ConOut, w_buffer);
-    (void)status;
-}
-
-
-void KCON_printf(const char* format, ...) {
-    char buffer[256];
-    unsigned short w_buffer[256];
-
-    va_list va;
-    va_start(va, format);
-    const int len = vsnprintf(buffer, sizeof(buffer), format, va);
-    va_end(va);
-
-    int head=0;
-    int dst_head=0;
-    while(head < len + 1) {
-        if (buffer[head] == '\n' && (head-1 < 0 || buffer[head-1] != '\r')) {
-            w_buffer[dst_head] = '\r';
-            dst_head++;
-        }
-        w_buffer[dst_head] = buffer[head];
-        head++;
-        dst_head++;
-    }
-    EFI_STATUS status = ST->ConOut->OutputString(ST->ConOut, w_buffer);
-    (void)status;
-}
-
-void* PMEM_allocate(u64 size, void* old_ptr) {
-    EFI_STATUS Status;
-    if (size && !old_ptr) {
-        void* addr = 0;
-        Status = ST->BootServices->AllocatePool(EfiLoaderData, (8 + size), &addr);
-        if (EFI_ERROR(Status)) {
-            printf("Pool failed, %d, %d bytes\n", Status, size);
-            return NULL;
-        }
-        // *(int*)addr = size;
-        // return (char*)addr + 8;
-        return (char*)addr;
-    } else if(!size) {
-        // void* real_addr = (char*)old_ptr - 8;
-        void* real_addr = (char*)old_ptr;
-        Status = ST->BootServices->FreePool(real_addr);
-        if (EFI_ERROR(Status)) {
-            printf("Pool free failed, %d, %d bytes\n", Status);
-            return NULL;
-        }
-        return NULL;
-    } else {
-        // @TODO Implement?
-        printf("NO REALLOCATE\n");
-        kernel_bug();
-        return NULL;
-        // void* real_addr = (char*)old_ptr - 8;
-        // int old_size = *(int*)real_addr;
-        // void* addr = 0;
-        // Status = ST->BootServices->AllocatePool(EfiLoaderData, (8 + size + EFI_PAGE_SIZE-1)/EFI_PAGE_SIZE, &addr);
-        // if (EFI_ERROR(Status)) {
-        //     printf("Pool failed, %d, %d bytes\n", Status, size);
-        //     return NULL;
-        // }
-        // *(int*)addr = size;
-        // memcpy((char*)addr + 8, old_ptr, old_size);
-        // Status = ST->BootServices->FreePool(real_addr);
-        // return (char*)addr + 8;
-    }
-}
-
-void* PMEM_alloc_phys(u64 size, int flags) {
-    EFI_STATUS Status;
-    EFI_PHYSICAL_ADDRESS addr = 0;
-    Status = ST->BootServices->AllocatePages(AllocateAnyPages, EfiLoaderData, (size+EFI_PAGE_SIZE-1)/EFI_PAGE_SIZE, &addr);
-    if (EFI_ERROR(Status)) {
-        printf("Pool failed, %d, %d bytes\n", Status, size);
-        return NULL;
-    }
-    return (void*)addr;
-}
-
-void PMEM_map_memory(void* vaddr, void* paddr, uint64_t size) {
-    if (vaddr != paddr) {
-        printf("Only identitiy mapping allowed, %x -> %x (%d bytes)\n", paddr, vaddr, size);
-        return;
-    }
-    EFI_STATUS Status;
-    EFI_PHYSICAL_ADDRESS addr = (EFI_PHYSICAL_ADDRESS)paddr;
-    Status = ST->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, (size+EFI_PAGE_SIZE-1)/EFI_PAGE_SIZE, &addr);
-    if (EFI_ERROR(Status)) {
-        printf("Could not map %x -> %x (%d bytes), %d\n", paddr, vaddr, size, Status);
-    }
-}
 
 
 EFI_STATUS boot_init_memory() {
@@ -390,7 +238,8 @@ local_kernel:
 }
 
 EFI_STATUS load_kernel_from_file(void* address) {
-    
+    printf("Loading Kernel from disk\n");
+
     EFI_STATUS Status;
     EFI_FILE_PROTOCOL* volume;
     Status = simple_file_system->OpenVolume(simple_file_system, &volume);
@@ -430,14 +279,15 @@ EFI_STATUS load_kernel_from_file(void* address) {
         return Status;
     }
     
-    printf("First word: %x\n", *(int*)address);
-    printf("Kernel size: %d KB\n", file_info->FileSize/1024);
+    // printf("First word: %x\n", *(int*)address);
+    // printf("Kernel size: %d KB\n", file_info->FileSize/1024);
 
     return EFI_SUCCESS;
 }
 
 #define FREEZE() while (1) pause();
 
+// Breakpoint when debugging
 volatile void efi_entry() { }
 
 EFI_STATUS EFIAPI
@@ -480,49 +330,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     efi_entry();
 
 
-    
-    // Status = BS->LocateProtocol(&gEfiSimpleNetworkProtocolGuid, NULL, (void**)&simple_network);
-    // if (EFI_ERROR(Status)) {
-    //     printf("SimpleNetworkProtocol is not available, %d\n", Status);
-    // } else {
-    //     Status = simple_network->Start(simple_network);
-    //     if (EFI_ERROR(Status)) {
-    //         printf("Cannot start network, %d\n", Status);
-    //     } else {
-    //         Status = simple_network->Initialize(simple_network, 0x0, 0x0);
-    //         // status = simple_network->Initialize(simple_network, 0x100000, 0x100000);
-    //         if (EFI_ERROR(Status)) {
-    //             printf("Cannot init network, %d\n", Status);
-    //         } else {
-    //             netboot_impl.recv = efi_recv;
-    //             netboot_impl.send = efi_send;
-    //             memcpy(netboot_impl.mac, simple_network->Mode->CurrentAddress.Addr, 6);
-    //             netboot_device = NULL;
-    //             can_load_kernel_from_network = true;
-    //         }
-    //     }
-    // }
-
-    if (!can_load_kernel_from_network) {
-            
-        NetDevice devices[6];
-        int devices_len = ARRAY_LENGTH(devices);
-        NET_scan_devices(devices, &devices_len);
-
-        if (devices_len == 0) {
-            printf("Non-UEFI network driver could not find supported controller (no rtl8169)\n");
-        } else {
-            NetDevice device = devices[0];
-            NET_DeviceInfo devinfo;
-            NET_device_info(device, &devinfo);
-
-            netboot_impl.recv = netdrv_recv;
-            netboot_impl.send = netdrv_send;
-            memcpy(netboot_impl.mac, devinfo.mac, 6);
-            netboot_device = device;
-            can_load_kernel_from_network = true;
-        }
-    }
+    init_network();
 
 
     Status = BS->HandleProtocol(loaded_image->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (void**)&simple_file_system);
@@ -564,7 +372,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
 
     FN_BootAPI kernel_entry = NULL;
 
-    void* kernel_address = __kernel_start;
+    void* kernel_address = __KERNEL_START;
 
     // @TODO We need to check if memory map contains usable pages at the address.
     Status = load_kernel(kernel_address);
@@ -578,8 +386,8 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
 
     boot_init_frame_buffer();
 
-    EFI_PHYSICAL_ADDRESS stack = (u64)__stack_start;
-    int stack_size = (u64)__stack_end - (u64)__stack_start;
+    EFI_PHYSICAL_ADDRESS stack = (u64)__STACK_START;
+    int stack_size = (u64)__STACK_END - (u64)__STACK_START;
     // int stack_size = 10000;
 
     Status = ST->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, stack_size / EFI_PAGE_SIZE, &stack);
@@ -596,32 +404,30 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
 
     // FREEZE();
 
-    EFI_EVENT timer_event;
-    UINTN index;
-
-    Status = ST->BootServices->CreateEvent(EFI_EVENT_TIMER, TPL_APPLICATION,NULL,NULL,&timer_event);
-    if (EFI_ERROR(Status)) {
-        printf("CreateEvent failed, %d\n", Status);
-        return 1;
-    }
-    Status = ST->BootServices->RaiseTPL(TPL_APPLICATION);
-    if (EFI_ERROR(Status)) {
-        printf("RaiseTPL failed, %d\n", Status);
-        return 1;
-    }
-    
-    Status = ST->BootServices->SetTimer(timer_event, TimerRelative, 10*1000LL*1000LL*10); // 100ns units
-    if (EFI_ERROR(Status)) {
-        printf("SetTimer failed, %d\n", Status);
-        return 1;
-    }
-
-    Status = ST->BootServices->WaitForEvent(1, &timer_event, &index);
-    if (EFI_ERROR(Status)) {
-        printf("WaitForEvent %d\n", Status);
-        FREEZE();
-        return Status;
-    }
+    // Sleep if we want.
+    // EFI_EVENT timer_event;
+    // UINTN index;
+    // Status = ST->BootServices->CreateEvent(EFI_EVENT_TIMER, TPL_APPLICATION,NULL,NULL,&timer_event);
+    // if (EFI_ERROR(Status)) {
+    //     printf("CreateEvent failed, %d\n", Status);
+    //     return 1;
+    // }
+    // Status = ST->BootServices->RaiseTPL(TPL_APPLICATION);
+    // if (EFI_ERROR(Status)) {
+    //     printf("RaiseTPL failed, %d\n", Status);
+    //     return 1;
+    // }
+    // Status = ST->BootServices->SetTimer(timer_event, TimerRelative, 10*1000LL*1000LL*10); // 100ns units
+    // if (EFI_ERROR(Status)) {
+    //     printf("SetTimer failed, %d\n", Status);
+    //     return 1;
+    // }
+    // Status = ST->BootServices->WaitForEvent(1, &timer_event, &index);
+    // if (EFI_ERROR(Status)) {
+    //     printf("WaitForEvent %d\n", Status);
+    //     FREEZE();
+    //     return Status;
+    // }
 
 
     Status = boot_init_memory();
@@ -647,79 +453,6 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     // Shouldn't return. We're in the hands of the OS now
     return Status;
 }
-
-
-int efi_recv(NetBoot_Device device, void* buffer, int* out_size) {
-    
-    EFI_STATUS status;
-    UINTN buffer_size = *out_size;
-    UINT32 interruptMask;
-    void* tx_buf;
-    
-    status = simple_network->GetStatus(simple_network, &interruptMask, &tx_buf);
-
-    status = simple_network->Receive(simple_network, 0, &buffer_size, buffer, NULL, NULL, NULL);
-    if (status == EFI_NOT_READY) {
-        // printf("RECV NOT ready\r\n");
-        *out_size = 0;
-        return 0;
-    }
-    if (EFI_ERROR(status)) {
-        printf("Cannot receive network, %d, buffer size %d\r\n", status, buffer_size);
-        *out_size = 0;
-        return 0;
-    }
-    status = simple_network->GetStatus(simple_network, &interruptMask, &tx_buf);
-
-    EFI_NETWORK_STATISTICS stats = {0};
-    UINTN stat_size = sizeof(EFI_NETWORK_STATISTICS);
-    status = simple_network->Statistics(simple_network, 0, &stat_size, &stats);
-    if (EFI_ERROR(status)) {
-        printf("Statistics error, %d\r\n", status);
-    }
-
-    debug("Got %d bytes, good=%d total=%x drop=%x totalb=%d statS=%d\n", buffer_size, stats.RxGoodFrames, stats.RxTotalFrames, stats.RxDroppedFrames, stats.RxTotalBytes, stat_size);
-
-    *out_size = buffer_size;
-    return buffer_size;
-}
-int efi_send(NetBoot_Device device, void* buffer, int size) {
-    EFI_STATUS status;
-    
-    status = simple_network->Transmit(simple_network, 0, size, (void*)buffer, NULL, NULL, NULL);
-    if (EFI_ERROR(status)) {
-        printf("Could not transmit, %d\r\n", status);
-        return 0;
-    }
-
-    UINT32 interruptMask;
-    void* tx_buf;
-    while (1) {
-        status = simple_network->GetStatus(simple_network, &interruptMask, &tx_buf);
-        pause();
-        if (tx_buf == buffer)
-            break;
-    }
-    return size;
-}
-
-int netdrv_recv(NetBoot_Device device, void* buffer, int* out_size) {
-    NET_Packet packet;
-    bool yes = NET_poll_packet(device, &packet);
-    if (!yes) {
-        *out_size = 0;
-        return 0;
-    }
-    int bytes = *out_size >= packet.size ? packet.size : *out_size;
-    memcpy(buffer, packet.buffer, bytes);
-    NET_free_packet(device, &packet);
-    return bytes;
-}
-int netdrv_send(NetBoot_Device device, void* buffer, int size) {
-    NET_send_packet(device, buffer, size);
-    return size;
-}
-
 
 
 

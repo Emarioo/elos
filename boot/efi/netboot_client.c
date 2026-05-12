@@ -18,10 +18,12 @@ uint32_t target_ip_address;
 int TARGET_PORT = NETBOOT_DEFAULT_PORT;
 int SRC_PORT = NETBOOT_DEFAULT_PORT;
 
+void KCON_printf(const char* format, ...);
 
-void printf(const char* format, ...);
+#define printf(...) KCON_printf(__VA_ARGS__)
 
-#define debug(...) printf(__VA_ARGS__)
+
+#define debug(...) KCON_printf(__VA_ARGS__)
 // #define debug(...)
 
 u32 ipv4_from_str(const char* address);
@@ -315,60 +317,6 @@ bool NETBOOT_query_mac(uint32_t address, uint8_t mac[6]) {
 }
 
 
-// bool NETBOOT_test_recv(uint32_t address, uint8_t mac[6]) {
-
-//     // send_arp(address);
-    
-//     uint64_t startTime       = now_us();
-//     uint64_t lastSentTime    = now_us();
-//     uint64_t timeout_us      = 1000*1000; // 10ms
-//     uint64_t timeout_send_us = 100*1000; // 3ms
-
-//     while (1) {
-//         int buffer_size = sizeof(g_recv_buffer);
-//         bool res = recv_packet(g_recv_buffer, &buffer_size);
-//         if (!res) {
-//             uint64_t now = now_us();
-//             // if (now - lastSentTime >= timeout_send_us) {
-//             //     lastSentTime = now;
-//             //     // printf("Send arp\n");
-//             //     send_arp(address);
-//             // }
-//             if (now - startTime >= timeout_us) {
-//                 break;
-//             }
-//             continue;
-//         }
-        
-//         EtherFrame* frame = (EtherFrame*)g_recv_buffer;
-
-//         frame->etherType = bswap16(frame->etherType);
-
-//         // printf("Ether typ %d\r\n", frame->etherType);
-
-//         if (frame->etherType == ETHER_ARP) {
-//             ARP_Header* arp = (ARP_Header*)((char*)g_recv_buffer + sizeof(EtherFrame));
-
-//             arp->hardware_type = bswap16(arp->hardware_type);
-//             arp->protocol_type = bswap16(arp->protocol_type);
-//             arp->operation     = bswap16(arp->operation);
-
-//             // printf("ARP oper %d\r\n", arp->operation);
-            
-//             if (arp->hardware_type == ARP_ETHERNET && arp->protocol_type == ETHER_IPV4) {
-//                 ARP_Header_EthernetIPV4* arp_ipv4 = (ARP_Header_EthernetIPV4*)arp;
-                
-//                 // memcpy(mac, arp_ipv4->sender_hw_address, 6);
-//                 char buffer0[30];
-//                 printf("Got MORE MAC from ARP, %s!?\n", mac_str(arp_ipv4->sender_hw_address,buffer0));
-//                 // sucess
-//                 // return true;
-//             }
-//         }
-//     }
-
-//     return false;
-// }
 
 bool NETBOOT_handle_base(char* buffer, int size) {
     EtherFrame* frame = (EtherFrame*)g_recv_buffer;
@@ -552,7 +500,7 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
         received_bytes += sendf->size;
 
 
-        debug("Recv file size, recbytes=%d off=%d recvsize=%d total=%d foff=%d\r\n", received_bytes, buffer_offset, sendf->size, sendf->totalFileSize, sendf->offset);
+        // debug("Recv file size, recbytes=%d off=%d recvsize=%d total=%d foff=%d\r\n", received_bytes, buffer_offset, sendf->size, sendf->totalFileSize, sendf->offset);
         timeoutStart_us = now_us();
 
         send_file_ack(frame->source, ipv4->sourceAddress, udp->sourcePort, sendf->offset, sendf->size);
@@ -562,6 +510,7 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
         // Server will timeout the session eventually.
 
         if (size == received_bytes || received_bytes == sendf->totalFileSize - offset) {
+            printf("Finished %s\n", path);
             return received_bytes;
         } else if (received_bytes > size) {
             printf("Recevied too many bytes, %d > %d\r\n", received_bytes, size);
@@ -708,31 +657,5 @@ void send_file_ack(uint8_t mac[6], uint32_t address, uint16_t port, uint64_t off
 
     send_packet(g_send_buffer, packet_size);
 
-    debug("Sent ack off=%d size=%d\r\n", (int)offset, (int)size);
+    // debug("Sent ack off=%d size=%d\r\n", (int)offset, (int)size);
 }
-
-// uint32_t ipv4_from_str(const char* address) {
-//     char* string = (char*)address;
-//     uint32_t num;
-//     num  = (u32)strtol(string  , &string, 10);
-//     num |= (u32)strtol(string+1, &string, 10) << 8;
-//     num |= (u32)strtol(string+1, &string, 10) << 16;
-//     num |= (u32)strtol(string+1, &string, 10) << 24;
-//     return num;
-// }
-
-// u16 compute_internet_checksum(void* header, int size) {
-//     u32 acc = 0;
-//     int half_words = (size + 1) / 2;
-
-//     u16* data = (u16*)header;
-//     for (int i=0;i<half_words;i++) {
-//         acc += (u16)bswap16(data[i]);
-//     }
-
-//     // Add carries to 16-bit part
-//     while (acc >> 16)
-//         acc = (acc & 0xFFFF) + (acc >> 16);
-
-//     return ~acc;
-// }
