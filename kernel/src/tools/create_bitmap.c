@@ -1,4 +1,6 @@
 
+// #     cmd("gcc -g -o bin/create_bitmap src/tools/create_bitmap.c -Iinclude/vendor -lm")
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 

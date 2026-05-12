@@ -1,5 +1,6 @@
 /*
-    Read a specification
+    
+    cmd("gcc -g -o bin/elos-img kernel/src/tools/create_efi.c -DELOS_DEBUG -Ikernel/include/vendor -Ikernel/src -lm")
 */
 
 #include <stdlib.h>
@@ -52,6 +53,7 @@ int write_sectors(const void* buffer, uint64_t lba, uint64_t count, void* user_d
         int len = lba * SECTOR_SIZE + count * SECTOR_SIZE - file_size;
         int left = len;
         while (left) {
+            // @TODO THIS IS REALLY SLOW!!!!!!!! large sections to zero.
             int chunk_size = (left > 4096) ? 4096 : left;
             fwrite(_zero_buffer, 1, chunk_size, ctx->file);
             left -= chunk_size;

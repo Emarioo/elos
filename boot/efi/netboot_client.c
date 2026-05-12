@@ -9,6 +9,15 @@
 
 #include "elos/common/intrinsics.h"
 
+/*
+    @TODO Tweak timeouts for DHCP, ARP, NetBoot requests.
+
+    On QEMU we increase them a bit because emulation and wierdness.
+    On Hardware we can assume local network latency is less than 10ms in worst case.
+    Probably a lot less but maybe network card runs in default slow mode or something.
+*/
+
+
 uint8_t  my_mac_address[6];
 uint32_t my_ip_address;
 
@@ -156,7 +165,7 @@ bool NETBOOT_query_dhcp_ip(uint32_t* address) {
     send_dhcp_discover();
 
     uint64_t startTime = now_us();
-    uint64_t timeout_us = 50*1000;
+    uint64_t timeout_us = 100*1000;
 
     while (1) {
         int buffer_size = sizeof(g_recv_buffer);
@@ -265,8 +274,8 @@ bool NETBOOT_query_mac(uint32_t address, uint8_t mac[6]) {
     
     uint64_t startTime       = now_us();
     uint64_t lastSentTime    = now_us();
-    uint64_t timeout_us      = 1000*1000; // 10ms
-    uint64_t timeout_send_us = 100*1000; // 3ms
+    uint64_t timeout_us      = 1000*1000;
+    uint64_t timeout_send_us = 400*1000;
     // int resends = 0;
     while (1) {
         int buffer_size = sizeof(g_recv_buffer);
@@ -356,7 +365,7 @@ uint64_t crude_measure() {
     uint64_t start_tsc, end_tsc;
     EFI_EVENT timer_event;
 
-    uint64_t wait_time_us = 10*1000; // 10 ms
+    uint64_t wait_time_us = 100*1000; // 10 ms
 
     status = ST->BootServices->CreateEvent(EFI_EVENT_TIMER, TPL_APPLICATION, NULL, NULL, &timer_event);
     if (EFI_ERROR(status)) {
@@ -418,7 +427,7 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
     uint64_t start_us = now_us();
     uint64_t timeoutStart_us = now_us();
 
-    uint64_t timeoutValue = 4800 * 1000; // 800 ms
+    uint64_t timeoutValue = 1000 * 1000; // 800 ms
     // int limit = limit_cap;
     while (1) {
         int buffer_size = sizeof(g_recv_buffer);

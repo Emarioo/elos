@@ -12,9 +12,10 @@ else
   NETBOOT_APP ?= $(INT_DIR)/netboot
 endif
 
+SILENT ?= @
+
 ################################
 
-SILENT := 
 
 ROOT := $(abspath $(dir $(abspath $(lastword $(MAKEFILE_LIST))))..)
 
@@ -36,11 +37,11 @@ DEP_FILES := $(patsubst %.o,%.d,$(OBJ_FILES))
 
 ifeq ($(OS),Windows_NT)
 	RM_CMD := cmd /C del /Q
-	MKDIR  := cmd /C
+	MKDIR  := cmd /C mkdir
 	LDFLAGS += -lws2_32
 else
 	RM_CMD := rm
-	MKDIR  := mkdir
+	MKDIR  := mkdir -p
 endif
 
 all: $(NETBOOT_APP)

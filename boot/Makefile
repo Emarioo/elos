@@ -26,18 +26,15 @@ CFLAGS += -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable
 
 LDFLAGS := -nostdlib --dll --image-base=0 -shared --subsystem 10 -e efi_main
 
-SRC_FILES := $(wildcard $(ROOT)/boot/efi/*.c)
-SRC_FILES += $(wildcard $(ROOT)/kernel/src/elos/kernel/net/*.c)
-SRC_FILES += $(wildcard $(ROOT)/kernel/src/elos/kernel/driver/*.c)
-SRC_FILES += $(wildcard $(ROOT)/kernel/src/elos/common/*.c)
+SRC_DIRS := \
+	$(ROOT)/boot/efi \
+	$(ROOT)/kernel/src/elos/kernel/net \
+	$(ROOT)/kernel/src/elos/kernel/driver \
+	$(ROOT)/kernel/src/elos/common \
 
-OBJ_FILES := $(patsubst $(ROOT)/boot/efi/%.c,$(INT_DIR)/%.o,$(SRC_FILES))
-OBJ_FILES := $(patsubst $(ROOT)/kernel/src/elos/kernel/net/%.c,$(INT_DIR)/%.o,$(OBJ_FILES))
-OBJ_FILES := $(patsubst $(ROOT)/kernel/src/elos/kernel/driver/%.c,$(INT_DIR)/%.o,$(OBJ_FILES))
-OBJ_FILES := $(patsubst $(ROOT)/kernel/src/elos/common/%.c,$(INT_DIR)/%.o,$(OBJ_FILES))
+SRC_FILES := $(foreach dir,$(SRC_DIRS),$(shell find $(dir) -name '*.c'))
+OBJ_FILES := $(patsubst $(ROOT)/%.c,$(INT_DIR)/%.o,$(SRC_FILES))
 DEP_FILES := $(patsubst %.o,%.d,$(OBJ_FILES))
-
-# $(info $(SRC_FILES))
 
 all: $(BOOT_EFI)
 
@@ -45,24 +42,14 @@ ifeq (0, $(words $(findstring $(MAKECMDGOALS), clean)))
     -include $(DEP_FILES)
 endif
 
-
-$(INT_DIR):
-	$(SILENT) mkdir $(INT_DIR)
-
-$(INT_DIR)/%.o: $(ROOT)/boot/efi/%.c | $(INT_DIR)
+$(INT_DIR)/%.o: $(ROOT)/%.c
+	$(SILENT) mkdir -p $(dir $@)
 	$(SILENT) $(CC) $(CFLAGS) -c -MD -o $@ $<
 
-$(INT_DIR)/%.o: $(ROOT)/kernel/src/elos/kernel/net/%.c | $(INT_DIR)
-	$(SILENT) $(CC) $(CFLAGS) -c -MD -o $@ $<
-
-$(INT_DIR)/%.o: $(ROOT)/kernel/src/elos/kernel/driver/%.c | $(INT_DIR)
-	$(SILENT) $(CC) $(CFLAGS) -c -MD -o $@ $<
-
-$(INT_DIR)/%.o: $(ROOT)/kernel/src/elos/common/%.c | $(INT_DIR)
-	$(SILENT) $(CC) $(CFLAGS) -c -MD -o $@ $<
-
-$(BOOT_EFI): $(OBJ_FILES) | $(INT_DIR)
+$(BOOT_EFI): $(OBJ_FILES)
+	$(SILENT) mkdir -p $(dir $@)
 	$(SILENT) $(LD) $(LDFLAGS) -o $@ $^
 
 clean:
-	$(SILENT) rm $(OBJ_FILES) $(DEP_FILES) $(BOOT_EFI)
+	@# Should be $(INT_DIR) not 'int' but i'm afraid $(INT_DIR) will be / or . for whatever reason
+	$(SILENT) rm -rf int
