@@ -30,6 +30,7 @@ SRC_DIRS := \
 	$(ROOT)/boot/efi \
 	$(ROOT)/kernel/src/elos/kernel/net \
 	$(ROOT)/kernel/src/elos/kernel/driver \
+	$(ROOT)/kernel/src/elos/kernel/cfg \
 	$(ROOT)/kernel/src/elos/common \
 
 SRC_FILES := $(foreach dir,$(SRC_DIRS),$(shell find $(dir) -name '*.c'))

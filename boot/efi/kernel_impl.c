@@ -37,7 +37,7 @@ NetBoot_Impl netboot_impl;
 NetBoot_Config netboot_config;
 NetBoot_Device netboot_device;
 
-
+KernelConfig kernel_config;
 
 
 void KCON_printf(const char* format, ...) {

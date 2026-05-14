@@ -15,6 +15,7 @@ void memmove(void* dst, const void* src, int size);
 int memcmp(void* dst, void* src, int size);
 
 int strcmp(const char* dst, const char* src);
+int strncmp(const char* dst, const char* src, int);
 void memset(void* dst, int val, int size);
 
 long strtol(const char* ptr, char** endptr, int base);

@@ -177,6 +177,40 @@ There is a high chance it doesn't boot, this means my OS doesn't follow standard
 - `tests` has tests
 - `scripts` useful developer scripts, like gdb qemu commands
 
+# Some output when booting
+
+```log
+Image loaded at: 0x61a5000
+Hello World
+static_ip = 192.168.100.54
+netboot_port = 2493
+netboot_ips[0] = 192.168.100.50
+netboot_ips[1] = 192.168.0.60
+BOOT: Found ACPI 1.0, RSDP at 777e000.
+BOOT: Found ACPI 2.0, XSDP at 777e014.
+No response for DHCP, using static IP address: 192.168.100.54
+Got MAC from ARP, d2:10:42:53:3a:c6, 368 us
+Requesting /KERNEL.IMG
+Finished /KERNEL.IMG
+UEFI - Exit boot services
+Loaded default font
+Initializing physical memory regions
+ps2: Set config byte 38
+second PS2 enabled, disabling...
+ps2: Ports are reset
+ps2: Pick scancode set
+Expected ACK: fa (0xFA)
+ps2: Enable scanning
+Expected ACK: fa (0xFA)
+[INFO] bar[1] 32-bit addr=81080000 size=128 KB
+[INFO] bar[2] IO-mapped addr=c000 size=0 KB
+[INFO] bar[3] 32-bit addr=0 size=0 KB
+[INFO] bar[4] 32-bit addr=0 size=0 KB
+[INFO] bar[5] 32-bit addr=0 size=0 KB
+[INFO] bar[6] 32-bit addr=0 size=0 KB
+NET_init: MAC Address: 52:54:00:12:34:56
+END OF KERNEL_ENTRY!
+```
 
 # OS layout
 
@@ -193,6 +227,7 @@ There is a high chance it doesn't boot, this means my OS doesn't follow standard
 |   Operating System  |
 |---------------------|
 ```
+
 
 
 

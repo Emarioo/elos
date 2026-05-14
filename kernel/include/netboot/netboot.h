@@ -102,8 +102,10 @@ typedef struct NetBoot_Impl {
 } NetBoot_Impl;
 
 typedef struct NetBoot_Config {
+    uint32_t  static_ip;
     uint32_t* server_ips;
     uint32_t  server_ips_len;
+    uint16_t  port;
 } NetBoot_Config;
 
 

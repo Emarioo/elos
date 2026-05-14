@@ -205,14 +205,12 @@ EFI_STATUS load_kernel(void* address) {
     if (!can_load_kernel_from_network) {
         goto local_kernel;
     }
-    static u32 ips[2];
     
-    netboot_config.server_ips = ips;
-    netboot_config.server_ips_len = ARRAY_LENGTH(ips);
-    // The IP address for tap0 must have it's own subnet or it can intefere with the subnet the Host is connected to.
-    // Consequence is no packets sent or received (doesn't show up in wireshark)
-    ips[0] = ipv4_from_str("192.168.100.50"); // QEMU tap0
-    ips[1] = ipv4_from_str("192.168.0.60");   // BEAST computer
+    netboot_config.static_ip = kernel_config.static_ip;
+    netboot_config.server_ips = kernel_config.netboot_ips;
+    netboot_config.server_ips_len = kernel_config.netboot_ips_len;
+    netboot_config.port = kernel_config.netboot_port;
+    
 
     bool res;
 
@@ -285,6 +283,73 @@ EFI_STATUS load_kernel_from_file(void* address) {
     return EFI_SUCCESS;
 }
 
+EFI_STATUS read_kernel_config() {
+    
+    EFI_STATUS Status;
+    EFI_FILE_PROTOCOL* volume;
+    Status = simple_file_system->OpenVolume(simple_file_system, &volume);
+    if (EFI_ERROR(Status)) {
+        printf("OpenVolume %d\n", Status);
+        catch_bad_status();
+        return Status;
+    }
+
+    const char* kernel_path = "\\TEMPLATE.CFG";
+    u16* kernel_wpath = tmp_path_wstring(kernel_path);
+
+    EFI_FILE_PROTOCOL* handle;
+    Status = volume->Open(volume, &handle, kernel_wpath, EFI_FILE_MODE_READ, 0);
+    if (EFI_ERROR(Status)) {
+        printf("Open %d\n", Status);
+        catch_bad_status();
+        return Status;
+    }
+
+    char temp_buffer[sizeof(EFI_FILE_INFO) + 256];
+    EFI_FILE_INFO* file_info = (EFI_FILE_INFO*)temp_buffer;
+    UINTN buffer_size = sizeof(EFI_FILE_INFO) + 256;
+
+    Status = handle->GetInfo(handle, &gEfiFileInfoGuid, &buffer_size, file_info);
+    if (EFI_ERROR(Status)) {
+        printf("GetInfo %d\n", Status);
+        catch_bad_status();
+        return Status;
+    }
+
+    void* text;
+    Status = ST->BootServices->AllocatePool(AllocateAnyPages, file_info->FileSize, &text);
+    if (EFI_ERROR(Status)) {
+        printf("AllocatePool, read config, %d\n", Status);
+        catch_bad_status();
+        return Status;
+    }
+
+    UINTN file_size = file_info->FileSize;
+    Status = handle->Read(handle, &file_size, text);
+    if (EFI_ERROR(Status)) {
+        printf("Read %d\n", Status);
+        catch_bad_status();
+        return Status;
+    }
+
+    char* error;
+    bool parsed = CFG_parse(text, file_size, &kernel_config, &error);
+    if (!parsed) {
+        printf("KernelConfig parser error: %s\n", error);
+        return -1;
+    }
+
+    char buffer0[30];
+    printf("static_ip = %s\n", ipv4_str((u8*)&kernel_config.static_ip, buffer0));
+    printf("netboot_port = %d\n", kernel_config.netboot_port);
+    printf("netboot_ips[0] = %s\n", ipv4_str((u8*)&kernel_config.netboot_ips[0], buffer0));
+    printf("netboot_ips[1] = %s\n", ipv4_str((u8*)&kernel_config.netboot_ips[1], buffer0));
+
+    return EFI_SUCCESS;
+}
+
+
+
 #define FREEZE() while (1) pause();
 
 // Breakpoint when debugging
@@ -330,9 +395,6 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     efi_entry();
 
 
-    init_network();
-
-
     Status = BS->HandleProtocol(loaded_image->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (void**)&simple_file_system);
     if (EFI_ERROR(Status)) {
         printf("gEfiSimpleFileSystemProtocolGuid failed: 0x%lx\n", Status);
@@ -348,6 +410,17 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
         FREEZE();
         return Status;
     }
+
+    Status = read_kernel_config();
+    if (EFI_ERROR(Status)) {
+        // Error already printed.
+        catch_bad_status();
+        FREEZE();
+        return Status;
+    }
+
+
+    init_network();
 
     EFI_GUID acpi20 = ACPI_20_TABLE_GUID;
     

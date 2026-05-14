@@ -36,6 +36,7 @@ def main():
     img       = False
     install   = False
     clean     = False
+    netboot   = False
 
     argi = 1
     while argi < len(sys.argv):
@@ -48,7 +49,9 @@ def main():
             VERBOSE = True
         elif arg == "run":
             run = True
+            img = True
         elif arg == "gdb":
+            img = True
             run = True
             gdb = True
         # elif arg == "vbox":
@@ -62,15 +65,23 @@ def main():
         elif arg == "clean":
             clean = True
         elif arg == "iso":
+            img = True
             iso = True
         elif arg == "install":
             install = True
+        elif arg == "netboot":
+            netboot = True
         else:
             print(f"Unknown argument '{arg}'")
             exit(1)
 
     if len(sys.argv) <= 1:
         run = True
+        img = True
+
+    if install:
+        install_deps()
+        exit(0)
 
     if clean:
         if os.path.exists("bin"):
@@ -81,25 +92,36 @@ def main():
             shutil.rmtree("releases")
         return 0
 
+    netboot_server = "int/netboot_server_windows/netboot.exe" if platform.system() == "Windows" else "int/netboot_server_linux/netboot"
+    netboot_server_bin = f"bin/{os.path.basename(netboot_server)}"
     cmd(f"make -f {ROOT}/netboot_server/Makefile")
+    if os.path.exists(netboot_server):
+        os.makedirs("bin", exist_ok=True)
+        try:
+            shutil.copy(netboot_server, netboot_server_bin)
+        except:
+            pass
 
     if vbox:
-        build_elos("bin/elos.img")
-        cmd("dd if=bin/elos.img of=bin/elos_padded.img bs=1M count=64 conv=sync")
-        vdi_path = "/mnt/d/vms/elos.vdi"
-        cmd(f"rm -f {vdi_path}")
-        cmd(f"VBoxManage convertfromraw bin/elos_padded.img {vdi_path} --format VDI")
-    elif install:
-        install_deps()
+        print("VBOX NO WORK")
+        exit(1)
+        # build_elos("bin/elos.img")
+        # cmd("dd if=bin/elos.img of=bin/elos_padded.img bs=1M count=64 conv=sync")
+        # vdi_path = "/mnt/d/vms/elos.vdi"
+        # cmd(f"rm -f {vdi_path}")
+        # cmd(f"VBoxManage convertfromraw bin/elos_padded.img {vdi_path} --format VDI")
     # elif usb:
     #     build_elos("bin/elos")
     #     build_image("bin/elos.img")
         # cmd("dd if=bin/elos.img of=bin/elos_padded.img bs=1M count=64 conv=sync")
-    else:
-        package_elos("releases", iso)
-        
 
-    if run:
+    if img:
+        package_elos("releases", iso)
+
+    if netboot:
+        cmd(f"{netboot_server_bin}")
+
+    elif run:
         # TODO: DON'T HARDCODE PATHS
         OVMF_FD = "extern/ovmf/OVMF.fd"
 
@@ -142,7 +164,6 @@ def main():
             else:
                 flag = line[:at].strip()
             if len(flag) > 0:
-                print(line, "->", flag)
                 qemu_flags += flag + " "
 
         cmd(f"qemu-system-x86_64 {qemu_flags}")
@@ -162,11 +183,11 @@ def package_elos(release_dir, build_iso = False):
 
     os.makedirs(temp_folder_path+"/fs/EFI/BOOT", exist_ok=True)
 
-    iso_path     = f"{temp_folder_path}/elos.iso"
-    img_path     = f"{temp_folder_path}/elos.img"
-    kernel_elf_path     = f"{temp_folder_path}/kernel.elf"
-    bootx64_path = f"{temp_folder_path}/fs/EFI/BOOT/BOOTX64.EFI"
-    kernel_path  = f"{temp_folder_path}/fs/kernel.img"
+    iso_path        = f"{temp_folder_path}/elos.iso"
+    img_path        = f"{temp_folder_path}/elos.img"
+    kernel_elf_path = f"{temp_folder_path}/kernel.elf"
+    bootx64_path    = f"{temp_folder_path}/fs/EFI/BOOT/BOOTX64.EFI"
+    kernel_path     = f"{temp_folder_path}/fs/KERNEL.IMG"
 
     INT_DIR=f"{ROOT}/int"
 
@@ -179,8 +200,9 @@ def package_elos(release_dir, build_iso = False):
     
     DEPS_SPEC: list[tuple[str,str]] = [
         (bootx64_path, "EFI/BOOT/BOOTX64.EFI"),
-        (kernel_path, "kernel.img"),
-        ("res/Lat2-Terminus16.psf", "RES/STDFONT.PSF"),
+        (kernel_path, "KERNEL.IMG"),
+        # ("res/Lat2-Terminus16.psf", "RES/STDFONT.PSF"),  # baked into kernel image, not needed here
+        ("boot/template.cfg", "TEMPLATE.CFG"),
     ]
 
     ISO_DIR = f"{INT_DIR}/image"
@@ -263,6 +285,9 @@ def make_fat(out_path: str, deps_spec: list[tuple[str,str]]):
     if os.path.exists(out_path):
         os.remove(out_path)
 
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    os.makedirs(INT_DIR, exist_ok=True)
+
     cmd(f"dd if=/dev/zero of={out_path} bs=1k count={math.ceil(fatSize/1024)} conv=fsync")
     cmd(f"mformat -i {out_path} ::")
 
@@ -305,7 +330,10 @@ def cmd(c):
     if platform.system() == "Windows":
         c = c.replace('/', "\\")
         sp = c.split(" ")
-        sp[0] += ".exe"
+        if sp[0] == "make":
+            sp[0] = "mingw32-make"
+        elif not sp[0].endswith(".exe"):
+            sp[0] += ".exe"
         c = " ".join(sp)
     
     if VERBOSE:

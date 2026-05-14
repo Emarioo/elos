@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include "netboot/netboot.h"
+#include "elos/kernel/cfg/kernel_cfg.h"
 
 #include <efi.h>
 #include <efilib.h>
@@ -21,3 +22,5 @@ void KCON_printf(const char* format, ...);
 extern NetBoot_Impl netboot_impl;
 extern NetBoot_Config netboot_config;
 extern NetBoot_Device netboot_device;
+
+extern KernelConfig kernel_config;

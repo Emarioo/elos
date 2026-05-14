@@ -65,11 +65,12 @@ bool NETBOOT_init(NetBoot_Impl* impl, NetBoot_Config* config) {
 
     bool yes = NETBOOT_query_dhcp_ip(&my_ip_address);
     if (!yes) {
-        // No DHCP response. (probably running in QEMU)
-        // Use hardcoded IP address.
-        const char* hardcoded_address = "192.168.100.54";
-        my_ip_address = ipv4_from_str(hardcoded_address);
-        printf("No response for DHCP, using hardcoded address: %s\n", hardcoded_address);
+        // If we get no DHCP response then we will use a hardcoded address for the 
+        // machine we are booting on.
+        // (with tap0 we have no DHCP server on the interface, with -net user qemu flag we do get DHCP, but no ARP i believe)
+        my_ip_address = g_config.static_ip;
+        char buffer0[30];
+        printf("No response for DHCP, using static IP address: %s\n", ipv4_str((u8*)&my_ip_address, buffer0));
     }
 
     bool got_mac = false;
@@ -186,7 +187,7 @@ bool NETBOOT_query_dhcp_ip(uint32_t* address) {
 
         frame->etherType = bswap16(frame->etherType);
 
-        // printf("Ether typ %d\r\n", frame->etherType);
+        // printf("Ether typ %d\n", frame->etherType);
 
         if (frame->etherType == ETHER_IPV4) {
             IPV4_Header* ip = (IPV4_Header*)((char*)g_recv_buffer + sizeof(EtherFrame));
@@ -298,7 +299,7 @@ bool NETBOOT_query_mac(uint32_t address, uint8_t mac[6]) {
 
         frame->etherType = bswap16(frame->etherType);
 
-        // printf("Ether typ %d\r\n", frame->etherType);
+        // printf("Ether typ %d\n", frame->etherType);
 
         if (frame->etherType == ETHER_ARP) {
             ARP_Header* arp = (ARP_Header*)((char*)g_recv_buffer + sizeof(EtherFrame));
@@ -307,7 +308,7 @@ bool NETBOOT_query_mac(uint32_t address, uint8_t mac[6]) {
             arp->protocol_type = bswap16(arp->protocol_type);
             arp->operation     = bswap16(arp->operation);
 
-            // printf("ARP oper %d\r\n", arp->operation);
+            // printf("ARP oper %d\n", arp->operation);
             
             if (arp->hardware_type == ARP_ETHERNET && arp->protocol_type == ETHER_IPV4) {
                 ARP_Header_EthernetIPV4* arp_ipv4 = (ARP_Header_EthernetIPV4*)arp;
@@ -344,12 +345,12 @@ bool NETBOOT_handle_base(char* buffer, int size) {
         if (hardware_type == ARP_ETHERNET && protocol_type == ETHER_IPV4 && operation == ARP_REQUEST) {
             ARP_Header_EthernetIPV4* arp_ipv4 = (ARP_Header_EthernetIPV4*)arp;
             // memcpy(mac, arp_ipv4->sender_hw_address, 6);
-            // printf("Got MAC from ARP\r\n");
+            // printf("Got MAC from ARP\n");
 
             int packet_size = sizeof(EtherFrame) + sizeof(ARP_Header_EthernetIPV4);
             construct_arp_reply(g_send_buffer, &packet_size, g_impl.mac, my_ip_address, arp_ipv4->sender_hw_address, *(u32*)&arp_ipv4->sender_proto_address);
 
-            debug("Handled ARP REQUEST\r\n");
+            debug("Handled ARP REQUEST\n");
             send_packet(g_send_buffer, packet_size);
             return true;
         }
@@ -418,7 +419,7 @@ uint64_t now_us() {
 
 // offset and size are optional
 int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void* buffer) {
-    printf("Requesting %s\r\n", path);
+    printf("Requesting %s\n", path);
 
     request_file(path, offset, size);
 
@@ -440,12 +441,12 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
             // @TODO If we haven't received all data then and no more SEND_FILE packets
             //   are arriving then we should let server know what we are missing.
             uint64_t now = now_us();
-            // printf("wait %d...\r\n", (now - timeoutStart_us) / 1000);
+            // printf("wait %d...\n", (now - timeoutStart_us) / 1000);
             if (now - timeoutStart_us > timeoutValue) {
                 break;
             }
             pause();
-            // printf("limit %d recvbytes=%d\r\n", limit, received_bytes);
+            // printf("limit %d recvbytes=%d\n", limit, received_bytes);
             continue;
         }
 
@@ -473,10 +474,10 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
         udp->checksum = bswap16(udp->checksum);
 
         // printf("CA\n");
-        // printf("UDP src=%d dst=%d len=%d chk=%d\r\n", udp->sourcePort, udp->destinationPort, udp->length, udp->checksum);
+        // printf("UDP src=%d dst=%d len=%d chk=%d\n", udp->sourcePort, udp->destinationPort, udp->length, udp->checksum);
 
         if (udp->destinationPort != SRC_PORT) {
-            // printf("Wrong port, %d\r\n", udp->destinationPort);
+            // printf("Wrong port, %d\n", udp->destinationPort);
             continue;
         }
         
@@ -484,32 +485,32 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
         
         NetBoot_Header* net = (NetBoot_Header*)((char*)udp + sizeof(UDP_Header));
         if (memcmp(net->magic, NETBOOT_MAGIC, 4) || net->version != 1) {
-            printf("Not bootmagic, ver=%d magic=\"%c%c%c%c\"\r\n", net->version, net->magic[0], net->magic[1], net->magic[2], net->magic[3]);
+            printf("Not bootmagic, ver=%d magic=\"%c%c%c%c\"\n", net->version, net->magic[0], net->magic[1], net->magic[2], net->magic[3]);
             continue;
         }
         
         // printf("NAS\n");
         if (net->type != NETBOOT_SEND_FILE) {
-            printf("NetBOOT Type is not SEND FILE, %d\r\n", net->type);
+            printf("NetBOOT Type is not SEND FILE, %d\n", net->type);
             continue;
         }
         NetBoot_Send_File* sendf = (NetBoot_Send_File*)net;
 
         int buffer_offset = sendf->offset - offset;
         if (buffer_offset < 0 || buffer_offset + sendf->size > size) {
-            printf("Invalid offsets %d %d\r\n", sendf->offset, sendf->size);
+            printf("Invalid offsets %d %d\n", sendf->offset, sendf->size);
             // Invalid size/offsets, malicious packet?
             continue;
         }
         
-        // printf("Memcpy %x, %d, %d\r\n", buffer, buffer_offset, sendf->size);
+        // printf("Memcpy %x, %d, %d\n", buffer, buffer_offset, sendf->size);
         // printf("CHILL\n");
         memcpy((char*)buffer + buffer_offset, sendf->payload, sendf->size);
 
         received_bytes += sendf->size;
 
 
-        // debug("Recv file size, recbytes=%d off=%d recvsize=%d total=%d foff=%d\r\n", received_bytes, buffer_offset, sendf->size, sendf->totalFileSize, sendf->offset);
+        // debug("Recv file size, recbytes=%d off=%d recvsize=%d total=%d foff=%d\n", received_bytes, buffer_offset, sendf->size, sendf->totalFileSize, sendf->offset);
         timeoutStart_us = now_us();
 
         send_file_ack(frame->source, ipv4->sourceAddress, udp->sourcePort, sendf->offset, sendf->size);
@@ -522,12 +523,12 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
             printf("Finished %s\n", path);
             return received_bytes;
         } else if (received_bytes > size) {
-            printf("Recevied too many bytes, %d > %d\r\n", received_bytes, size);
+            printf("Recevied too many bytes, %d > %d\n", received_bytes, size);
             break;
         }
     }
 
-    printf("No response on NETBOOT file request? (or incomplete response)\r\n");
+    printf("No response on NETBOOT file request? (or incomplete response)\n");
 
     return 0;
 }
@@ -540,7 +541,7 @@ void request_file(const char* path, uint64_t offset, uint64_t size) {
     int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + message_udpSize;
 
     if (packet_size > sizeof(g_send_buffer)) {
-        printf("NET: UDP packet data to big for static buffer, dropping\r\n");
+        printf("NET: UDP packet data to big for static buffer, dropping\n");
         // return 0;
     }
 
@@ -549,6 +550,8 @@ void request_file(const char* path, uint64_t offset, uint64_t size) {
     memcpy(message_frame->source, my_mac_address, 6);
     message_frame->etherType = ETHER_IPV4;
     
+    message_frame->etherType = bswap16(message_frame->etherType);
+
     IPV4_Header* message_ipv4 = (IPV4_Header*)(g_send_buffer + sizeof(EtherFrame));
     message_ipv4->headerLength = sizeof(IPV4_Header) / 4;
     message_ipv4->version = 4;
@@ -561,7 +564,6 @@ void request_file(const char* path, uint64_t offset, uint64_t size) {
     memcpy(&message_ipv4->sourceAddress, &my_ip_address, 4);
     memcpy(&message_ipv4->destinationAddress, &target_ip_address, 4);
 
-    message_frame->etherType = bswap16(message_frame->etherType);
     message_ipv4->totalLength = bswap16(message_ipv4->totalLength);
     message_ipv4->identification = bswap16(message_ipv4->identification);
     message_ipv4->fragmentPart = bswap16(message_ipv4->fragmentPart);
@@ -570,7 +572,7 @@ void request_file(const char* path, uint64_t offset, uint64_t size) {
 
     UDP_Header* message_udp = (UDP_Header*)(g_send_buffer + sizeof(EtherFrame) + sizeof(IPV4_Header));
     message_udp->sourcePort = SRC_PORT;
-    message_udp->destinationPort = TARGET_PORT;
+    message_udp->destinationPort = g_config.port;
     message_udp->checksum = 0;
     message_udp->length = message_udpSize;
 
@@ -589,15 +591,15 @@ void request_file(const char* path, uint64_t offset, uint64_t size) {
     req->filePath[req->filePath_len] = '\0';
 
     // @TODO Checksum. Need pseduo header for ipv4
-    // UDP_Pseudo_Header pseudo = {};
-    // pseudo.sourceAddress = message_ipv4->sourceAddress;
-    // pseudo.destinationAddress = message_ipv4->destinationAddress;
-    // pseudo.protocol = IP_UDP;
-    // pseudo.udpLength = bswap16(message_udpSize);
+    UDP_Pseudo_Header pseudo = {0};
+    pseudo.sourceAddress = message_ipv4->sourceAddress;
+    pseudo.destinationAddress = message_ipv4->destinationAddress;
+    pseudo.protocol = IP_UDP;
+    pseudo.udpLength = bswap16(message_udpSize);
 
-    // message_udp->checksum = bswap16(~compute_internet_checksum(&pseudo, sizeof(UDP_Pseudo_Header)));
+    message_udp->checksum = bswap16(~compute_internet_checksum(&pseudo, sizeof(UDP_Pseudo_Header)));
 
-    // message_udp->checksum = bswap16(compute_internet_checksum(message_udp, message_udpSize));
+    message_udp->checksum = bswap16(compute_internet_checksum(message_udp, message_udpSize));
 
     send_packet(g_send_buffer, packet_size);
 }
@@ -608,7 +610,7 @@ void send_file_ack(uint8_t mac[6], uint32_t address, uint16_t port, uint64_t off
     int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + message_udpSize;
 
     if (packet_size > sizeof(g_send_buffer)) {
-        printf("NET: UDP packet data to big for static buffer, dropping\r\n");
+        printf("NET: UDP packet data to big for static buffer, dropping\n");
         // return 0;
     }
 
@@ -654,17 +656,17 @@ void send_file_ack(uint8_t mac[6], uint32_t address, uint16_t port, uint64_t off
     req->size = size;
 
     // @TODO Checksum. Need pseduo header for ipv4
-    // UDP_Pseudo_Header pseudo = {};
-    // pseudo.sourceAddress = message_ipv4->sourceAddress;
-    // pseudo.destinationAddress = message_ipv4->destinationAddress;
-    // pseudo.protocol = IP_UDP;
-    // pseudo.udpLength = bswap16(message_udpSize);
+    UDP_Pseudo_Header pseudo = {0};
+    pseudo.sourceAddress = message_ipv4->sourceAddress;
+    pseudo.destinationAddress = message_ipv4->destinationAddress;
+    pseudo.protocol = IP_UDP;
+    pseudo.udpLength = bswap16(message_udpSize);
 
-    // message_udp->checksum = bswap16(~compute_internet_checksum(&pseudo, sizeof(UDP_Pseudo_Header)));
+    message_udp->checksum = bswap16(~compute_internet_checksum(&pseudo, sizeof(UDP_Pseudo_Header)));
 
-    // message_udp->checksum = bswap16(compute_internet_checksum(message_udp, message_udpSize));
+    message_udp->checksum = bswap16(compute_internet_checksum(message_udp, message_udpSize));
 
     send_packet(g_send_buffer, packet_size);
 
-    // debug("Sent ack off=%d size=%d\r\n", (int)offset, (int)size);
+    // debug("Sent ack off=%d size=%d\n", (int)offset, (int)size);
 }

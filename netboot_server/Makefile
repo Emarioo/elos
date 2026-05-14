@@ -5,10 +5,10 @@
 # Parameters to set:
 
 ifeq ($(OS),Windows_NT)
-  INT_DIR  ?= int/netserv_windows
+  INT_DIR  ?= int/netboot_server_windows
   NETBOOT_APP ?= $(INT_DIR)/netboot.exe
 else
-  INT_DIR  ?= int/netserv_linux
+  INT_DIR  ?= int/netboot_server_linux
   NETBOOT_APP ?= $(INT_DIR)/netboot
 endif
 

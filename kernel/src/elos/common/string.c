@@ -328,6 +328,22 @@ int strcmp(const char* dst, const char* src) {
     return 0;
 }
 
+int strncmp(const char* dst, const char* src, int len) {
+    int i=0;
+    while (i < len) {
+        char s = src[i];
+        char d = dst[i];
+        if (d != s) {
+            return d - s;
+        }
+        if (d == 0) {
+            break;
+        }
+        i++;
+    }
+    return 0;
+}
+
 void memset(void* dst, int val, int size) {
     for(int i=0;i<size;i++) {
         *((char*)dst + i) = val;

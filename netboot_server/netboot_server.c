@@ -104,6 +104,14 @@ void work();
 
 socket_t listenSocket;
 
+
+const char* ipv4_str(char address[4], char* buffer) {
+    snprintf(buffer, 20, "%u.%u.%u.%u", 
+        address[0], address[1], address[2], address[3]
+    );
+    return buffer;
+}
+
 int main(int argc, char** argv) {
     int res;
 
@@ -144,6 +152,9 @@ int main(int argc, char** argv) {
         pthread_t thread;
         res = pthread_create(&thread, NULL, (FN_Thread) thread_loss_detection, NULL);
     #endif
+
+    char ip_buffer[30];
+    printf("NetBoot server listening on %s:%d\n", ipv4_str((char*)&addr.sin_addr, ip_buffer), PORT);
 
     work();
 }
