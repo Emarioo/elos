@@ -70,6 +70,42 @@ static inline uint64_t rdtsc() {
     return value;
 }
 
+static inline u64 rdmsr(u32 msr)
+{
+    u32 low, high;
+
+    asm volatile (
+        "rdmsr"
+        : "=a"(low), "=d"(high)
+        : "c"(msr)
+    );
+
+    return ((u64)high << 32) | low;
+}
+
+static inline void wrmsr(u32 msr, u64 value)
+{
+    u32 low = value & 0xFFFFFFFF;
+    u32 high = value > 32;
+
+    asm volatile (
+        "wrmsr"
+        : 
+        : "c"(msr), "a"(low), "d"(high)
+    );
+}
+
+// static inline uint64_t cpuid() {
+//     uint64_t value;
+//     asm(
+//         "rdtsc\n"
+//         "shl $32, %%rdx\n"
+//         "or %%rdx, %%rax\n"
+//         : "=a" (value)
+//         :
+//     );
+//     return value;
+// }
 
 static inline u64 read_cr2() {
     u64 reg;

@@ -1,6 +1,7 @@
 
 Completed todos
 
+- 2026-05-14, Configuration file for NetBoot addresses.
 - 2026-05-11, Boot from network by download kernel.img in EFI application on laptop.
 - 2026-04-XX, Bare bones network driver for i8254x and rtl8169.
 

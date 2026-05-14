@@ -68,7 +68,6 @@ void FB_write(const char* buffer, int len) {
             continue;
         
         cstring text = { buffer + start, head - start };
-        head++;
         start = head;
 
         if (text.len > 0) {
@@ -87,7 +86,7 @@ void FB_write(const char* buffer, int len) {
             int screen_width, screen_height;
             draw_frame_info(&screen_width, &screen_height);
 
-            // draw_rect(0, pos_y + text_height, screen_width, text_height, DARK_BLUE);
+            draw_rect(0, pos_y + text_height, screen_width, text_height, DARK_BLUE);
 
             if (pos_y + text_height + border_padding >= screen_height) {
                 // @TODO: When about to go beyond the screen border we wrap around.

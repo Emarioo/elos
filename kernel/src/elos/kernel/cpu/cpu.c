@@ -7,17 +7,26 @@
 #include "elos/kernel/driver/acpi.h"
 
 #include "elos/common/intrinsics.h"
+#include "elos/physical_memory.h"
+
+#include "elos/kernel/kbd/ps2.h"
+#include "elos/kernel/kbd/keys.h"
 
 
 
-void init_gdt_idt();
+void init_gdt();
+void init_idt();
+void init_apic();
 
 
 void CPU_init(BootAPI* boot_api) {
 
-    init_gdt_idt();
+    init_gdt();
+    init_idt();
 
     acpi_init(boot_api);
+
+    init_apic();
 
 }
 
@@ -72,17 +81,47 @@ typedef struct {
     uint64_t ss;
 } PageFaultFrame;
 
+volatile u32* g_lapic;
+
+
 void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     if (isr_number == 14) {
         u64 fault_address = read_cr2();
-        printf("EXCEPTION #%d (rip=0x%x addr=0x%x err=0x%x)", isr_number, frame->rip, fault_address, frame->error_code);
+        printf("EXCEPTION #%d (rip=0x%x addr=0x%x err=0x%x)\n", isr_number, frame->rip, fault_address, frame->error_code);
     } else {
         printf("EXCEPTION #%d (error code=0x%x)\nHALTING\n", isr_number, frame->error_code);
     }
-    while (1) asm ( "cli\n" );
+    while (1) asm ( "cli\npause\n" );
+}
+
+void interrupt_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
+    printf("Interrupt #%d\n", isr_number);
+    
+    int scancode = ps2_read_scancode();
+    int chr = scancode_to_char(scancode, 0);
+
+    printf("scancode %d, %c\n", scancode, chr);
+
+    if (g_lapic)
+        g_lapic[0xB0/4] = 0; // clear EOI
 }
 
 
+void unused_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
+    printf("Interrupt unused #%d\n", isr_number);
+
+    if (g_lapic)
+        g_lapic[0xB0/4] = 0; // clear EOI
+}
+
+
+
+void interrupt_timer() {
+    printf("Timer triggered\n");
+
+    if (g_lapic)
+        g_lapic[0xB0/4] = 0; // clear EOI
+}
 
 
 #define MAKE_SEGMENT_DESC(BASE,LIMIT,ACCESS_BYTE,FLAGS) (\
@@ -118,7 +157,7 @@ void idt_set_descriptor(uint8_t vector, void* isr, uint8_t flags) {
 extern u8 __text_start;
 extern u8 __data_start;
 
-void init_gdt_idt() {
+void init_gdt() {
     
     asm ( "cli\n" );
 
@@ -154,8 +193,15 @@ void init_gdt_idt() {
         :::"rax"
     );
 
+    asm ( "sti\n" );
+}
 
-    for (int vector = 0; vector < 32; vector++) {
+void init_idt() {
+
+    asm ( "cli\n" );
+
+    for (int vector = 0; vector < 256; vector++) {
+        // 0x8e = 64-bit interrupt gate, present bit, super privilege
         idt_set_descriptor(vector, isr_stub_table[vector], 0x8e);
         vectors[vector] = true;
     }
@@ -163,6 +209,89 @@ void init_gdt_idt() {
     _idt_register.limit = sizeof(*_idt) * IDT_MAX_DESCRIPTORS - 1;
 
     asm ( "lidt %0\n" : : "m"(_idt_register));
+
+    asm ( "sti\n" );
+}
+
+
+
+uint32_t cpuReadIoApic(void *ioapicaddr, uint32_t reg)
+{
+   uint32_t volatile *ioapic = (uint32_t volatile *)ioapicaddr;
+   ioapic[0] = (reg & 0xff);
+   return ioapic[4];
+}
+
+void cpuWriteIoApic(void *ioapicaddr, uint32_t reg, uint32_t value)
+{
+   uint32_t volatile *ioapic = (uint32_t volatile *)ioapicaddr;
+   ioapic[0] = (reg & 0xff);
+   ioapic[4] = value;
+}
+
+
+
+
+void init_apic() {
+
+    asm ( "cli\n" );
+
+
+    #define IA32_APIC_BASE_MSR 0x1B
+    #define APIC_SOFTWARE_ENABLE 0x100
+
+    // @TODO Check APIC
+
+    // asm (
+    //     "cpuid\n"
+    // )
+
+    u64 apic_base = rdmsr(IA32_APIC_BASE_MSR);
+    apic_base |= (u64)1 << 11; // enable APIC
+    wrmsr(IA32_APIC_BASE_MSR, apic_base);
+
+    // Read base from MADT?
+    u64 lapic_base = apic_base & 0xFFFFF000;
+
+    PMEM_map_memory((void*)lapic_base, (void*)lapic_base, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
+
+    volatile u32* lapic = (volatile u32*)lapic_base;
+
+    g_lapic = lapic;
+
+    // lapic[0x3e0/4] = 0x3;
+    // lapic[0x320/4] = 48 | (1 << 17);
+    // lapic[0x380/4] = 10000000;
+
+    // printf("LVT timer=%x\n", lapic[0x320 / 4]);
+
+
+    int lapic_id = lapic[0x20/4];
+    printf("apic id: %d\n", lapic_id);
+
+    // 0xF0 = offset to spurious vector (/4 because lapic is u32)
+    #define SPURIOUS_VECTOR_OFFSET (0xF0/4)
+    lapic[SPURIOUS_VECTOR_OFFSET] = (lapic[SPURIOUS_VECTOR_OFFSET] & ~0xFF) | (APIC_SOFTWARE_ENABLE | 0xFF);
+
+    printf("SVR: %x\n", lapic[SPURIOUS_VECTOR_OFFSET]);
+
+    // Mask PIC IRQs
+    outb(0x21, 0xFF);
+    outb(0xA1, 0xFF);
+
+    // Read from MADT
+    #define IOAPIC_BASE ((void*)0xFEC00000)
+    
+    PMEM_map_memory((void*)IOAPIC_BASE, (void*)IOAPIC_BASE, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
+
+    // move APIC ID into ioapic here, currently fine since it's zero.
+    cpuWriteIoApic(IOAPIC_BASE, 0x12, 33);
+    cpuWriteIoApic(IOAPIC_BASE, 0x13, 0);
+
+    
+    lapic[0xB0/4] = 0; // clear EOI
+    lapic[0x280/4] = 0; // clear Error Status
+    lapic[0x280/4] = 0; // clear Error Status
 
     asm ( "sti\n" );
 }

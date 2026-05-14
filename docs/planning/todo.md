@@ -19,8 +19,8 @@ The categories are:
 Tasks related to kernel and operating system
 
 ## @current
+- [ ] A key to reboot kernel.
 - [ ] Driver for file system, disk device.
-- [ ] Decide on config file for Operating System (what it should contain and text format parsing). This is a boot config file that will contain IP addresses to NetBoot server at the very least.
 
 ## @urgent
 

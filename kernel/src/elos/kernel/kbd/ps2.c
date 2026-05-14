@@ -111,10 +111,15 @@ int ps2_init() {
 
     config_byte = ps2_send_read_command(0x20);
 
+    bool enable_interrupt = true;
+
     // These bits keep second PS/2 port bits and disables interrupt
     // for first PS/2, sets system flag, enabled first port clock
     // @TODO Set second PS/2 port clock, if enabled
     config_byte = (config_byte & 0b00100010) | 0b00000100;
+    if (enable_interrupt) {
+        config_byte |= 0b1;
+    }
     ps2_send_write_command(0x60, config_byte);
 
     printf("ps2: Set config byte %d\n", (int)config_byte);
