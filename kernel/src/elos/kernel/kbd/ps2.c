@@ -78,6 +78,36 @@ int ps2_read_scancode() {
 }
 
 
+int ps2_poll_scancode() {
+    
+    int res = inb(KBD_STATUS);
+    if ((res & PS2_READ_STATUS_MASK) == 0) {
+        // no key
+        return 0;
+    }
+
+    int data = inb(KBD_DATA);
+
+    if (data == 0xE0) {
+        int data2 = ps2_read_byte();
+        if (data2 == 0xF0) {
+            // Release don't care
+            data = ps2_read_byte();
+            return 0;
+        } else {
+            return 0xE000 | data2;
+        }
+    } else if (data == 0xF0) {
+        // Key release, don't care about data
+        data = ps2_read_byte();
+        return 0;
+    } else {
+        // key press, we want the code
+        return data;
+    }
+}
+
+
 void ps2_send_write_command(u8 cmd, u8 byte) {
     // @TODO Status register has "Command/data" where
     //      0 = data written to input buffer is data for PS/2 device
@@ -122,7 +152,7 @@ int ps2_init() {
     }
     ps2_send_write_command(0x60, config_byte);
 
-    printf("ps2: Set config byte %d\n", (int)config_byte);
+    // printf("ps2: Set config byte %d\n", (int)config_byte);
 
     // Self test controller
     byte = ps2_send_read_command(0xAA);
@@ -133,7 +163,7 @@ int ps2_init() {
     // Restore configuration byte, self test may have affected it
     ps2_send_write_command(0x60, config_byte);
 
-    ps2_send_command(0xA8);
+    // ps2_send_command(0xA8);
 
     config_byte = ps2_send_read_command(0x20);
     if (config_byte & 0b10000) {
@@ -159,37 +189,44 @@ int ps2_init() {
     ps2_send_command(0xAE);
 
     // Reset ports
-    ps2_send_command(0xFF);
-    printf("ps2: Ports are reset\n");
+    int limit = 500;
+    while ((inb(KBD_STATUS) & PS2_WRITE_STATUS_MASK) == 0 && limit > 0) {
+        limit--;
+    };
+    outb(KBD_DATA, 0xFF);
+    // printf("ps2: Ports are reset\n");
     // sleep_ns(500000000);
 
 
     ps2_write_byte(0xF0);
     ps2_write_byte(2);
-    printf("ps2: Pick scancode set\n");
+    // printf("ps2: Pick scancode set\n");
     // sleep_ns(500000000);
 
     while (1) {
         int val = inb(KBD_STATUS);
         if ((val & PS2_READ_STATUS_MASK)) {
             val = inb(KBD_DATA);
-            printf("Expected ACK: %x (0xFA)\n", val);
+            // printf("Expected ACK: %x (0xFA)\n", val);
             break;
         }
     }
 
     ps2_write_byte(0xF4);
-    printf("ps2: Enable scanning\n");
+    // printf("ps2: Enable scanning\n");
     // sleep_ns(500000000);
 
     while (1) {
         int val = inb(KBD_STATUS);
         if ((val & PS2_READ_STATUS_MASK)) {
             val = inb(KBD_DATA);
-            printf("Expected ACK: %x (0xFA)\n", val);
+            // printf("Expected ACK: %x (0xFA)\n", val);
             break;
         }
     }
+
+    config_byte = ps2_send_read_command(0x20);
+    printf("config byte: %d\n", config_byte);
 
 
     // Let's print bytes we receive from ps2
@@ -228,7 +265,7 @@ int ps2_init() {
 }
 
 
-static int _keycode_list[] = {
+static int _keycode_ask_list[] = {
     KEY_ESCAPE,
     KEY_F1,
     KEY_F2,
@@ -307,10 +344,10 @@ Keymap _default_keymap;
 int ps2_ask_keymap() {
     
     int key_index = 0;
-    int key_len = sizeof(_keycode_list)/sizeof(*_keycode_list);
+    int key_len = sizeof(_keycode_ask_list)/sizeof(*_keycode_ask_list);
 
     while (key_index < key_len) {
-        int keycode = _keycode_list[key_index];
+        int keycode = _keycode_ask_list[key_index];
         key_index++;
 
         const char* name = key_name(keycode);

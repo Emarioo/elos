@@ -23,6 +23,14 @@ Keycode KBD_read_key(int* character, int* mods) {
     return scancode_to_keycode(scancode);
 }
 
+
+Keycode KBD_poll_key() {
+    int scancode = ps2_poll_scancode();
+    
+    return scancode_to_keycode(scancode);
+}
+
+
                     // keycode scancode
 const char* sv_keymap = "1 118\n"
                         "2 18\n"

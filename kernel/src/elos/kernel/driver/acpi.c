@@ -6,7 +6,21 @@
 // #include "elos/kernel/pmem/paging.h"
 #include "elos/physical_memory.h"
 
+#include "elos/common/intrinsics.h"
+
 #define printf(...) KCON_printf(__VA_ARGS__)
+
+
+
+
+static int reset_addressSpace;
+static u64 reset_address;
+static u8  reset_value;
+
+
+u64 acpi_lapic_address;
+u64 acpi_ioapic_address;
+
 
 void acpi_init(BootAPI* boot_api) {
 
@@ -68,6 +82,9 @@ void acpi_init(BootAPI* boot_api) {
         printf("MADT LAPIC address: %x\n", madt_extra->lapic_address);
         printf("MADT flags: %x\n", madt_extra->flags);
 
+        
+        acpi_lapic_address = madt_extra->lapic_address;
+
         u8* entries = (u8*)madt_extra + sizeof(MADT_header);
         int entries_size = madt->Length - sizeof(ACPI_SDTHeader) - sizeof(MADT_header);
         int head = 0;
@@ -90,6 +107,8 @@ void acpi_init(BootAPI* boot_api) {
                     printf(" ioapicID: %d\n", entry->ioapicID);
                     printf(" ioapicAddress: %x\n", entry->ioapicAddress);
                     printf(" globalSystemInterruptBase: %x\n", entry->globalSystemInterruptBase);
+                    
+                    acpi_ioapic_address = entry->ioapicAddress;
                 } break;
                 case MADT_ENTRY_IOAPIC_INTERRUPT_SRC_OVERRIDE: {
                     MADT_ioapic_interrupt_source_override* entry = (MADT_ioapic_interrupt_source_override*)entry_base;
@@ -117,6 +136,8 @@ void acpi_init(BootAPI* boot_api) {
                     MADT_lapic_address_override* entry = (MADT_lapic_address_override*)entry_base;
                     printf("LAPIC addr.ovr. (type=%d len=%d)\n", entry->entryType, entry->entryLength);
                     printf(" address64: %d\n", entry->address64);
+                    
+                    acpi_lapic_address = entry->address64;
                 } break;
                 case MADT_ENTRY_LOCAL_X2APIC: {
                     MADT_local_x2apic* entry = (MADT_local_x2apic*)entry_base;
@@ -131,5 +152,56 @@ void acpi_init(BootAPI* boot_api) {
         }
     }
 
+    if (fadt) {
+        FADT* fadt_extra = (FADT*)((char*)fadt + sizeof(ACPI_SDTHeader));
+
+        if ((char*)&fadt_extra->ResetValue - (char*)fadt < fadt->Length) {
+            // Some FADT are smaller and may not have reset capability.
+
+            printf("fadt.ResetReg.AccessSize: %d\n", fadt_extra->ResetReg.AccessSize);
+            printf("fadt.ResetReg.Address: %x\n", fadt_extra->ResetReg.Address);
+            printf("fadt.ResetReg.AddressSpace: %d\n", fadt_extra->ResetReg.AddressSpace);
+            printf("fadt.ResetValue: %d\n", fadt_extra->ResetValue);
+            
+            #define ADDRESS_SPACE_SYSTEM_MEMORY 0
+            #define ADDRESS_SPACE_SYSTEM_IO 0
+            if (fadt_extra->ResetReg.AddressSpace == ADDRESS_SPACE_SYSTEM_MEMORY) { 
+                bool mapped = PMEM_map_memory((void*)fadt_extra->ResetReg.Address, (void*)fadt_extra->ResetReg.Address, 1, PMEM_FLAG_NOT_CACHED);
+                if (mapped) {
+                    reset_addressSpace = ADDRESS_SPACE_SYSTEM_MEMORY;
+                    reset_address = fadt_extra->ResetReg.Address;
+                    reset_value = fadt_extra->ResetValue;
+                }
+            } else if (fadt_extra->ResetReg.AddressSpace == ADDRESS_SPACE_SYSTEM_IO) { 
+                reset_addressSpace = ADDRESS_SPACE_SYSTEM_IO;
+                reset_address = fadt_extra->ResetReg.Address;
+                reset_value = fadt_extra->ResetValue;
+            }
+        }
+
+    }
     
+}
+
+
+
+void acpi_system_reset() {
+
+    if (reset_address) {
+        if (reset_addressSpace == ADDRESS_SPACE_SYSTEM_MEMORY) {
+            *(u8*)reset_address = reset_value;
+        } else if (reset_addressSpace == ADDRESS_SPACE_SYSTEM_IO) {
+            outb((u16)reset_address, reset_value);
+        } else {
+            printf("Invalid reset_addressSpace=%d\n", reset_addressSpace);
+        }
+    } else {
+        // Fallback to PS/2 power line reset
+        while (inb(0x64) & 0x2) ; // Wait for empty input buffer
+
+        outb(0x64, 0xFE); // Send reset command to keyboard controller
+    }
+
+    printf("SYSTEM RESET any time now...\n");
+    while (1) __asm__ ( "hlt\n" );
 }

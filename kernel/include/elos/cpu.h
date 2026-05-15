@@ -4,3 +4,5 @@
 
 void CPU_init(BootAPI* boot_api);
 
+
+void CPU_reset();

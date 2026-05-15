@@ -17,6 +17,7 @@ FrameBuffer g_frame_buffer;
 #define border_padding 20
 static int pos_x = border_padding;
 static int pos_y = border_padding;
+static int pos_offset_x = 0;
 
 
 
@@ -71,22 +72,20 @@ void FB_write(const char* buffer, int len) {
         start = head;
 
         if (text.len > 0) {
-            draw_glyphs_from_text_bcolor(pos_x, pos_y, text_height, text, g_default_font, WHITE, 0);
+            draw_glyphs_from_text_bcolor(pos_x + pos_offset_x, pos_y, text_height, text, g_default_font, WHITE, 0);
             // draw_glyphs_from_text_bcolor(pos_x, pos_y, text_height, text, g_default_font, WHITE, DARK_BLUE);
             int text_width = draw_text_width(text, text_height, g_default_font);
-            pos_x += text_width;
+            pos_offset_x += text_width;
         }
         if (chr == '\r') {
-            pos_x = border_padding;
+            pos_offset_x = border_padding;
         }
         if (chr == '\n') {
-            pos_x = border_padding;
+            pos_offset_x = border_padding;
             pos_y += text_height;
 
             int screen_width, screen_height;
             draw_frame_info(&screen_width, &screen_height);
-
-            draw_rect(0, pos_y + text_height, screen_width, text_height, DARK_BLUE);
 
             if (pos_y + text_height + border_padding >= screen_height) {
                 // @TODO: When about to go beyond the screen border we wrap around.
@@ -94,9 +93,16 @@ void FB_write(const char* buffer, int len) {
                 //   we need to remember the printed text.
                 //   Altough maybe we could do a big memmove of the pixel data/frame buffer?
                 pos_y = border_padding;
+                pos_x += g_default_font->glyphWidth * 36;
+
+                if (pos_x + g_default_font->glyphWidth * 43 + border_padding >= screen_width) {
+                    pos_x = border_padding;
+                }
 
                 // draw_shift_frame(0, -text_height, DARK_BLUE);
             }
+
+            draw_rect(pos_x + pos_offset_x, pos_y, g_default_font->glyphWidth * 36, text_height, DARK_BLUE);
         }
     }
 

@@ -132,3 +132,5 @@ void NET_send_arp(NetDevice device, uint32_t address);
 
 void NET_send_dhcp_discover(NetDevice device);
 void NET_send_dhcp_request(NetDevice device, u32 request_address, u32 dhcp_server);
+
+bool NET_send_udp(NetDevice device, u8 dst_mac[6], u32 address, u16 src_port, u16 dst_port, void* data, u32 size);

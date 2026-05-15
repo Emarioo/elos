@@ -81,7 +81,34 @@ typedef struct {
     uint64_t ss;
 } PageFaultFrame;
 
-volatile u32* g_lapic;
+volatile u32* g_apic_base;
+
+
+
+#define APIC_APICID     0x20
+#define APIC_APICVER    0x30
+#define APIC_TASKPRIOR  0x80
+#define APIC_EOI        0x0B0
+#define APIC_LDR        0x0D0
+#define APIC_DFR        0x0E0
+#define APIC_SPURIOUS   0x0F0
+#define APIC_ESR        0x280
+#define APIC_ICRL       0x300
+#define APIC_ICRH       0x310
+#define APIC_LVT_TMR	0x320
+#define APIC_LVT_PERF	0x340
+#define APIC_LVT_LINT0	0x350
+#define APIC_LVT_LINT1	0x360
+#define APIC_LVT_ERR	0x370
+#define APIC_TMRINITCNT	0x380
+#define APIC_TMRCURRCNT	0x390
+#define APIC_TMRDIV	    0x3E0
+#define APIC_LAST	    0x38F
+#define APIC_DISABLE	0x10000
+#define APIC_SW_ENABLE	0x100
+#define APIC_CPUFOCUS	0x200
+#define APIC_NMI	 (4<<8)
+
 
 
 void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
@@ -96,31 +123,34 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
 
 void interrupt_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     printf("Interrupt #%d\n", isr_number);
-    
-    int scancode = ps2_read_scancode();
-    int chr = scancode_to_char(scancode, 0);
 
-    printf("scancode %d, %c\n", scancode, chr);
+    while (1) {
+        int scancode = ps2_poll_scancode();
+        if (scancode == 0)
+            break;
+        int chr = scancode_to_char(scancode, 0);
+        printf("scancode %d, %c\n", scancode, chr);
+    }
 
-    if (g_lapic)
-        g_lapic[0xB0/4] = 0; // clear EOI
+    if (g_apic_base)
+        g_apic_base[APIC_EOI/4] = 0; // clear EOI
 }
 
 
 void unused_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     printf("Interrupt unused #%d\n", isr_number);
 
-    if (g_lapic)
-        g_lapic[0xB0/4] = 0; // clear EOI
+    if (g_apic_base)
+        g_apic_base[APIC_EOI/4] = 0; // clear EOI
 }
 
 
 
 void interrupt_timer() {
-    printf("Timer triggered\n");
+    printf("Timer triggered, %x\n", g_apic_base);
 
-    if (g_lapic)
-        g_lapic[0xB0/4] = 0; // clear EOI
+    if (g_apic_base)
+        g_apic_base[APIC_EOI/4] = 0; // clear EOI
 }
 
 
@@ -231,67 +261,100 @@ void cpuWriteIoApic(void *ioapicaddr, uint32_t reg, uint32_t value)
 
 
 
-
 void init_apic() {
+    if (!acpi_ioapic_address) {
+        printf("ACPI tables does not specify IOAPIC address\n");
+        return;
+    }
+    if (!acpi_lapic_address) {
+        printf("ACPI tables does not specify LAPIC address\n");
+        return;
+    }
 
     asm ( "cli\n" );
 
+
+    // Mask PIC IRQs
+    outb(0x21, 0xFF);
+    outb(0xA1, 0xFF);
 
     #define IA32_APIC_BASE_MSR 0x1B
     #define APIC_SOFTWARE_ENABLE 0x100
 
     // @TODO Check APIC
 
-    // asm (
-    //     "cpuid\n"
-    // )
+    u32 eax,ebx,ecx,edx;
+    cpuid(1, 0, &eax,&ebx,&ecx,&edx);
 
-    u64 apic_base = rdmsr(IA32_APIC_BASE_MSR);
-    apic_base |= (u64)1 << 11; // enable APIC
-    wrmsr(IA32_APIC_BASE_MSR, apic_base);
+    bool x2apic_support = (ecx & (1<<21)) != 0;
+    bool apic_support = (edx & (1<<9)) != 0;
 
-    // Read base from MADT?
-    u64 lapic_base = apic_base & 0xFFFFF000;
+    if (!apic_support) {
+        printf("Missing APIC support\n");
+        return;
+    }
 
-    PMEM_map_memory((void*)lapic_base, (void*)lapic_base, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
+    // printf("APIC support: apic=%d x2apic=%d\n", apic_support, x2apic_support);
 
-    volatile u32* lapic = (volatile u32*)lapic_base;
+    u64 apic_msr = rdmsr(IA32_APIC_BASE_MSR);
+    // printf("IA32_APIC_BASE_MSR=%x\n", apic_msr);
 
-    g_lapic = lapic;
+    apic_msr = (apic_msr & ~0xFFFFFC00) | acpi_lapic_address | ((u64)1 << 11); // enable APIC, disable x2APIC, keep reserved and BSP bits (BSP = boot processor)
+    wrmsr(IA32_APIC_BASE_MSR, apic_msr);
+    // printf("Write new: IA32_APIC_BASE_MSR=%x\n", apic_msr);
 
-    // lapic[0x3e0/4] = 0x3;
-    // lapic[0x320/4] = 48 | (1 << 17);
-    // lapic[0x380/4] = 10000000;
+    u32* apic_base = (void*)acpi_lapic_address;
+    g_apic_base = apic_base;
 
-    // printf("LVT timer=%x\n", lapic[0x320 / 4]);
+    PMEM_map_memory((void*)apic_base, (void*)apic_base, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
 
 
-    int lapic_id = lapic[0x20/4];
+    // Reset APIC to known state. (doesn't seem necessary in QEMU but very important on real Hardware)
+    // u32 tmp;
+    // apic_base[APIC_DFR/4] = 0xFFFFFFFF; // reset Destination Format Register
+    // tmp = apic_base[APIC_LDR/4];
+    // tmp &= 0x00FFFFFF;
+    // tmp |= 1;
+    // apic_base[APIC_LDR/4] = tmp;
+    // apic_base[APIC_LVT_TMR/4] = APIC_DISABLE;
+    // apic_base[APIC_LVT_PERF/4] = APIC_NMI;
+    // apic_base[APIC_LVT_LINT0/4] = APIC_DISABLE;
+    // apic_base[APIC_LVT_LINT1/4] = APIC_DISABLE;
+    // apic_base[APIC_TASKPRIOR/4] = 0;
+
+
+    apic_base[APIC_TMRDIV/4] = 0x3;
+    apic_base[APIC_LVT_TMR/4] = 48 | (1 << 17); // periodic mode
+    apic_base[APIC_TMRINITCNT/4] = 10000000;
+
+    printf("LVT timer=%x\n", apic_base[APIC_LVT_TMR / 4]);
+
+
+    int lapic_id = apic_base[APIC_APICID/4];
     printf("apic id: %d\n", lapic_id);
 
-    // 0xF0 = offset to spurious vector (/4 because lapic is u32)
-    #define SPURIOUS_VECTOR_OFFSET (0xF0/4)
-    lapic[SPURIOUS_VECTOR_OFFSET] = (lapic[SPURIOUS_VECTOR_OFFSET] & ~0xFF) | (APIC_SOFTWARE_ENABLE | 0xFF);
+    apic_base[APIC_SPURIOUS/4] = APIC_SOFTWARE_ENABLE | 0xFF;
 
-    printf("SVR: %x\n", lapic[SPURIOUS_VECTOR_OFFSET]);
+    printf("SVR: %x\n", apic_base[APIC_SPURIOUS]);
 
-    // Mask PIC IRQs
-    outb(0x21, 0xFF);
-    outb(0xA1, 0xFF);
 
-    // Read from MADT
-    #define IOAPIC_BASE ((void*)0xFEC00000)
-    
-    PMEM_map_memory((void*)IOAPIC_BASE, (void*)IOAPIC_BASE, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
+    PMEM_map_memory((void*)acpi_ioapic_address, (void*)acpi_ioapic_address, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
 
     // move APIC ID into ioapic here, currently fine since it's zero.
-    cpuWriteIoApic(IOAPIC_BASE, 0x12, 33);
-    cpuWriteIoApic(IOAPIC_BASE, 0x13, 0);
+    // cpuWriteIoApic((void*)acpi_ioapic_address, 0x12, 33);
+    cpuWriteIoApic((void*)acpi_ioapic_address, 0x12, 33 | (1 << 15));
+    cpuWriteIoApic((void*)acpi_ioapic_address, 0x13, 0);
 
     
-    lapic[0xB0/4] = 0; // clear EOI
-    lapic[0x280/4] = 0; // clear Error Status
-    lapic[0x280/4] = 0; // clear Error Status
+    apic_base[APIC_EOI/4] = 0; // clear EOI
+    apic_base[APIC_ESR/4] = 0; // clear Error Status
+    apic_base[APIC_ESR/4] = 0; // clear Error Status
 
     asm ( "sti\n" );
 }
+
+
+void CPU_reset() {
+    acpi_system_reset();
+}
+

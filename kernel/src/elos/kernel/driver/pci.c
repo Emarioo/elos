@@ -268,6 +268,9 @@ void decode_bar(PCI_ConfigSpace* config, u64* first_ioaddr, u64* out_first_ioadd
 
     u32* bars = &config->header0.bar0;
 
+    // #define debug(...) printf(__VA_ARGS__)
+    #define debug(...) 
+
     int head = 0;
     while (head < 6) {
         u32 bar = bars[head];
@@ -277,7 +280,7 @@ void decode_bar(PCI_ConfigSpace* config, u64* first_ioaddr, u64* out_first_ioadd
 
         if (bar & 0x1) {
             u32 addr = bar & ~0x3;
-            printf("[INFO] bar[%d] IO-mapped addr=%x size=%d KB\n", head, addr, bar_size/1024);
+            debug("[INFO] bar[%d] IO-mapped addr=%x size=%d KB\n", head, addr, bar_size/1024);
             if (*first_ioaddr == 0) {
                 *first_ioaddr = addr;
                 *out_first_ioaddr_size = bar_size;
@@ -285,9 +288,9 @@ void decode_bar(PCI_ConfigSpace* config, u64* first_ioaddr, u64* out_first_ioadd
         } else if (((bar >> 1) & 0x6) == 0) {
             u32 addr = bar & ~0xf;
             if (bar & 0x8) {
-                printf("[INFO] bar[%d] 32-bit prefetchable addr=%x size=%d KB\n", head, addr, bar_size/1024);
+                debug("[INFO] bar[%d] 32-bit prefetchable addr=%x size=%d KB\n", head, addr, bar_size/1024);
             } else {
-                printf("[INFO] bar[%d] 32-bit addr=%x size=%d KB\n", head,addr, bar_size/1024);
+                debug("[INFO] bar[%d] 32-bit addr=%x size=%d KB\n", head,addr, bar_size/1024);
             }
             if (*first_maddr == 0) {
                 *first_maddr = addr;
@@ -298,9 +301,9 @@ void decode_bar(PCI_ConfigSpace* config, u64* first_ioaddr, u64* out_first_ioadd
             u64 addr = ((u64)bar_ext << 32) | ((u64)bar & ~0xfLLU);
             head++;
             if (bar & 0x8) {
-                printf("[INFO] bar[%d] 64-bit prefetchable addr=%x\n", head, addr, bar_size/1024);
+                debug("[INFO] bar[%d] 64-bit prefetchable addr=%x\n", head, addr, bar_size/1024);
             } else {
-                printf("[INFO] bar[%d] 64-bit addr=%x size=%d KB\n", head, addr, bar_size/1024);
+                debug("[INFO] bar[%d] 64-bit addr=%x size=%d KB\n", head, addr, bar_size/1024);
             }
             if (*first_maddr == 0) {
                 *first_maddr = addr;

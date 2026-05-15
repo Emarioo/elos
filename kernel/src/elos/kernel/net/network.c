@@ -14,6 +14,8 @@
 
 #include "elos/kernel/net/net_internal.h"
 
+#include "elos/common/intrinsics.h"
+
 
 
 #define printf(...) KCON_printf(__VA_ARGS__)
@@ -41,7 +43,7 @@ bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
             controller.config = *config;
             return true;
         } else {
-            printf("[INFO] NET_init: Searching PCI for network card, found device id 0x%x (vendor 0x%x), but card is not supported.\n", config->deviceID, config->vendorID);
+            // printf("[INFO] NET_init: Searching PCI for network card, found device id 0x%x (vendor 0x%x), but card is not supported.\n", config->deviceID, config->vendorID);
         }
     }
 
@@ -704,3 +706,68 @@ bool NET_handle_packet(NetDevice device, NET_Packet* packet) {
     return false;
 }
 
+
+
+bool NET_send_udp(NetDevice device, u8 dst_mac[6], u32 address, u16 src_port, u16 dst_port, void* data, u32 size) {
+    
+    if (size > 1400) {
+        return false;
+    }
+
+    // @TODO Spinlock
+
+    int udpSize = sizeof(UDP_Header) + size;
+
+    static u8 udp_message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + 1400];
+
+    int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + udpSize;
+
+    EtherFrame* message_frame = (EtherFrame*)udp_message_buffer;
+    memcpy(message_frame->destination, dst_mac, 6);
+    memcpy(message_frame->source, current_mac, 6);
+    message_frame->etherType = ETHER_IPV4;
+    IPV4_Header* message_ipv4 = (IPV4_Header*)(udp_message_buffer + sizeof(EtherFrame));
+    message_ipv4->headerLength = sizeof(IPV4_Header) / 4;
+    message_ipv4->version = 4;
+    message_ipv4->totalLength = sizeof(IPV4_Header) + udpSize;
+    message_ipv4->identification = 0;
+    message_ipv4->fragmentPart = IPV4_FLAG_DONT_FRAGMENT;
+    message_ipv4->headerChecksum = 0;
+    message_ipv4->timeToLive = 64;
+    message_ipv4->protocol = IP_UDP;
+    message_ipv4->sourceAddress = current_ip;
+    message_ipv4->destinationAddress = address;
+
+    message_frame->etherType = bswap16(message_frame->etherType);
+    message_ipv4->totalLength = bswap16(message_ipv4->totalLength);
+    message_ipv4->identification = bswap16(message_ipv4->identification);
+    message_ipv4->fragmentPart = bswap16(message_ipv4->fragmentPart);
+
+    message_ipv4->headerChecksum = bswap16(compute_internet_checksum(message_ipv4, sizeof(IPV4_Header)));
+
+    UDP_Header* message_udp = (UDP_Header*)(udp_message_buffer + sizeof(EtherFrame) + sizeof(IPV4_Header));
+    message_udp->sourcePort = src_port;
+    message_udp->destinationPort = dst_port;
+    message_udp->checksum = 0;
+    message_udp->length = udpSize;
+
+    message_udp->sourcePort = bswap16(message_udp->sourcePort);
+    message_udp->destinationPort = bswap16(message_udp->destinationPort);
+    message_udp->length = bswap16(message_udp->length);
+
+    u8* message_udp_data = ((u8*)message_udp + sizeof(UDP_Header));
+    memcpy(message_udp_data, data, size);
+
+    UDP_Pseudo_Header pseudo = {0};
+    pseudo.sourceAddress = message_ipv4->sourceAddress;
+    pseudo.destinationAddress = message_ipv4->destinationAddress;
+    pseudo.protocol = IP_UDP;
+    pseudo.udpLength = bswap16(udpSize);
+
+    message_udp->checksum = bswap16(~compute_internet_checksum(&pseudo, sizeof(UDP_Pseudo_Header)));
+    message_udp->checksum = bswap16(compute_internet_checksum(message_udp, udpSize));
+
+    NET_send_packet(device, udp_message_buffer, packet_size);
+
+    return true;
+}

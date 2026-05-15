@@ -86,7 +86,7 @@ static inline u64 rdmsr(u32 msr)
 static inline void wrmsr(u32 msr, u64 value)
 {
     u32 low = value & 0xFFFFFFFF;
-    u32 high = value > 32;
+    u32 high = value >> 32;
 
     asm volatile (
         "wrmsr"
@@ -95,17 +95,27 @@ static inline void wrmsr(u32 msr, u64 value)
     );
 }
 
-// static inline uint64_t cpuid() {
-//     uint64_t value;
-//     asm(
-//         "rdtsc\n"
-//         "shl $32, %%rdx\n"
-//         "or %%rdx, %%rax\n"
-//         : "=a" (value)
-//         :
-//     );
-//     return value;
-// }
+static inline void cpuid(
+    uint32_t leaf,
+    uint32_t subleaf,
+    uint32_t* eax,
+    uint32_t* ebx,
+    uint32_t* ecx,
+    uint32_t* edx)
+{
+    uint32_t a, b, c, d;
+
+    asm volatile (
+        "cpuid"
+        : "=a"(a), "=b"(b), "=c"(c), "=d"(d)
+        : "a"(leaf), "c"(subleaf)
+    );
+
+    if (eax) *eax = a;
+    if (ebx) *ebx = b;
+    if (ecx) *ecx = c;
+    if (edx) *edx = d;
+}
 
 static inline u64 read_cr2() {
     u64 reg;
@@ -143,3 +153,9 @@ static inline void flush_tlb_full() {
         "mov cr3, cr3\n"
     );
 }
+
+// static inline void flush_tlb_full() {
+//     asm (
+//         "mov cr3, cr3\n"
+//     );
+// }

@@ -5,6 +5,7 @@
 int ps2_init();
 
 int ps2_read_scancode();
+int ps2_poll_scancode();
 
 int ps2_ask_keymap();
 

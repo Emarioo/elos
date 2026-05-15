@@ -13,7 +13,7 @@
 #define RED        0xFFFF0000
 #define ALPHA_MASK 0xFF000000
 
-#define DARK_BLUE  0xFF040a18
+#define DARK_BLUE  0xFF242a48
 
 void draw_frame_info(int* width, int* height);
 

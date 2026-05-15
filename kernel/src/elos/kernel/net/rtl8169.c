@@ -118,14 +118,14 @@ static bool reset_nic() {
     memcpy(current_mac, controller.mac_address, 6);
 
 
-    printf("NET_init: MAC Address: %x%x:%x%x:%x%x:%x%x:%x%x:%x%x\n",
-        controller.mac_address[0] >> 4, controller.mac_address[0] & 0xF,
-        controller.mac_address[1] >> 4, controller.mac_address[1] & 0xF,
-        controller.mac_address[2] >> 4, controller.mac_address[2] & 0xF,
-        controller.mac_address[3] >> 4, controller.mac_address[3] & 0xF,
-        controller.mac_address[4] >> 4, controller.mac_address[4] & 0xF,
-        controller.mac_address[5] >> 4, controller.mac_address[5] & 0xF
-        );
+    // printf("NET_init: MAC Address: %x%x:%x%x:%x%x:%x%x:%x%x:%x%x\n",
+    //     controller.mac_address[0] >> 4, controller.mac_address[0] & 0xF,
+    //     controller.mac_address[1] >> 4, controller.mac_address[1] & 0xF,
+    //     controller.mac_address[2] >> 4, controller.mac_address[2] & 0xF,
+    //     controller.mac_address[3] >> 4, controller.mac_address[3] & 0xF,
+    //     controller.mac_address[4] >> 4, controller.mac_address[4] & 0xF,
+    //     controller.mac_address[5] >> 4, controller.mac_address[5] & 0xF
+    //     );
 
 
     // Prepare RX descriptors and buffers

@@ -11,6 +11,7 @@ void KBD_init(BootAPI* boot_api);
 Keycode KBD_read_key(int* character, int* mods);
 // int KBD_read_char();
 
+Keycode KBD_poll_key();
 
 enum Keycode {
     KEY_NONE, // empty/invalid key

@@ -32,9 +32,10 @@ void handle_packet(NetDevice device, NET_Packet* packet, void* user_data);
 BootAPI _boot_api;
 BootAPI* boot_api;
 void kernel_entry(BootAPI* in_boot_api) {
+    // Put BootAPI in kernel's memory space. in_boot_api will become invalid when
+    // we setup our own page tables.
     _boot_api = *in_boot_api;
-    boot_api = &_boot_api; // Put it in the kernel's memory space. When mapping pages we don't have to specifically map BootAPI too. We actually don't know which
-    // physical address boot_api has anyway. Maybe on the stack allocated by EFI but we don't know which physical address still.
+    boot_api = &_boot_api;
 
     // Have .bss section in kernel image been memory mapped?
     // In theory the .data, .rodata, .text should be mapped because we allocate memory for kernel image from
@@ -112,6 +113,7 @@ void kernel_entry(BootAPI* in_boot_api) {
     // You must setup tap device (which is preferably anyway because you can use wireshark)
     NET_send_arp(net_device, target_ip);
 
+    // KCON_net_set_target(net_device, 
 
     KCON_printf("END OF KERNEL_ENTRY!\n");
     while (1) {
@@ -123,6 +125,12 @@ void kernel_entry(BootAPI* in_boot_api) {
                 NET_free_packet(net_device, &packet);
             }
         }
+
+        int keycode = KBD_poll_key();
+        if (keycode == KEY_F1) {
+            CPU_reset();
+        }
+
         pause();
     }
 
