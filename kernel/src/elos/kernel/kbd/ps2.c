@@ -225,7 +225,7 @@ int ps2_init() {
         }
     }
 
-    config_byte = ps2_send_read_command(0x20);
+    // config_byte = ps2_send_read_command(0x20);
     // printf("config byte: %d\n", config_byte);
 
 

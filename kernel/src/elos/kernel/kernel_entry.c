@@ -90,17 +90,12 @@ void kernel_entry(BootAPI* in_boot_api) {
     KCON_printf("Initializing physical memory regions\n");
     PMEM_init(boot_api);
 
-    // draw_rect(200, 400, 50,50, GREEN);
-
     // Initialize simple keyboard
     KBD_init(boot_api);
 
-    // draw_rect(200, 500, 50,50, GREEN);
-
-    // Initialize interrupt tables
+    // Initialize GDT, IDT, interrupt tables, vectors
+    // Timer interrupt, parse ACPI tables for IOAPIC, APIC, HPET
     CPU_init(boot_api);
-
-    // draw_rect(200, 600, 50,50, GREEN);
 
 
     // @TODO Initialize file system and disk devices
@@ -126,10 +121,10 @@ void kernel_entry(BootAPI* in_boot_api) {
 
     KCON_printf("END OF KERNEL_ENTRY!\n");
 
-    // CPU_start_core(1, NULL);
+    CPU_start_core(1, NULL);
 
     // KCON_printf("Started cores\n");
-    // EXEC_init();
+    EXEC_init();
 
     while (1) {
         if (count) {

@@ -46,7 +46,6 @@ void CPU_disable_interrupt();
 
 void CPU_reset();
 
-void CPU_calibrate_tsc();
 void CPU_sleep(u64 nanoseconds);
 
 int CPU_get_core_index();
@@ -61,3 +60,6 @@ void LOCK(volatile u32* ptr);
 void UNLOCK(volatile u32* ptr);
 bool IS_LOCKED(volatile u32* ptr);
 
+
+void LOCK_INT(volatile u32* ptr);
+void UNLOCK_INT(volatile u32* ptr);

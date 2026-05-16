@@ -48,13 +48,14 @@ void KCON_printf(const char* format, ...) {
 
     static u32 print_lock;
 
-    LOCK(&print_lock);
+
+    LOCK_INT(&print_lock);
     for (int i=0;i<ARRAY_LENGTH(_write_hooks);i++) {
         if (_write_hooks[i]) {
             _write_hooks[i](buffer, len);
         }
     }
-    UNLOCK(&print_lock);
+    UNLOCK_INT(&print_lock);
 }
 
 

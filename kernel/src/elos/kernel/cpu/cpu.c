@@ -24,8 +24,9 @@
 void init_gdt();
 void init_idt();
 void init_apic();
+void calibrate_tsc();
 
-u64 tsc_per_second;
+u64 tsc_per_sec;
 
 void CPU_init(BootAPI* boot_api) {
 
@@ -36,9 +37,7 @@ void CPU_init(BootAPI* boot_api) {
 
     init_apic();
 
-    // CPU_calibrate_tsc();
-    // printf("Calibrated tsc: %d/ms\n", tsc_per_second/1000);
-
+    calibrate_tsc();
 }
 
 
@@ -120,7 +119,6 @@ void ap_trampoline(); // defined in assembly
 #define APIC_CPUFOCUS	0x200
 #define APIC_NMI	 (4<<8)
 
-void hpet_calibrate();
 
 void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     if (isr_number == 14) {
@@ -133,14 +131,24 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
 }
 
 void interrupt_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
-    printf("Interrupt #%d\n", isr_number);
+    // printf("Interrupt #%d\n", isr_number);
 
     while (1) {
         int scancode = ps2_poll_scancode();
         if (scancode == 0)
             break;
+        
+        int keycode = scancode_to_keycode(scancode);
+        if (keycode == KEY_F1) {
+            CPU_reset();
+        }
+        
         int chr = scancode_to_char(scancode, 0);
-        printf("scancode %d, %c\n", scancode, chr);
+        if (chr == 0)
+            continue;
+
+
+        // printf("scancode %d, %c\n", scancode, chr);
     }
 
     if (g_lapic_base)
@@ -155,16 +163,6 @@ void unused_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
         g_lapic_base[APIC_EOI/4] = 0; // clear EOI
 }
 
-
-
-// void interrupt_timer() {
-//     printf("[TIMER]\n");
-
-//     EXEC_interrupt();
-
-//     if (g_lapic_base)
-//         g_lapic_base[APIC_EOI/4] = 0; // clear EOI
-// }
 
 
 #define MAKE_SEGMENT_DESC(BASE,LIMIT,ACCESS_BYTE,FLAGS) (\
@@ -278,7 +276,7 @@ void cpuWriteIoApic(void *ioapicaddr, uint32_t reg, uint32_t value)
 
 
 void init_apic() {
-    if (!acpi_ioapic_address) {
+    if (!acpi_ioapic_array_len) {
         printf("ACPI tables does not specify IOAPIC address\n");
         return;
     }
@@ -317,21 +315,19 @@ void init_apic() {
     u32* apic_base = (void*)acpi_lapic_address;
     g_lapic_base = apic_base;
 
-    PMEM_map_memory((void*)apic_base, (void*)apic_base, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
 
-
-    // Reset APIC to known state. (doesn't seem necessary)
-    // u32 tmp;
-    // apic_base[APIC_DFR/4] = 0xFFFFFFFF; // reset Destination Format Register
-    // tmp = apic_base[APIC_LDR/4];
-    // tmp &= 0x00FFFFFF;
-    // tmp |= 1;
-    // apic_base[APIC_LDR/4] = tmp;
-    // apic_base[APIC_LVT_TMR/4] = APIC_DISABLE;
-    // apic_base[APIC_LVT_PERF/4] = APIC_NMI;
-    // apic_base[APIC_LVT_LINT0/4] = APIC_DISABLE;
-    // apic_base[APIC_LVT_LINT1/4] = APIC_DISABLE;
-    // apic_base[APIC_TASKPRIOR/4] = 0;
+    // Reset APIC to known state. (may or may not be necessary but certainly doesn't hurt)
+    u32 tmp;
+    apic_base[APIC_DFR/4] = 0xFFFFFFFF; // reset Destination Format Register
+    tmp = apic_base[APIC_LDR/4];
+    tmp &= 0x00FFFFFF;
+    tmp |= 1;
+    apic_base[APIC_LDR/4] = tmp;
+    apic_base[APIC_LVT_TMR/4] = APIC_DISABLE;
+    apic_base[APIC_LVT_PERF/4] = APIC_NMI;
+    apic_base[APIC_LVT_LINT0/4] = APIC_DISABLE;
+    apic_base[APIC_LVT_LINT1/4] = APIC_DISABLE;
+    apic_base[APIC_TASKPRIOR/4] = 0;
 
     apic_base[APIC_EOI/4] = 0; // clear EOI
     apic_base[APIC_ESR/4] = 0; // clear Error Status
@@ -352,80 +348,162 @@ void init_apic() {
     // printf("SVR: %x\n", apic_base[APIC_SPURIOUS]);
 
 
-    PMEM_map_memory((void*)acpi_ioapic_address, (void*)acpi_ioapic_address, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
-
     // move APIC ID into ioapic here, currently fine since it's zero.
-    cpuWriteIoApic((void*)acpi_ioapic_address, 0x12, 33 | (1 << 15)); // 1<<15 does level trigger instead of edge, seems to work better?
-    cpuWriteIoApic((void*)acpi_ioapic_address, 0x13, 0);
-    
-    // Map IRQ2 to Vector #32
-    // Use for HPET
-    cpuWriteIoApic((void*)acpi_ioapic_address, 0x14, 34); // wants edge trigger
-    cpuWriteIoApic((void*)acpi_ioapic_address, 0x15, 0);
+    // IRQ1, for keyboard interrupts
+    cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x12, 33 | (1 << 15)); // 1<<15 does level trigger instead of edge, seems to work better?
+    cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x13, 0);
 
     sti();
-
-    // while (1) pause();
-
-    hpet_calibrate();
 }
 
 u64 hpet_rdtsc_value;
 
-void hpet_calibrate() {
+void calibrate_tsc() {
     cli();
 
-    const HPET_Capability_Register capabilities = *(HPET_Capability_Register*)(acpi_hpet_address + 0x0);
+    // A lot of the bits we clear are probably already cleared but we try to be very specific
+    // with how we set up the HPET because laptop has been a little quirky.
+
+    const u64 capabilities = *(u64*)(acpi_hpet_address + 0x0);
     volatile u64* configuration  = (u64*)(acpi_hpet_address + 0x10);
-    // volatile HPET_Configuration_Register* _configuration  = (HPET_Configuration_Register*)(acpi_hpet_address + 0x10);
     volatile u64* interrupt_status = (u64*)(acpi_hpet_address + 0x20);
     volatile u64* main_counter     = (u64*)(acpi_hpet_address + 0xF0);
+    u32 counter_clk_period = capabilities >> 32;
+    u32 count_size_cap = (capabilities >> 13) & 1;
+    u32 num_tim_cap = (capabilities >> 8) & 0x1F;
 
-    volatile u64* timer0 = (u64*)(acpi_hpet_address + 0x100 + 0x20*0);
-    volatile HPET_Timer_Register* _timer0 = (HPET_Timer_Register*)(acpi_hpet_address + 0x100 + 0x20*0);
-    // volatile HPET_Timer_Register* timer1 = (HPET_Timer_Register*)(acpi_hpet_address + 0x100 + 0x20*1);
-    
-    volatile u64* comp0 = (u64*)(acpi_hpet_address + 0x108 + 0x20*0);
-    // volatile u64* comp1 = (u64*)(acpi_hpet_address + 0x108 + 0x20*1);
+    // Set to some arbitrary value in case we can't calibrate.
+    // Better than nothing.
+    tsc_per_sec = 5000000000; // 5e9
 
-    // @TODO Warn if timer is 32-bit    
-    
+
+    // @TODO Optimize by doing less repetitive reads and writes to registers.
+
+
+    volatile u64* chosen_timer = NULL;
+    volatile u64* chosen_comp = NULL;
+
     int irq_number = 2;
-    while (irq_number < 32) {
-        *timer0 = (irq_number << 9) | (1 << 2);
-        //  ->int_route_cnf = irq_number; // IRQ2, hopefully
-        // timer0->int_enb_cnf = 1;
+    int timer_index = 0;
+    while (timer_index < num_tim_cap) {
+        volatile u64* hpet_timer = (u64*)(acpi_hpet_address + 0x100 + 0x20*timer_index);
+        volatile u64* hpet_comp  = (u64*)(acpi_hpet_address + 0x108 + 0x20*timer_index);
+        timer_index++;
 
-        if (((*timer0 >> 9) & 0x3F) != irq_number) {
-            printf("Could not set IRQ%d for HPET timer0\n", irq_number);
+        // Clear bits Tn_FSB_EN_CNF, Tn_TYPE_CNF, 32MODE_CNF, Tn_INT_ENB_CNF.
+        // In human terms: Disables FSB interrupt mapping, disable 32-bit force mode,
+        //   disables periodic mode, and disables interrupt for this timer.
+        *hpet_timer = (*hpet_timer & ~0x410CLU);
+
+        // Iterate IRQ numbers till we find a usable one.
+        irq_number = 2;
+        u32 int_route_cap = *hpet_timer >> 32;
+        // printf("Interrupt map %d: %x\n", timer_index-1, int_route_cap);
+        while (irq_number < 32) {
+            // Check that timer supports the IRQ
+            if (((1 << irq_number) & int_route_cap)) {
+                // Or the IRQ number and keep other bits untouched
+                *hpet_timer = (*hpet_timer & ~0x3E00LU) | (irq_number << 9);
+
+                // Check if we were able to write the value
+                u32 written_irq = (*hpet_timer >> 9) & 0x1F;
+                if (written_irq == irq_number) {
+                    u32 low  = *hpet_timer;
+                    u32 high = *hpet_timer >> 32;
+                    // printf("Result: %x %x\n", high, low);
+                    chosen_timer = hpet_timer;
+                    chosen_comp = hpet_comp;
+                    break;
+                }
+                // If note then we did something wrong.
+                // We assume timer doesn't support the IRQ number.
+            }
+            // printf("Failed timer=%d irq=%d\n", timer_index-1, irq_number);
             irq_number++;
-            continue;
         }
-        break;
+        if (irq_number < 32) {
+            break;
+        }
+        // Failed.
+        // printf("Failed timer %d\n", timer_index-1);
     }
 
-    // 1 second
-    u64 delay = (1000000000LU*1000000LU)/capabilities.counter_clk_period;
+    if (!chosen_timer) {
+        printf("Could not find supported timer\n");
+        cli();
+        return;
+    }
+    
 
-    *comp0 = *main_counter + delay;
+    // Enable IRQ number on the IOAPIC. We map to interrupt vector 34.
+    // @TODO Should we use edge or level trigger. Are both always available?
+    // @TODO We assume APIC ID = 0. We will want to do this per Processor in the future.
+
+    // @TODO Move this complexity elsewhere.
+    int calculated_irq_number = 0;
+    void* ioapic_address = NULL;
+    for (int i=0;i<acpi_ioapic_array_len;i++) {
+        IOAPIC_Info* ioapic = &acpi_ioapic_array[i];
+        u32 config = cpuReadIoApic((void*)ioapic->address, 0x1);
+        int irq_limit = (config>>16) & 0xFF;
+
+        if (irq_number >= ioapic->interruptBaseNumber && irq_number < ioapic->interruptBaseNumber + irq_limit) {
+            calculated_irq_number = irq_number - ioapic->interruptBaseNumber;
+            ioapic_address = (void*)ioapic->address;
+            break;
+        }
+    }
+    if (!ioapic_address) {
+        printf("Could not find IRQ (globalSystemInterrupt) in any IOAPIC (ACPI can provide multiple)\n");
+        sti();
+        return;
+    }
+
+    cpuWriteIoApic(ioapic_address, 0x10 + 2 * calculated_irq_number, 34);
+    cpuWriteIoApic(ioapic_address, 0x11 + 2 * calculated_irq_number, 0);
+
+    // 100 millisecond second
+    u64 delay = (100000000LU*1000000LU)/counter_clk_period;
+
+    // @TODO We need to handle overflow if 32-bit timer/counter is used.
+    //   Real hardware uses 32-bit timers, QEMU supports 64-bit timer/counter.
+    //   One option is to reset the counter which we can't if a timer is already running.
+    //   I have two timers in QEMU and ond the laptop so we will have to be selected how
+    //   we use them. Meaning, we know that it's safe to reset here when calibrating tsc.
+    //   Since we do this in kernel startup counter will be small anyway.
+    //   May recalibrate some time though. For other processors for example.
+    // *main_counter = 0;
+    
+    hpet_rdtsc_value = 0; // Reset previous value (if we call calibrate_tsc again for whatever reason)
+    *chosen_timer = *chosen_timer | 4; // Enable interrupts
+    *chosen_comp = *main_counter + delay;
 
     sti();
 
     u64 start = rdtsc();
-    *configuration = (*configuration & ~2LU) | 1;
 
+    // Keep reserved bits, disable/clear legacy replacment bit and enable main counter.
+    *configuration = (*configuration & ~3LU) | 1;
 
-    printf("HPET setup, %d\n", *main_counter);
-
+    // Wait for interrupt to set this value
     while (hpet_rdtsc_value == 0) {
         pause();
     }
+
+    cpuWriteIoApic(ioapic_address, 0x10 + 2 * calculated_irq_number, 0x100); // Disable interrupt we are done.
+    cpuWriteIoApic(ioapic_address, 0x11 + 2 * calculated_irq_number, 0);
+
     u64 diff = hpet_rdtsc_value - start;
-    printf("HPET measured: %d M/s\n", diff/1000000);
+    printf("HPET measured: %d K cycles/ms\n", diff/1000);
+
+    tsc_per_sec = diff*10; // We measured 100 milliseconds, multiply by 10 and we get a full second
 }
 void hpet_isr() {
     hpet_rdtsc_value = rdtsc();
-    printf("Triggered %d\n", hpet_rdtsc_value/1000);
+    // printf("Triggered %d\n", hpet_rdtsc_value/1000);
+    
+    if (g_lapic_base)
+        g_lapic_base[APIC_EOI/4] = 0; // clear EOI
 }
 
 
@@ -434,39 +512,20 @@ void CPU_reset() {
 }
 
 
-void CPU_calibrate_tsc() {
-    cli();
-
-    #define PIT_CMD_PORT 0x43
-    #define PIT_DATA_PORT 0x40
-
-    // This is awful calibration. Use HPET or interrupts or something.
-    // Found this on https://wiki.osdev.org/Symmetric_Multiprocessing
-    // but I think I misunderstood it.
-    // From eye measurement it seems to be off by a factor of 2-3 in QEMU and ~1000 on laptop.
-
-    // u64 start = rdtsc();
-
-    // outb(PIT_CMD_PORT, 0x30);
-    // outb(PIT_DATA_PORT, 0xA9);
-    // outb(PIT_DATA_PORT, 0x4);
-
-    // outb(PIT_CMD_PORT, 0xE2);
-    
-    // while ((inb(PIT_DATA_PORT) & 0x80) == 0) pause();
-
-    // u64 end = rdtsc();
-
-    sti();
-
-    // tsc_per_second = (end - start) * 1000;
-    tsc_per_second = 1000000000;
-}
-
 
 void CPU_sleep(u64 nanoseconds) {
-    // @TODO Might be some overflow issues if you sleep for 10 seconds.
-    u64 target = (nanoseconds * tsc_per_second)/1000000000  + rdtsc();
+    // tsc_per_sec can be assumed to be about 10e9-1e9
+    // 1-10 second sleep can cause overflow problems.
+    // Below crudely prevents the problem.
+    u64 target;
+    if (nanoseconds > 700000000) {
+        // Do this if sleeping for more than 700 ms
+        // Will overflow if sleeping around 1.66 - 16.66 minutes which is
+        // a very questionable amount of time to sleep for.
+        target = ((nanoseconds/100) * tsc_per_sec)/10000000  + rdtsc();
+    } else {
+        target = (nanoseconds * tsc_per_sec)/1000000000  + rdtsc();
+    }
 
     while(1) {
         u64 now = rdtsc();

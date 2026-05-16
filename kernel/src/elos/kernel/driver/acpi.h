@@ -235,7 +235,10 @@ typedef struct {
 } HPET;
 #pragma pack(pop)
 
-
+/*
+    These structs are here for reference.
+    The bit fields are conceptually correct but does not compile
+    to correct layout.
 
 #pragma pack(push, 1)
 typedef struct {
@@ -274,10 +277,16 @@ typedef struct {
     uint64_t  reserved: 62;
 } HPET_Configuration_Register;
 #pragma pack(pop)
+*/
 
+typedef struct {
+    u64 address; // mapped when parsing ACPI tables
+    u64 interruptBaseNumber;
+} IOAPIC_Info;
 
 extern u64 acpi_lapic_address;
-extern u64 acpi_ioapic_address;
+extern IOAPIC_Info acpi_ioapic_array[4];
+extern int acpi_ioapic_array_len;
 extern u64 acpi_hpet_address;
 
 void acpi_init(BootAPI* boot_api);
