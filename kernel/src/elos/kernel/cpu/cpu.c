@@ -12,6 +12,8 @@
 #include "elos/kernel/kbd/ps2.h"
 #include "elos/kernel/kbd/keys.h"
 
+#include "elos/execution.h"
+
 
 
 void init_gdt();
@@ -116,7 +118,7 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
         u64 fault_address = read_cr2();
         printf("EXCEPTION #%d (rip=0x%x addr=0x%x err=0x%x)\n", isr_number, frame->rip, fault_address, frame->error_code);
     } else {
-        printf("EXCEPTION #%d (error code=0x%x)\nHALTING\n", isr_number, frame->error_code);
+        printf("EXCEPTION #%d (error code=0x%x, rip=%x)\nHALTING\n", isr_number, frame->error_code, frame->rip);
     }
     while (1) asm ( "cli\npause\n" );
 }
@@ -146,12 +148,14 @@ void unused_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
 
 
 
-void interrupt_timer() {
-    printf("Timer triggered, %x\n", g_apic_base);
+// void interrupt_timer() {
+//     printf("[TIMER]\n");
 
-    if (g_apic_base)
-        g_apic_base[APIC_EOI/4] = 0; // clear EOI
-}
+//     EXEC_interrupt();
+
+//     if (g_apic_base)
+//         g_apic_base[APIC_EOI/4] = 0; // clear EOI
+// }
 
 
 #define MAKE_SEGMENT_DESC(BASE,LIMIT,ACCESS_BYTE,FLAGS) (\
@@ -192,6 +196,9 @@ void init_gdt() {
     asm ( "cli\n" );
 
     // Base and LIMIT are set to zero because they are ignored in 64-bit mode.
+
+    // Ensure the macros KERNEL_CODE_SEGMENT, KERNEL_DATA_SEGMENT
+    // Match with below.
 
     // Null descriptor.
     _gdt[0] = MAKE_SEGMENT_DESC(0,0,0,0);
@@ -309,7 +316,7 @@ void init_apic() {
     PMEM_map_memory((void*)apic_base, (void*)apic_base, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
 
 
-    // Reset APIC to known state. (doesn't seem necessary in QEMU but very important on real Hardware)
+    // Reset APIC to known state. (doesn't seem necessary)
     // u32 tmp;
     // apic_base[APIC_DFR/4] = 0xFFFFFFFF; // reset Destination Format Register
     // tmp = apic_base[APIC_LDR/4];
@@ -327,15 +334,15 @@ void init_apic() {
     apic_base[APIC_LVT_TMR/4] = 48 | (1 << 17); // periodic mode
     apic_base[APIC_TMRINITCNT/4] = 10000000;
 
-    printf("LVT timer=%x\n", apic_base[APIC_LVT_TMR / 4]);
+    // printf("LVT timer=%x\n", apic_base[APIC_LVT_TMR / 4]);
 
 
     int lapic_id = apic_base[APIC_APICID/4];
-    printf("apic id: %d\n", lapic_id);
+    // printf("apic id: %d\n", lapic_id >> 24);
 
     apic_base[APIC_SPURIOUS/4] = APIC_SOFTWARE_ENABLE | 0xFF;
 
-    printf("SVR: %x\n", apic_base[APIC_SPURIOUS]);
+    // printf("SVR: %x\n", apic_base[APIC_SPURIOUS]);
 
 
     PMEM_map_memory((void*)acpi_ioapic_address, (void*)acpi_ioapic_address, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
@@ -358,3 +365,34 @@ void CPU_reset() {
     acpi_system_reset();
 }
 
+
+
+void CPU_sleep(u64 nanoseconds) {
+    // @TODO seconds to cycles conversion
+    u64 target = nanoseconds*4 + rdtsc();
+
+    while(1) {
+        u64 now = rdtsc();
+        if (now >= target)
+            break;
+        pause();
+    }
+}
+
+int CPU_get_core_index() {
+
+    return g_apic_base[APIC_APICID/4] >> 24;
+}
+
+
+void apic_clear_eoi() {
+    g_apic_base[APIC_EOI/4] = 0; // clear EOI
+}
+
+
+void CPU_enable_interrupt() {
+    sti();
+}
+void CPU_disable_interrupt() {
+    cli();
+}

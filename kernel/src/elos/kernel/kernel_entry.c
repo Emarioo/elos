@@ -21,6 +21,8 @@
 
 #include "elos/kernel/pmem/paging.h"
 
+#include "elos/execution.h"
+
 bool load_font();
 
 
@@ -107,15 +109,18 @@ void kernel_entry(BootAPI* in_boot_api) {
     u32 target_ip = ipv4_from_str("192.168.100.50");
 
     // In QEMU you need to setup DHCP server or use "-netdev user,id=net0"
-    NET_send_dhcp_discover(net_device);
+    // NET_send_dhcp_discover(net_device);
     
     // In QEMU you cannot use "-netdev user,id=net0".
     // You must setup tap device (which is preferably anyway because you can use wireshark)
-    NET_send_arp(net_device, target_ip);
+    // NET_send_arp(net_device, target_ip);
 
-    // KCON_net_set_target(net_device, 
+
 
     KCON_printf("END OF KERNEL_ENTRY!\n");
+
+    EXEC_init();
+
     while (1) {
         if (count) {
             NET_Packet packet;

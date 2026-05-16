@@ -2,7 +2,7 @@
 #include "elos/kernel/driver/pata.h"
 
 #include "elos/kernel_console.h"
-#include "elos/common/cpu.h"
+#include "elos/cpu.h"
 
 #include "elos/common/intrinsics.h"
 
@@ -59,7 +59,7 @@ int ata_wait_drq() {
 
 void ata_soft_reset() {
     outb(IO_PRIMARY_CONTROL, 0x4); // SRST
-    sleep_ns(5000); // 5 us
+    CPU_sleep(5000); // 5 us
     outb(IO_PRIMARY_CONTROL, 0);
 }
 
@@ -246,7 +246,7 @@ int ata_write_sectors(void* buffer, u64 lba, u64 sectors) {
     u16* ptr = (u16*)buffer;
     for (int i = 0; i < 256; i++) {
         outw(IO_PRIMARY_BASE, ptr[i]); // 256 words = 512 bytes
-        sleep_ns(1000);
+        CPU_sleep(1000);
     }
 
     outb(IO_PRIMARY_BASE + 7, 0xE7); // flush command

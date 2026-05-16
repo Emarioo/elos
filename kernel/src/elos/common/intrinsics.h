@@ -2,6 +2,28 @@
 
 #include "elos/common/types.h"
 
+
+static inline void cli() {
+    asm( "cli\n" );
+}
+
+static inline void sti() {
+    asm( "sti\n" );
+}
+
+
+static inline u64 get_rflags() {
+    u64 rax;
+    asm(
+        "pushfq\n"
+        "pop %0\n"
+        : "=a" (rax)
+        :
+    );
+    return rax;
+}
+
+
 static inline void outb(u16 port, u8 value) {
     asm(
         "outb %0, %1\n"

@@ -178,6 +178,22 @@ void init_network() {
 }
 
 
+void CPU_sleep(u64 nanoseconds) {
+    static u64 rdtsc_base;
+    if (!rdtsc_base)
+        rdtsc_base = rdtsc();
+
+    // @TODO seconds to cycles conversion
+    u64 target = nanoseconds + (rdtsc() - rdtsc_base);
+
+    while(1) {
+        u64 now = rdtsc() - rdtsc_base;
+        if (now >= target)
+            break;
+        pause();
+    }
+}
+
 int efi_recv(NetBoot_Device device, void* buffer, int* out_size) {
     
     EFI_STATUS status;

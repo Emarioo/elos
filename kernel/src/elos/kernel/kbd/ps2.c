@@ -2,7 +2,7 @@
 
 #include "elos/common/intrinsics.h"
 #include "elos/kernel_console.h"
-#include "elos/common/cpu.h"
+#include "elos/cpu.h"
 #include "elos/common/types.h"
 #include "elos/common/string.h"
 #include "elos/kernel/kbd/keys.h"
@@ -56,7 +56,7 @@ void ps2_write_byte(u8 byte) {
 
 int ps2_read_scancode() {
     while (1) {
-        __pause();
+        pause();
         int data = ps2_read_byte();
         // printf("Got %d\n", data);
         if (data == 0xE0) {

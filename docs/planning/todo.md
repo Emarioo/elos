@@ -19,7 +19,7 @@ The categories are:
 Tasks related to kernel and operating system
 
 ## @current
-- [ ] A key to reboot kernel.
+- [ ] Scheduler. context switch, enable multiple processors, load executable.
 - [ ] Driver for file system, disk device.
 
 ## @urgent

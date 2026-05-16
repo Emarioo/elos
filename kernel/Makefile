@@ -50,6 +50,7 @@ OBJ_FILES := $(patsubst $(INT_DIR)/%.s,$(INT_DIR)/%.o,$(OBJ_FILES))
 
 DEP_FILES := $(patsubst %.o,%.d,$(OBJ_FILES))
 
+
 all: $(KERNEL_IMAGE) $(KERNEL_ELF)
 
 ifeq (0, $(words $(findstring $(MAKECMDGOALS), clean)))

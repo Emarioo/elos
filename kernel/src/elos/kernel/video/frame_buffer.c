@@ -4,8 +4,11 @@
 #include "elos/common/types.h"
 #include "elos/common/string.h"
 
+#include "elos/cpu.h"
+
 #include "elos/kernel/video/frame.h"
 #include "elos/kernel/video/font/font.h"
+
 
 #include <stdarg.h>
 
@@ -48,6 +51,7 @@ void FB_printf(const char* format, ...) {
 }
 
 void FB_write(const char* buffer, int len) {
+    CPU_disable_interrupt();
 
     int start = 0;
     int head = 0;
@@ -106,4 +110,5 @@ void FB_write(const char* buffer, int len) {
         }
     }
 
+    CPU_enable_interrupt();
 }

@@ -92,17 +92,18 @@ for i in range(256):
         iretq
         '''
     elif i == 48:
-        text += f'''
-    isr_stub_{i}:
+        pass
+    #     text += f'''
+    # isr_stub_{i}:
     
-        {push_regs}
+    #     {push_regs}
 
-        call interrupt_timer
+    #     call interrupt_timer
 
-        {pop_regs}
+    #     {pop_regs}
 
-        iretq
-        '''
+    #     iretq
+    #     '''
     elif i == 255:
         text += f'''
     isr_stub_{i}:
@@ -140,7 +141,7 @@ for i in range(256):
     elif i == 33:
         text += f".quad isr_stub_{i}\n"
     elif i == 48:
-        text += f".quad isr_stub_{i}\n"
+        text += f".quad timer_isr\n"
     elif i == 255:
         text += f".quad isr_stub_{i}\n"
     else:
