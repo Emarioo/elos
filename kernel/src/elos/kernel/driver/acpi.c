@@ -8,6 +8,8 @@
 
 #include "elos/common/intrinsics.h"
 
+#include "elos/cpu.h"
+
 #define printf(...) KCON_printf(__VA_ARGS__)
 
 
@@ -20,6 +22,8 @@ static u8  reset_value;
 
 u64 acpi_lapic_address;
 u64 acpi_ioapic_address;
+u64 acpi_hpet_address;
+
 
 
 void acpi_init(BootAPI* boot_api) {
@@ -56,8 +60,9 @@ void acpi_init(BootAPI* boot_api) {
     u64* array_of_sdt = (u64*)((char*)rsdt + sizeof(*rsdt));
 
 
-    ACPI_SDTHeader* fadt = NULL;
-    ACPI_SDTHeader* madt = NULL;
+    ACPI_SDTHeader* fadt_header = NULL;
+    ACPI_SDTHeader* madt_header = NULL;
+    ACPI_SDTHeader* hpet_header = NULL;
 
     for (int i=0;i<array_of_sdt_len;i++) {
         ACPI_SDTHeader* header = (ACPI_SDTHeader*)array_of_sdt[i];
@@ -71,22 +76,24 @@ void acpi_init(BootAPI* boot_api) {
         memcpy(name, header->Signature, 4);
         name[4] = 0;
         if (!memcmp(header->Signature, "FACP", 4)) {
-            fadt = header;
+            fadt_header = header;
         } else if (!memcmp(header->Signature, "APIC", 4)) {
-            madt = header;
+            madt_header = header;
+        } else if (!memcmp(header->Signature, "HPET", 4)) {
+            hpet_header = header;
         }
     }
 
-    if (madt) {
-        MADT_header* madt_extra = (MADT_header*)((char*)madt + sizeof(ACPI_SDTHeader));
-        printf("MADT LAPIC address: %x\n", madt_extra->lapic_address);
-        printf("MADT flags: %x\n", madt_extra->flags);
+    if (madt_header) {
+        MADT_header* madt = (MADT_header*)((char*)madt_header + sizeof(ACPI_SDTHeader));
+        printf("MADT LAPIC address: %x\n", madt->lapic_address);
+        printf("MADT flags: %x\n", madt->flags);
 
         
-        acpi_lapic_address = madt_extra->lapic_address;
+        acpi_lapic_address = madt->lapic_address;
 
-        u8* entries = (u8*)madt_extra + sizeof(MADT_header);
-        int entries_size = madt->Length - sizeof(ACPI_SDTHeader) - sizeof(MADT_header);
+        u8* entries = (u8*)madt + sizeof(MADT_header);
+        int entries_size = madt_header->Length - sizeof(ACPI_SDTHeader) - sizeof(MADT_header);
         int head = 0;
         while (head < entries_size) {
             int start_head = head;
@@ -152,37 +159,47 @@ void acpi_init(BootAPI* boot_api) {
         }
     }
 
-    if (fadt) {
-        FADT* fadt_extra = (FADT*)((char*)fadt + sizeof(ACPI_SDTHeader));
+    if (fadt_header) {
+        FADT* fadt = (FADT*)((char*)fadt_header + sizeof(ACPI_SDTHeader));
 
-        if ((char*)&fadt_extra->ResetValue - (char*)fadt < fadt->Length) {
+        if ((char*)&fadt->ResetValue - (char*)fadt_header < fadt_header->Length) {
             // Some FADT are smaller and may not have reset capability.
 
-            printf("fadt.ResetReg.AccessSize: %d\n", fadt_extra->ResetReg.AccessSize);
-            printf("fadt.ResetReg.Address: %x\n", fadt_extra->ResetReg.Address);
-            printf("fadt.ResetReg.AddressSpace: %d\n", fadt_extra->ResetReg.AddressSpace);
-            printf("fadt.ResetValue: %d\n", fadt_extra->ResetValue);
+            printf("fadt.ResetReg.AccessSize: %d\n", fadt->ResetReg.AccessSize);
+            printf("fadt.ResetReg.Address: %x\n", fadt->ResetReg.Address);
+            printf("fadt.ResetReg.AddressSpace: %d\n", fadt->ResetReg.AddressSpace);
+            printf("fadt.ResetValue: %d\n", fadt->ResetValue);
             
             #define ADDRESS_SPACE_SYSTEM_MEMORY 0
             #define ADDRESS_SPACE_SYSTEM_IO 0
-            if (fadt_extra->ResetReg.AddressSpace == ADDRESS_SPACE_SYSTEM_MEMORY) { 
-                bool mapped = PMEM_map_memory((void*)fadt_extra->ResetReg.Address, (void*)fadt_extra->ResetReg.Address, 1, PMEM_FLAG_NOT_CACHED);
+            if (fadt->ResetReg.AddressSpace == ADDRESS_SPACE_SYSTEM_MEMORY) { 
+                bool mapped = PMEM_map_memory((void*)fadt->ResetReg.Address, (void*)fadt->ResetReg.Address, 1, PMEM_FLAG_NOT_CACHED);
                 if (mapped) {
                     reset_addressSpace = ADDRESS_SPACE_SYSTEM_MEMORY;
-                    reset_address = fadt_extra->ResetReg.Address;
-                    reset_value = fadt_extra->ResetValue;
+                    reset_address = fadt->ResetReg.Address;
+                    reset_value = fadt->ResetValue;
                 }
-            } else if (fadt_extra->ResetReg.AddressSpace == ADDRESS_SPACE_SYSTEM_IO) { 
+            } else if (fadt->ResetReg.AddressSpace == ADDRESS_SPACE_SYSTEM_IO) { 
                 reset_addressSpace = ADDRESS_SPACE_SYSTEM_IO;
-                reset_address = fadt_extra->ResetReg.Address;
-                reset_value = fadt_extra->ResetValue;
+                reset_address = fadt->ResetReg.Address;
+                reset_value = fadt->ResetValue;
             }
         }
-
     }
     
-}
+    if (hpet_header) {
+        HPET* hpet = (HPET*)((char*)hpet_header + sizeof(ACPI_SDTHeader));
 
+        if (hpet->address.AddressSpace != ADDRESS_SPACE_SYSTEM_MEMORY) {
+            printf("HPET does not use MMIO\n");
+        } else {
+            acpi_hpet_address = hpet->address.Address;
+
+            PMEM_map_memory((void*)acpi_hpet_address, (void*)acpi_hpet_address, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
+
+        }
+    }
+}
 
 
 void acpi_system_reset() {

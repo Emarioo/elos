@@ -38,6 +38,13 @@ void kernel_entry(BootAPI* in_boot_api) {
     // we setup our own page tables.
     _boot_api = *in_boot_api;
     boot_api = &_boot_api;
+    
+    // Disable PIT (gives out some stray IRQ2 in the beginning which inteferes with HPET interrupt)
+    outb(0x43, 0x30);
+    outb(0x40, 0);
+    outb(0x40, 0);
+    outb(0x21, 0xFF);
+    outb(0xA1, 0xFF);
 
     // Have .bss section in kernel image been memory mapped?
     // In theory the .data, .rodata, .text should be mapped because we allocate memory for kernel image from
@@ -119,9 +126,9 @@ void kernel_entry(BootAPI* in_boot_api) {
 
     KCON_printf("END OF KERNEL_ENTRY!\n");
 
-    CPU_start_core(1, NULL);
+    // CPU_start_core(1, NULL);
 
-    KCON_printf("Started cores\n");
+    // KCON_printf("Started cores\n");
     // EXEC_init();
 
     while (1) {

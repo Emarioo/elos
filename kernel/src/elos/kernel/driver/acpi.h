@@ -220,9 +220,65 @@ typedef struct {
 } FADT;
 #pragma pack(pop)
 
+#pragma pack(push, 1)
+typedef struct {
+    uint8_t hardware_rev_id;
+    uint8_t comparator_count:5;
+    uint8_t counter_size:1;
+    uint8_t reserved:1;
+    uint8_t legacy_replacement:1;
+    uint16_t pci_vendor_id;
+    GenericAddressStructure address;
+    uint8_t hpet_number;
+    uint16_t minimum_tick;
+    uint8_t page_protection;
+} HPET;
+#pragma pack(pop)
+
+
+
+#pragma pack(push, 1)
+typedef struct {
+    uint8_t  rev_id;
+    uint8_t  num_time_cap: 5;
+    uint8_t  count_size_cap : 1;
+    uint8_t  reserved : 1;
+    uint8_t  leg_rt_cap : 1;
+    uint16_t vendor_id;
+    uint32_t counter_clk_period;
+} HPET_Capability_Register;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct {
+    uint8_t  reserved2: 1;
+    uint8_t  int_type_cnf: 1;
+    uint8_t  int_enb_cnf: 1;
+    uint8_t  type_cnf: 1;
+    uint8_t  per_int_cap: 1;
+    uint8_t  size_cap: 1;
+    uint8_t  val_set_cnf: 1;
+    uint8_t  reserved1: 1;
+    uint8_t  int_route_cnf : 6;
+    uint8_t  fsb_en_cnf : 1;
+    uint8_t  fsb_int_del_cap : 1;
+    uint16_t reserved;
+    uint32_t int_route_cap;
+} HPET_Timer_Register;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct {
+    uint64_t  enable_cnf: 1;
+    uint64_t  leg_rt_cnf: 1;
+    uint64_t  reserved: 62;
+} HPET_Configuration_Register;
+#pragma pack(pop)
+
 
 extern u64 acpi_lapic_address;
 extern u64 acpi_ioapic_address;
+extern u64 acpi_hpet_address;
 
 void acpi_init(BootAPI* boot_api);
 

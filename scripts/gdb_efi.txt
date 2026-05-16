@@ -10,5 +10,5 @@ b catch_bad_status
 b kernel_bug
 b thread_bootstrap
 
-b EXEC_interrupt
+b hpet_calibrate
 c

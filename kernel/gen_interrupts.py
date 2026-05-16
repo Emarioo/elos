@@ -16,9 +16,8 @@ text = f'''
 .section .text
 '''
 
-push_regs = '''
+push_volatile = '''
         push rax
-        push rbx
         push rcx
         push rdx
         push rsi
@@ -29,7 +28,7 @@ push_regs = '''
         push r11
 '''
 
-pop_regs = '''
+pop_volatile = '''
         pop r11
         pop r10
         pop r9
@@ -38,7 +37,6 @@ pop_regs = '''
         pop rsi
         pop rdx
         pop rcx
-        pop rbx
         pop rax
 '''
 
@@ -58,14 +56,14 @@ for i in range(256):
         push rbp
         mov rbp, rsp
 
-        {push_regs}
+        {push_volatile}
 
         mov rdi, {i}  # isr number
         mov rsi, rsp  # pass pointer to stack frame
 
         call exception_handler
         
-        {pop_regs}
+        {pop_volatile}
 
         pop rbp
 
@@ -78,16 +76,28 @@ for i in range(256):
         push rbp
         mov rbp, rsp
 
-        {push_regs}
+        {push_volatile}
 
         mov rdi, {i}  # isr number
         mov rsi, rsp  # pass pointer to stack frame
 
         call interrupt_handler
 
-        {pop_regs}
+        {pop_volatile}
 
         pop rbp
+
+        iretq
+        '''
+    elif i == 34:
+        text += f'''
+    isr_stub_{i}:
+
+        {push_volatile}
+
+        call hpet_isr
+
+        {pop_volatile}
 
         iretq
         '''
@@ -96,11 +106,11 @@ for i in range(256):
     #     text += f'''
     # isr_stub_{i}:
     
-    #     {push_regs}
+    #     {push_volatile}
 
     #     call interrupt_timer
 
-    #     {pop_regs}
+    #     {pop_volatile}
 
     #     iretq
     #     '''
@@ -108,14 +118,14 @@ for i in range(256):
         text += f'''
     isr_stub_{i}:
 
-        {push_regs}
+        {push_volatile}
 
         mov rdi, {i}
         mov rsi, rsp
 
         call unused_handler
 
-        {pop_regs}
+        {pop_volatile}
 
         iretq
         '''
@@ -139,6 +149,8 @@ for i in range(256):
     if i < 32:
         text += f".quad isr_stub_{i}\n"
     elif i == 33:
+        text += f".quad isr_stub_{i}\n"
+    elif i == 34:
         text += f".quad isr_stub_{i}\n"
     elif i == 48:
         text += f".quad timer_isr\n"
