@@ -6,6 +6,7 @@
 #include "elos/common/types.h"
 
 #include "elos/network.h"
+#include "elos/cpu.h"
 
 #include "elos/kernel/kcon/netlog.h"
 // #include "elos/kernel/net/net_internal.h"
@@ -45,11 +46,15 @@ void KCON_printf(const char* format, ...) {
     int len = vsnprintf(buffer, sizeof(buffer), format, va);
     va_end(va);
 
+    static u32 print_lock;
+
+    LOCK(&print_lock);
     for (int i=0;i<ARRAY_LENGTH(_write_hooks);i++) {
         if (_write_hooks[i]) {
             _write_hooks[i](buffer, len);
         }
     }
+    UNLOCK(&print_lock);
 }
 
 

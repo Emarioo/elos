@@ -9,6 +9,35 @@
 #define KERNEL_DATA_SEGMENT 0x10
 
 
+typedef struct {
+    // @TODO Save cr3
+    // @TODO Save float
+    // @TODO GS,FS segments
+
+    u64 r15;
+    u64 r14;
+    u64 r13;
+    u64 r11;
+    u64 r12;
+    u64 r10;
+    u64 r9;
+    u64 r8;
+    u64 rdi;
+    u64 rsi;
+    u64 rdx;
+    u64 rcx;
+    u64 rbx;
+    u64 rax;
+    u64 rbp;
+
+    u64 rip;
+    u64 cs;
+    u64 rflags;
+    u64 rsp;
+    u64 ss;
+} InterruptFrame;
+
+
 void CPU_init(BootAPI* boot_api);
 
 
@@ -17,7 +46,18 @@ void CPU_disable_interrupt();
 
 void CPU_reset();
 
+void CPU_calibrate_tsc();
 void CPU_sleep(u64 nanoseconds);
 
 int CPU_get_core_index();
+
+
+void CPU_start_core(u32 apic_id, InterruptFrame* frame);
+
+
+
+
+void LOCK(volatile u32* ptr);
+void UNLOCK(volatile u32* ptr);
+bool IS_LOCKED(volatile u32* ptr);
 

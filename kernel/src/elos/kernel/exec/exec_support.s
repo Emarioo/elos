@@ -3,7 +3,7 @@
 .extern thread_bootstrap
 .extern EXEC_interrupt
 
-.extern g_apic_base
+.extern g_lapic_base
 
 
 
@@ -49,7 +49,7 @@ timer_isr:
     mov rsp, rax
     
     # Clear EOI (end of interrupt), so next timer interrupt can arrive (and other interrupts like keyboard)
-    mov ebx, g_apic_base
+    mov ebx, g_lapic_base
     mov DWORD PTR [rbx + APIC_EOI], 0
     
     pop r15

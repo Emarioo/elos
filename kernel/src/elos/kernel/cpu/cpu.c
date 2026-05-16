@@ -2,24 +2,30 @@
 #include "elos/cpu.h"
 
 #include "elos/common/types.h"
+#include "elos/common/string.h"
+#include "elos/common/intrinsics.h"
+
 #include "elos/kernel_console.h"
 
 #include "elos/kernel/driver/acpi.h"
 
-#include "elos/common/intrinsics.h"
 #include "elos/physical_memory.h"
 
 #include "elos/kernel/kbd/ps2.h"
 #include "elos/kernel/kbd/keys.h"
 
+
+
 #include "elos/execution.h"
 
+#define printf(...) KCON_printf(__VA_ARGS__)
 
 
 void init_gdt();
 void init_idt();
 void init_apic();
 
+u64 tsc_per_second;
 
 void CPU_init(BootAPI* boot_api) {
 
@@ -29,6 +35,9 @@ void CPU_init(BootAPI* boot_api) {
     acpi_init(boot_api);
 
     init_apic();
+
+    CPU_calibrate_tsc();
+    printf("Calibrated tsc: %d/ms\n", tsc_per_second/1000);
 
 }
 
@@ -60,7 +69,7 @@ typedef struct IDT_Entry {
 } IDT_Entry;
 #pragma pack(pop)
 
-static GDT_Register _gdt_register;
+GDT_Register _gdt_register;
 static IDT_Register _idt_register;
 
 static u64 _gdt[3];
@@ -68,7 +77,6 @@ static u64 _gdt[3];
 _align(16)
 static IDT_Entry _idt[256];
 
-#define printf(...) KCON_printf(__VA_ARGS__)
 
 typedef struct {
     // uint64_t r11, r10, r9, r8;
@@ -83,9 +91,10 @@ typedef struct {
     uint64_t ss;
 } PageFaultFrame;
 
-volatile u32* g_apic_base;
+volatile u32* g_lapic_base;
 
 
+void ap_trampoline(); // defined in assembly
 
 #define APIC_APICID     0x20
 #define APIC_APICVER    0x30
@@ -134,16 +143,16 @@ void interrupt_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
         printf("scancode %d, %c\n", scancode, chr);
     }
 
-    if (g_apic_base)
-        g_apic_base[APIC_EOI/4] = 0; // clear EOI
+    if (g_lapic_base)
+        g_lapic_base[APIC_EOI/4] = 0; // clear EOI
 }
 
 
 void unused_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     printf("Interrupt unused #%d\n", isr_number);
 
-    if (g_apic_base)
-        g_apic_base[APIC_EOI/4] = 0; // clear EOI
+    if (g_lapic_base)
+        g_lapic_base[APIC_EOI/4] = 0; // clear EOI
 }
 
 
@@ -153,8 +162,8 @@ void unused_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
 
 //     EXEC_interrupt();
 
-//     if (g_apic_base)
-//         g_apic_base[APIC_EOI/4] = 0; // clear EOI
+//     if (g_lapic_base)
+//         g_lapic_base[APIC_EOI/4] = 0; // clear EOI
 // }
 
 
@@ -311,7 +320,7 @@ void init_apic() {
     // printf("Write new: IA32_APIC_BASE_MSR=%x\n", apic_msr);
 
     u32* apic_base = (void*)acpi_lapic_address;
-    g_apic_base = apic_base;
+    g_lapic_base = apic_base;
 
     PMEM_map_memory((void*)apic_base, (void*)apic_base, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
 
@@ -337,7 +346,7 @@ void init_apic() {
     // printf("LVT timer=%x\n", apic_base[APIC_LVT_TMR / 4]);
 
 
-    int lapic_id = apic_base[APIC_APICID/4];
+    int lapic_id = apic_base[APIC_APICID/4] >> 24;
     // printf("apic id: %d\n", lapic_id >> 24);
 
     apic_base[APIC_SPURIOUS/4] = APIC_SOFTWARE_ENABLE | 0xFF;
@@ -366,10 +375,38 @@ void CPU_reset() {
 }
 
 
+void CPU_calibrate_tsc() {
+    cli();
+
+    #define PIT_CMD_PORT 0x43
+    #define PIT_DATA_PORT 0x40
+
+    // This is awful calibration. Use HPET or interrupts or something.
+    // Found this on https://wiki.osdev.org/Symmetric_Multiprocessing
+    // but I think I misunderstood it.
+    // From eye measurement it seems to be off by a factor of 2-3 in QEMU and ~1000 on laptop.
+
+    u64 start = rdtsc();
+
+    outb(PIT_CMD_PORT, 0x30);
+    outb(PIT_DATA_PORT, 0xA9);
+    outb(PIT_DATA_PORT, 0x4);
+
+    outb(PIT_CMD_PORT, 0xE2);
+    
+    while ((inb(PIT_DATA_PORT) & 0x80) == 0) pause();
+
+    u64 end = rdtsc();
+
+    sti();
+
+    tsc_per_second = (end - start) * 1000;
+}
+
 
 void CPU_sleep(u64 nanoseconds) {
-    // @TODO seconds to cycles conversion
-    u64 target = nanoseconds*4 + rdtsc();
+    // @TODO Might be some overflow issues if you sleep for 10 seconds.
+    u64 target = (nanoseconds * tsc_per_second)/1000000000  + rdtsc();
 
     while(1) {
         u64 now = rdtsc();
@@ -380,13 +417,12 @@ void CPU_sleep(u64 nanoseconds) {
 }
 
 int CPU_get_core_index() {
-
-    return g_apic_base[APIC_APICID/4] >> 24;
+    return g_lapic_base[APIC_APICID/4] >> 24;
 }
 
 
 void apic_clear_eoi() {
-    g_apic_base[APIC_EOI/4] = 0; // clear EOI
+    g_lapic_base[APIC_EOI/4] = 0; // clear EOI
 }
 
 
@@ -395,4 +431,77 @@ void CPU_enable_interrupt() {
 }
 void CPU_disable_interrupt() {
     cli();
+}
+
+
+// MUST BE PAGE ALIGNED. Address is hardcoded in trampoline assembly.
+#define TRAMPOLINE_ADDRESS ((void*)0x8000)
+
+
+void CPU_start_core(u32 apic_id, InterruptFrame* frame) {
+    bool mapped = PMEM_map_memory(TRAMPOLINE_ADDRESS, TRAMPOLINE_ADDRESS, PAGE_SIZE, PMEM_FLAG_NONE);
+    if (!mapped) {
+        printf("Could not map AP trampoline\n");
+        return;
+    }
+
+    for (int i=0;i<10;i++) {
+        printf("Waiting %d\n", i);
+        CPU_sleep(1000000000);
+    }
+
+    // This code will freeze if APIC ID doesn't exist.
+    printf("Step KABOOM\n");
+
+    memcpy(TRAMPOLINE_ADDRESS, ap_trampoline, PAGE_SIZE);
+
+    printf("Step 1\n");
+
+    CPU_disable_interrupt();
+
+    g_lapic_base[APIC_ICRH/4] = (g_lapic_base[APIC_ICRH/4] & 0x00FFFFFF) | (apic_id << 24);
+    g_lapic_base[APIC_ICRL/4] = (g_lapic_base[APIC_ICRL/4] & 0xFFF00000) | (0x0C500); // send INIT, Level and Trigger Mode bit is set.
+    // Intel manual says trigger mode should be 0 for all but INIT de-assert. We use INIT assert so maybe we should ty 0x004500
+
+    while (g_lapic_base[APIC_ICRL/4] & 0x1000) pause(); // wait for delivery
+
+    printf("Step 2\n");
+
+    g_lapic_base[APIC_ICRH/4] = (g_lapic_base[APIC_ICRH/4] & 0x00FFFFFF) | (apic_id << 24);
+    g_lapic_base[APIC_ICRL/4] = (g_lapic_base[APIC_ICRL/4] & 0xFFF00000) | (0x08500); // send INIT deassert, Trigger Mode bit is set.
+    
+    while (g_lapic_base[APIC_ICRL/4] & 0x1000) pause(); // wait for delivery
+    
+    printf("Step 3\n");
+
+    CPU_sleep(10000000); // 10ms
+
+    for (int j = 0; j < 2; j++) {
+        g_lapic_base[APIC_ESR/4] = 0;
+        g_lapic_base[APIC_ICRH/4] = (g_lapic_base[APIC_ICRH/4] & 0x00FFFFFF) | (apic_id << 24);
+        g_lapic_base[APIC_ICRL/4] = (g_lapic_base[APIC_ICRL/4] & 0xFFF0F800) | (0x00600) | ((u32)(u64)TRAMPOLINE_ADDRESS/PAGE_SIZE); // send STARTUP IPI
+        
+        CPU_sleep(200000); // 200us
+
+        while (g_lapic_base[APIC_ICRL/4] & 0x1000) pause(); // wait for delivery
+        
+        printf("Step 4\n");
+    }
+
+    CPU_enable_interrupt();
+}
+
+_align(4096) u8  initial_ap_stack[32 * 0x1000]; // 4K stack for each AP. They can setup more later.
+_align(4096) u32 initial_ap_stack_top;
+
+// ap = Application Processor, BSP = Boot processor?
+void ap_entry(int id) {
+    
+
+    int lapic_id = g_lapic_base[APIC_APICID/4] >> 24;
+    // while (1) pause();
+
+    printf("AP #%d started (edi=%d)\n", lapic_id, id);
+
+    while (1) pause();
 }
