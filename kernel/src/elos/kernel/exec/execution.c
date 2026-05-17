@@ -17,25 +17,6 @@
 #define printf(...) KCON_printf(__VA_ARGS__)
 
 
-typedef void(*FN_ThreadEntry)();
-
-typedef struct {
-    InterruptFrame* frame;
-    void*           stack;
-    FN_ThreadEntry  entry;
-    u32             stack_size;
-    bool            used;
-} EXEC_Thread;
-
-#define THREAD_LIMIT 32
-#define CORE_LIMIT 32
-
-typedef struct {
-    EXEC_Thread threads[THREAD_LIMIT];
-    int active_thread;
-    volatile u32 thread_lock;
-} EXEC_Core;
-
 EXEC_Core cores[CORE_LIMIT];
 
 bool scheduling_enabled;
@@ -47,15 +28,15 @@ void EXEC_terminate_self_end();
 void thread_bootstrap(FN_ThreadEntry entry);
 
 u64 EXEC_interrupt(InterruptFrame* frame) {
-
-    // printf("Hello\n");
+    int coreIndex = CPU_get_core_index();
+    // printf("TIMED %d\n", coreIndex);
 
     if (!scheduling_enabled)
         return (u64)frame;
 
     u64 returnValue;
-    int coreIndex = CPU_get_core_index();
     EXEC_Core* core = &cores[coreIndex];
+
 
     LOCK(&core->thread_lock);
 

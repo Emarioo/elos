@@ -49,9 +49,10 @@ void CPU_reset();
 void CPU_sleep(u64 nanoseconds);
 
 int CPU_get_core_index();
+int CPU_get_core_count();
 
 
-void CPU_start_core(u32 apic_id, InterruptFrame* frame);
+void CPU_start_core(u32 apic_id);
 
 
 

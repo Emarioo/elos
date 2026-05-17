@@ -21,14 +21,45 @@
 #define printf(...) KCON_printf(__VA_ARGS__)
 
 
+#define APIC_APICID     0x20
+#define APIC_APICVER    0x30
+#define APIC_TASKPRIOR  0x80
+#define APIC_EOI        0x0B0
+#define APIC_LDR        0x0D0
+#define APIC_DFR        0x0E0
+#define APIC_SPURIOUS   0x0F0
+#define APIC_ESR        0x280
+#define APIC_ICRL       0x300
+#define APIC_ICRH       0x310
+#define APIC_LVT_TMR	0x320
+#define APIC_LVT_PERF	0x340
+#define APIC_LVT_LINT0	0x350
+#define APIC_LVT_LINT1	0x360
+#define APIC_LVT_ERR	0x370
+#define APIC_TMRINITCNT	0x380
+#define APIC_TMRCURRCNT	0x390
+#define APIC_TMRDIV	    0x3E0
+#define APIC_LAST	    0x38F
+#define APIC_DISABLE	0x10000
+#define APIC_SW_ENABLE	0x100
+#define APIC_CPUFOCUS	0x200
+#define APIC_NMI	 (4<<8)
+
+void ap_trampoline(); // defined in assembly
+
+
 void init_gdt();
 void init_idt();
 void init_apic();
 void calibrate_tsc();
 
+// MUST BE PAGE ALIGNED. Address is hardcoded in trampoline assembly.
+#define TRAMPOLINE_ADDRESS ((void*)0x8000)
 
 uint32_t cpuReadIoApic(void *ioapicaddr, uint32_t reg);
 void cpuWriteIoApic(void *ioapicaddr, uint32_t reg, uint32_t value);
+
+volatile u32* g_lapic_base;
 
 u64 tsc_per_sec;
 
@@ -39,6 +70,8 @@ void CPU_init(BootAPI* boot_api) {
 
     acpi_init(boot_api);
 
+    g_lapic_base = (void*)acpi_lapic_address;
+
     init_apic();
     
 
@@ -46,8 +79,30 @@ void CPU_init(BootAPI* boot_api) {
     cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x12, 33 | (1 << 15)); // 1<<15 does level trigger instead of edge, seems to work better?
     cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x13, 0);
 
-
+    // @TODO Calibration per core
     calibrate_tsc();
+
+
+
+    bool mapped = PMEM_map_memory(TRAMPOLINE_ADDRESS, TRAMPOLINE_ADDRESS, PAGE_SIZE, PMEM_FLAG_NONE);
+    if (!mapped) {
+        printf("Could not map AP trampoline\n");
+        return;
+    }
+    memcpy(TRAMPOLINE_ADDRESS, ap_trampoline, PAGE_SIZE);
+
+    int lapic_id = g_lapic_base[APIC_APICID/4] >> 24;
+
+    // Starting cores requires some sleep and precise timings.
+    // We must calibrate TSC first.
+    for (int i=0;i<acpi_lapic_ids_len;i++) {
+        u32 apic_id = acpi_lapic_ids[i];
+        if (apic_id == lapic_id)
+            continue; // don't try to start current core.
+
+        // printf("APIC id: %d\n", apic_id);
+        CPU_start_core(apic_id);
+    }
 }
 
 
@@ -79,7 +134,7 @@ typedef struct IDT_Entry {
 #pragma pack(pop)
 
 GDT_Register _gdt_register;
-static IDT_Register _idt_register;
+IDT_Register _idt_register;
 
 static u64 _gdt[3];
 
@@ -100,34 +155,9 @@ typedef struct {
     uint64_t ss;
 } PageFaultFrame;
 
-volatile u32* g_lapic_base;
 
 
-void ap_trampoline(); // defined in assembly
 
-#define APIC_APICID     0x20
-#define APIC_APICVER    0x30
-#define APIC_TASKPRIOR  0x80
-#define APIC_EOI        0x0B0
-#define APIC_LDR        0x0D0
-#define APIC_DFR        0x0E0
-#define APIC_SPURIOUS   0x0F0
-#define APIC_ESR        0x280
-#define APIC_ICRL       0x300
-#define APIC_ICRH       0x310
-#define APIC_LVT_TMR	0x320
-#define APIC_LVT_PERF	0x340
-#define APIC_LVT_LINT0	0x350
-#define APIC_LVT_LINT1	0x360
-#define APIC_LVT_ERR	0x370
-#define APIC_TMRINITCNT	0x380
-#define APIC_TMRCURRCNT	0x390
-#define APIC_TMRDIV	    0x3E0
-#define APIC_LAST	    0x38F
-#define APIC_DISABLE	0x10000
-#define APIC_SW_ENABLE	0x100
-#define APIC_CPUFOCUS	0x200
-#define APIC_NMI	 (4<<8)
 
 
 void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
@@ -295,6 +325,7 @@ void init_apic() {
         return;
     }
 
+    
     cli();
 
     #define IA32_APIC_BASE_MSR 0x1B
@@ -318,45 +349,42 @@ void init_apic() {
     u64 apic_msr = rdmsr(IA32_APIC_BASE_MSR);
     // printf("IA32_APIC_BASE_MSR=%x\n", apic_msr);
 
-    apic_msr = (apic_msr & ~0xFFFFFC00) | acpi_lapic_address | ((u64)1 << 11); // enable APIC, disable x2APIC, keep reserved and BSP bits (BSP = boot processor)
+    apic_msr = (apic_msr & ~0xFFFFFC00LLU) | acpi_lapic_address | ((u64)1 << 11); // enable APIC, disable x2APIC, keep reserved and BSP bits (BSP = boot processor)
     wrmsr(IA32_APIC_BASE_MSR, apic_msr);
     // printf("Write new: IA32_APIC_BASE_MSR=%x\n", apic_msr);
 
-    u32* apic_base = (void*)acpi_lapic_address;
-    g_lapic_base = apic_base;
+    // Important that we set up APIC_SPURIOUS early.
+    // APIC Timer or interrupts in general on real hardware (my laptop) won't get setup correctly.
+    g_lapic_base[APIC_SPURIOUS/4] = APIC_SOFTWARE_ENABLE | 0xFF;
+    // printf("SVR: %x\n", g_lapic_base[APIC_SPURIOUS]);
 
+    int lapic_id = g_lapic_base[APIC_APICID/4] >> 24;
+    // printf("apic id: %d\n", lapic_id);
+
+    // g_lapic_base[APIC_SPURIOUS/4] = APIC_SOFTWARE_ENABLE | 0xFF;
 
     // Reset APIC to known state. (may or may not be necessary but certainly doesn't hurt)
     u32 tmp;
-    apic_base[APIC_DFR/4] = 0xFFFFFFFF; // reset Destination Format Register
-    tmp = apic_base[APIC_LDR/4];
+    g_lapic_base[APIC_DFR/4] = 0xFFFFFFFF; // reset Destination Format Register
+    tmp = g_lapic_base[APIC_LDR/4];
     tmp &= 0x00FFFFFF;
     tmp |= 1;
-    apic_base[APIC_LDR/4] = tmp;
-    apic_base[APIC_LVT_TMR/4] = APIC_DISABLE;
-    apic_base[APIC_LVT_PERF/4] = APIC_NMI;
-    apic_base[APIC_LVT_LINT0/4] = APIC_DISABLE;
-    apic_base[APIC_LVT_LINT1/4] = APIC_DISABLE;
-    apic_base[APIC_TASKPRIOR/4] = 0;
+    g_lapic_base[APIC_LDR/4] = tmp;
+    g_lapic_base[APIC_LVT_TMR/4] = APIC_DISABLE;
+    g_lapic_base[APIC_LVT_PERF/4] = APIC_NMI;
+    g_lapic_base[APIC_LVT_LINT0/4] = APIC_DISABLE;
+    g_lapic_base[APIC_LVT_LINT1/4] = APIC_DISABLE;
+    g_lapic_base[APIC_TASKPRIOR/4] = 0;
 
-    apic_base[APIC_EOI/4] = 0; // clear EOI
-    apic_base[APIC_ESR/4] = 0; // clear Error Status
-    apic_base[APIC_ESR/4] = 0; // clear Error Status
+    g_lapic_base[APIC_EOI/4] = 0; // clear EOI
 
-    apic_base[APIC_TMRDIV/4] = 0x3;
-    apic_base[APIC_LVT_TMR/4] = 48 | (1 << 17); // periodic mode
-    apic_base[APIC_TMRINITCNT/4] = 10000000;
+    g_lapic_base[APIC_TMRDIV/4] = 0x3;
+    g_lapic_base[APIC_LVT_TMR/4] = 48 | (1 << 17); // periodic mode
+    g_lapic_base[APIC_TMRINITCNT/4] = 10000000;
 
-    // printf("LVT timer=%x\n", apic_base[APIC_LVT_TMR / 4]);
+    // printf("LVT timer=%x\n", g_lapic_base[APIC_LVT_TMR / 4]);
 
-
-    int lapic_id = apic_base[APIC_APICID/4] >> 24;
-    // printf("apic id: %d\n", lapic_id >> 24);
-
-    apic_base[APIC_SPURIOUS/4] = APIC_SOFTWARE_ENABLE | 0xFF;
-
-    // printf("SVR: %x\n", apic_base[APIC_SPURIOUS]);
-
+    // printf("ESR=%x\n", g_lapic_base[APIC_ESR/4]);
 
     sti();
 }
@@ -544,6 +572,9 @@ int CPU_get_core_index() {
     return g_lapic_base[APIC_APICID/4] >> 24;
 }
 
+int CPU_get_core_count() {
+    return acpi_lapic_ids_len;
+}
 
 void apic_clear_eoi() {
     g_lapic_base[APIC_EOI/4] = 0; // clear EOI
@@ -557,28 +588,8 @@ void CPU_disable_interrupt() {
     cli();
 }
 
-
-// MUST BE PAGE ALIGNED. Address is hardcoded in trampoline assembly.
-#define TRAMPOLINE_ADDRESS ((void*)0x8000)
-
-
-void CPU_start_core(u32 apic_id, InterruptFrame* frame) {
-    bool mapped = PMEM_map_memory(TRAMPOLINE_ADDRESS, TRAMPOLINE_ADDRESS, PAGE_SIZE, PMEM_FLAG_NONE);
-    if (!mapped) {
-        printf("Could not map AP trampoline\n");
-        return;
-    }
-
-    // for (int i=0;i<10;i++) {
-    //     printf("Waiting %d\n", i);
-    //     CPU_sleep(1000000000);
-    // }
-
-    // This code will freeze if APIC ID doesn't exist.
-
-    memcpy(TRAMPOLINE_ADDRESS, ap_trampoline, PAGE_SIZE);
-
-    CPU_disable_interrupt();
+void CPU_start_core(u32 apic_id) {
+    cli();
 
     g_lapic_base[APIC_ICRH/4] = (g_lapic_base[APIC_ICRH/4] & 0x00FFFFFF) | (apic_id << 24);
     g_lapic_base[APIC_ICRL/4] = (g_lapic_base[APIC_ICRL/4] & 0xFFF00000) | (0x0C500); // send INIT, Level and Trigger Mode bit is set.
@@ -603,10 +614,10 @@ void CPU_start_core(u32 apic_id, InterruptFrame* frame) {
         while (g_lapic_base[APIC_ICRL/4] & 0x1000) pause(); // wait for delivery
     }
 
-    CPU_enable_interrupt();
+    sti();
 }
 
-_align(4096) u8  initial_ap_stack[32 * 0x1000]; // 4K stack for each AP. They can setup more later.
+_align(4096) u8  initial_ap_stack[CORE_LIMIT * 0x1000]; // 4K stack for each AP. They can setup more later.
 _align(4096) u32 initial_ap_stack_top;
 
 // ap = Application Processor, BSP = Bootstrap processor?
@@ -614,9 +625,18 @@ void ap_entry(int id) {
     int lapic_id = g_lapic_base[APIC_APICID/4] >> 24;
     printf("AP #%d started (edi=%d)\n", lapic_id, id);
     
+    
+    int coreIndex = CPU_get_core_index();
+    EXEC_Core* core = &cores[coreIndex];
+    core->active_thread = 0;
+    core->threads[core->active_thread].used = true;
+    
+
     init_apic();
 
     // while (1) pause();
+    
+    // printf("APIC setup\n");
 
 
     while (1) pause();

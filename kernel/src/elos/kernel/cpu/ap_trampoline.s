@@ -72,15 +72,10 @@ _8060:
     mov cr0, eax
 
     lgdt [_gdt_register] # Prepared by BSP in Kernel C code
-    lidt [IDT]
+    lidt [_idt_register]
 
     // Jump to long mode
     ljmp 0x08:0x8100
-
-    .align 4
-IDT:
-    .word 0
-    .quad 0
 
     .align 256
     .code64

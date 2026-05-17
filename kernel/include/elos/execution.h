@@ -5,6 +5,27 @@
 #include "elos/cpu.h"
 
 
+typedef void(*FN_ThreadEntry)();
+
+typedef struct {
+    InterruptFrame* frame;
+    void*           stack;
+    FN_ThreadEntry  entry;
+    u32             stack_size;
+    bool            used;
+} EXEC_Thread;
+
+#define THREAD_LIMIT 32
+#define CORE_LIMIT 32
+
+typedef struct {
+    EXEC_Thread threads[THREAD_LIMIT];
+    int active_thread;
+    volatile u32 thread_lock;
+} EXEC_Core;
+
+extern EXEC_Core cores[CORE_LIMIT];
+
 
 void EXEC_init();
 

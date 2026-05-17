@@ -20,6 +20,9 @@ static u64 reset_address;
 static u8  reset_value;
 
 
+u32 acpi_lapic_ids[64];
+u32 acpi_lapic_ids_len;
+
 u64 acpi_lapic_address;
 IOAPIC_Info acpi_ioapic_array[4];
 int acpi_ioapic_array_len;
@@ -108,6 +111,9 @@ void acpi_init(BootAPI* boot_api) {
                     printf(" acpiProcessorID: %d\n", entry->acpiProcessorID);
                     printf(" apicID: %d\n", entry->apicID);
                     printf(" flags: %x\n", entry->flags);
+
+                    acpi_lapic_ids[acpi_lapic_ids_len] = entry->apicID;
+                    acpi_lapic_ids_len++;
                 } break;
                 case MADT_ENTRY_IOAPIC: {
                     MADT_ioapic* entry = (MADT_ioapic*)entry_base;

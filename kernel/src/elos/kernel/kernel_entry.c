@@ -121,8 +121,6 @@ void kernel_entry(BootAPI* in_boot_api) {
 
     KCON_printf("END OF KERNEL_ENTRY!\n");
 
-    // CPU_start_core(1, NULL);
-
     // KCON_printf("Started cores\n");
     EXEC_init();
     

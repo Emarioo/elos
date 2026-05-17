@@ -15,7 +15,7 @@
 
 #include "user/pipe.h"
 
-int ring_size = 0x50;
+int ring_size = 0x10000;
 Handle ringBuffer;
 
 #define printf(...) KCON_printf(__VA_ARGS__)
@@ -33,18 +33,11 @@ void terminal_main() {
         return;
     }
 
-    // Pass ring buffer to processes.
-    // ringB
-
-    // Create a ring buffer.
-    // Get a handle (maybe two but lets do one)
-    // We have the read handle
-    // we pass the write handle 
-
-    // Create a ring buffer 
-
-    EXEC_create_thread(proc1, -1);
-    EXEC_create_thread(proc2, -1);
+    int coreCount = CPU_get_core_count();
+    for (int i=0;i<coreCount;i++) {
+        EXEC_create_thread(proc1, i);
+        EXEC_create_thread(proc2, i);
+    }
 
     while (1) pause();
 }
@@ -58,35 +51,41 @@ typedef struct {
 } Message;
 
 void proc1() {
-    printf("Proc 1\n");
+    int core = CPU_get_core_index();
+    printf("Proc 1, on core: %d\n", core);
+
+    // while (1) pause();
 
     int index = 0;
 
     Message messages[] = {
-        { "Hello\n" },
-        { "World\n" },
-        { "Writing\n" },
-        { "Bytes\n" },
-        { "To you.\n" },
+        { "Hello" },
+        { "World" },
+        { "Writing" },
+        { "Bytes" },
+        { "To you." },
     };
 
     while (1) {
         int written = write(ringBuffer, &messages[index], sizeof(messages[index]));
         index = (index + 1) % ARRAY_LENGTH(messages);
 
-        printf("Sent %d %d\n", index, ARRAY_LENGTH(messages));
+        printf("C%d Sent %d\n", core, index);
         CPU_sleep(10 * MS);
     }
 }
 
 void proc2() {
-    printf("Proc 2\n");
+    int core = CPU_get_core_index();
+    printf("Proc 2, on core: %d\n", core);
+
+    // while (1) pause();
 
     Message msg;
 
     while (1) {
         int read_bytes = read(ringBuffer, &msg, sizeof(msg));
-        printf("Read: %s", msg.text);
+        printf("C%d Read: %s\n", core, msg.text);
 
         CPU_sleep(300 * MS);
     }

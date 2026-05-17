@@ -284,6 +284,10 @@ typedef struct {
     u64 interruptBaseNumber;
 } IOAPIC_Info;
 
+
+extern u32 acpi_lapic_ids[64];
+extern u32 acpi_lapic_ids_len;
+
 extern u64 acpi_lapic_address;
 extern IOAPIC_Info acpi_ioapic_array[4];
 extern int acpi_ioapic_array_len;
