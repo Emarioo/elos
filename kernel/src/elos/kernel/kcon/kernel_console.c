@@ -46,16 +46,13 @@ void KCON_printf(const char* format, ...) {
     int len = vsnprintf(buffer, sizeof(buffer), format, va);
     va_end(va);
 
-    static u32 print_lock;
 
 
-    LOCK_INT(&print_lock);
     for (int i=0;i<ARRAY_LENGTH(_write_hooks);i++) {
         if (_write_hooks[i]) {
             _write_hooks[i](buffer, len);
         }
     }
-    UNLOCK_INT(&print_lock);
 }
 
 
@@ -76,6 +73,10 @@ void serial_init() {
 
 
 void serial_write(const char* buffer, int size) {
+    static u32 print_lock;
+
+    LOCK_INT(&print_lock);
+
     for (int i = 0; i < size; i++) {
         int limit = 100;
         while (limit--) {
@@ -85,6 +86,8 @@ void serial_write(const char* buffer, int size) {
         }
         outb(COM1, buffer[i] & 0x7F);
     }
+
+    UNLOCK_INT(&print_lock);
 }
 
 

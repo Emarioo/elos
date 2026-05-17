@@ -11,6 +11,7 @@
 
 #include "elos/kernel/config.h"
 
+#include "elos/cpu.h"
 
 #define MAX_REGIONS 1000
 
@@ -153,8 +154,13 @@ void PMEM_init(BootAPI* boot_api) {
 }
 
 
+u32 allocate_spinlock;
 
 void* PMEM_allocate(u64 size, void* ptr) {
+    void* returnValue;
+
+    LOCK_INT(&allocate_spinlock);
+
     const int requested_pages = (size + PAGE_SIZE-1) / PAGE_SIZE;
     const int requested_aligned_size = ((size + PAGE_SIZE-1) / PAGE_SIZE) * PAGE_SIZE;
     // in pages, same as PhysicalMemoryRegion.virtualStart
@@ -162,7 +168,8 @@ void* PMEM_allocate(u64 size, void* ptr) {
     void* const old_aligned_ptr   = (void*)(((u64)ptr) * PAGE_SIZE);
 
     if (!size && !old_virtual_address) {
-        return NULL;
+        returnValue = NULL;
+        goto cleanup;
     }
 
 
@@ -182,7 +189,8 @@ void* PMEM_allocate(u64 size, void* ptr) {
         }
 
         if (found_used_index == -1) {
-            return NULL;
+            returnValue = NULL;
+            goto cleanup;
         }
 
         PhysicalMemoryRegion* used_alloc = &g_used_regions[found_used_index];
@@ -196,7 +204,8 @@ void* PMEM_allocate(u64 size, void* ptr) {
         //   so no point in improving this now.
         PMEM_allocate(0, old_aligned_ptr);
 
-        return new_ptr;
+        returnValue = new_ptr;
+        goto cleanup;
 
     } else if (old_virtual_address) {
         // FREE MEMORY
@@ -220,7 +229,8 @@ void* PMEM_allocate(u64 size, void* ptr) {
         }
 
         if (found_used_index == -1) {
-            return NULL;
+            returnValue = NULL;
+            goto cleanup;
         }
 
         int found_free_index = -1;
@@ -234,7 +244,8 @@ void* PMEM_allocate(u64 size, void* ptr) {
         }
 
         if (found_free_index == -1) {
-            return NULL;
+            returnValue = NULL;
+            goto cleanup;
         }
 
         PhysicalMemoryRegion* free_alloc = &g_free_regions[found_free_index];
@@ -255,10 +266,13 @@ void* PMEM_allocate(u64 size, void* ptr) {
         if (!yes) {
             kernel_bug();
             // Bug in kernel if this doesn't work
-            return NULL;
+            returnValue = NULL;
+            goto cleanup;
         }
 
-        return NULL; // we return NULL on success when freeing
+        // we return NULL on success when freeing
+        returnValue = NULL;
+        goto cleanup;
 
     } else /* if (size) */ {
         // ALLOCATE MEMORY
@@ -277,7 +291,8 @@ void* PMEM_allocate(u64 size, void* ptr) {
         }
 
         if (found_free_index == -1) {
-            return NULL;
+            returnValue = NULL;
+            goto cleanup;
         }
 
         int found_used_index = -1;
@@ -291,7 +306,8 @@ void* PMEM_allocate(u64 size, void* ptr) {
         }
 
         if (found_used_index == -1) {
-            return NULL;
+            returnValue = NULL;
+            goto cleanup;
         }
 
         PhysicalMemoryRegion* free_alloc = &g_free_regions[found_free_index];
@@ -318,14 +334,19 @@ void* PMEM_allocate(u64 size, void* ptr) {
         bool yes = PMEM_map_memory(new_ptr, new_ptr, requested_pages * PAGE_SIZE, PMEM_FLAG_NONE);
         if (!yes) {
             kernel_bug();
-            return NULL;
+            returnValue = NULL;
+            goto cleanup;
         }
 
         // Initialize to non-zero. Easier to debug when i see 9D and now it's uninitialized and came from PMEM_allocate.
         memset(new_ptr, 0x9D, aligned_size);
 
-        return new_ptr;
+        returnValue = new_ptr;
+        goto cleanup;
     }
+cleanup:
+    UNLOCK_INT(&allocate_spinlock);
+    return returnValue;
 }
 
 
@@ -422,8 +443,12 @@ void* PMEM_allocate(u64 size, void* ptr) {
 
 
 void* PMEM_alloc_phys(u64 size, PMEM_Flags flags) {
+    void* returnValue;
+    
     if (size <= 0)
         return NULL;
+
+    LOCK_INT(&allocate_spinlock);
 
     u64 requested_pages = (size + PAGE_SIZE-1) / PAGE_SIZE;
 
@@ -441,7 +466,8 @@ void* PMEM_alloc_phys(u64 size, PMEM_Flags flags) {
     }
 
     if (found_free_index == -1) {
-        return NULL;
+        returnValue = NULL;
+        goto cleanup;
     }
 
     int found_used_index = -1;
@@ -455,7 +481,8 @@ void* PMEM_alloc_phys(u64 size, PMEM_Flags flags) {
     }
 
     if (found_used_index == -1) {
-        return NULL;
+        returnValue = NULL;
+        goto cleanup;
     }
 
     PhysicalMemoryRegion* free_alloc = &g_free_regions[found_free_index];
@@ -483,11 +510,16 @@ void* PMEM_alloc_phys(u64 size, PMEM_Flags flags) {
         bool yes = PMEM_map_memory(new_ptr, new_ptr, requested_pages * PAGE_SIZE, flags & ~PMEM_FLAG_IDENTITY_MAPPED);
         if (!yes) {
             printf("pmem: Could not identity physical pages at %x.\n", new_ptr);
-            return NULL;
+            returnValue = NULL;
+            goto cleanup;
         }
     }
 
-    return new_ptr;
+    returnValue = new_ptr;
+
+cleanup:
+    UNLOCK_INT(&allocate_spinlock);
+    return returnValue;
 }
 
 bool PMEM_map_memory(void* virtual_address, void* physical_address, u64 size, PMEM_Flags flags) {

@@ -20,9 +20,11 @@
 typedef void(*FN_ThreadEntry)();
 
 typedef struct {
-    bool used;
     InterruptFrame* frame;
-    FN_ThreadEntry entry;
+    void*           stack;
+    FN_ThreadEntry  entry;
+    u32             stack_size;
+    bool            used;
 } EXEC_Thread;
 
 #define THREAD_LIMIT 32
@@ -31,6 +33,7 @@ typedef struct {
 typedef struct {
     EXEC_Thread threads[THREAD_LIMIT];
     int active_thread;
+    volatile u32 thread_lock;
 } EXEC_Core;
 
 EXEC_Core cores[CORE_LIMIT];
@@ -40,17 +43,29 @@ bool scheduling_enabled;
 void test_thread1();
 void test_thread2();
 
+void EXEC_terminate_self_end();
+void thread_bootstrap(FN_ThreadEntry entry);
 
 u64 EXEC_interrupt(InterruptFrame* frame) {
+
+    // printf("Hello\n");
+
     if (!scheduling_enabled)
         return (u64)frame;
 
+    u64 returnValue;
     int coreIndex = CPU_get_core_index();
     EXEC_Core* core = &cores[coreIndex];
+
+    LOCK(&core->thread_lock);
 
     int currentThread_index = core->active_thread;
     EXEC_Thread* currentThread = &core->threads[core->active_thread];
     EXEC_Thread* nextThread = NULL;
+
+    if (frame->rip == (u64)EXEC_terminate_self_end) {
+        currentThread->used = false;
+    }
 
     while (1) {
         core->active_thread = (core->active_thread + 1) % THREAD_LIMIT;
@@ -60,43 +75,54 @@ u64 EXEC_interrupt(InterruptFrame* frame) {
         }
     }
 
-    if (currentThread == nextThread) {
+    if (currentThread == nextThread || nextThread == NULL) {
         // do nothing
-        return (u64)frame;
+        returnValue = (u64)frame;
+        goto exit;
     }
 
+    currentThread->frame = frame;
+    returnValue = (u64)nextThread->frame;
     // printf("Switch to %d\n", core->active_thread);
 
-    currentThread->frame = frame;
-    return (u64)nextThread->frame;
+exit:
+    UNLOCK(&core->thread_lock);
+    return returnValue;
 }
 
 void EXEC_init() {
     printf("EXEC init\n");
 
+    int coreIndex = CPU_get_core_index();
+    EXEC_Core* core = &cores[coreIndex];
 
-    EXEC_create_thread(test_thread1);
-    EXEC_create_thread(test_thread2);
+    EXEC_Thread* this_thread = &core->threads[0];
+    this_thread->used = true;
+    core->active_thread = 0;
 
-    EXEC_Core* core = &cores[0];
-
-    core->active_thread = THREAD_LIMIT-1;
-    if (core->threads[core->active_thread].used) {
-        printf("Overwriting FRAME of created thread #%d!!!\n", core->active_thread);
-    }
+    // EXEC_create_thread(test_thread1);
+    // EXEC_create_thread(test_thread2);
 
     printf("Enable scheduling\n");
     scheduling_enabled = true;
-    // Wait for timer interrupt
-    while (1) {
-        pause();
-    }
 }
 
-bool EXEC_create_thread(void* entry) {
-    EXEC_Core* core = &cores[0];
-    
-    // @TODO Thread safety
+bool EXEC_create_thread(void* entry, int pinnedCoreIndex) {
+    bool returnValue;
+    int coreIndex;
+    if (pinnedCoreIndex != -1) {
+        if (pinnedCoreIndex < 0 || pinnedCoreIndex > CORE_LIMIT) {
+            printf("EXEC_create_thread: Invalid pinnedCoreIndex %d (0 - %d)\n", pinnedCoreIndex, CORE_LIMIT-1);
+            return false;
+        }
+        coreIndex = pinnedCoreIndex;
+    } else {
+        coreIndex = CPU_get_core_index();
+    }
+    EXEC_Core* core = &cores[coreIndex];
+
+    LOCK_INT(&core->thread_lock);
+
     EXEC_Thread* found_thread = NULL;
     for (int i=0;i<ARRAY_LENGTH(core->threads);i++) {
         EXEC_Thread* thread = &core->threads[i];
@@ -106,20 +132,27 @@ bool EXEC_create_thread(void* entry) {
         }
     }
     if (!found_thread) {
-        return false;
+        returnValue = false;
+        goto exit;
     }
-    memset(found_thread, 0, sizeof(*found_thread));
 
-    int stack_size = 0x10000;
-    void* stack = PMEM_alloc(stack_size);
-    if (!stack)
-        return false;
+    // Terminated threads don't free their stack so we can reuse it.
+    if (!found_thread->stack) {
+        int stack_size = 0x10000;
+        void* stack = PMEM_alloc(stack_size);
+        if (!stack) {
+            returnValue = false;
+            goto exit;
+        }
+        found_thread->stack_size = stack_size;
+        found_thread->stack = stack;
+    }
 
     found_thread->used = true;
     found_thread->entry = entry;
 
     u64 rflags = get_rflags(); // usually IOPL and IF flags (IO permission and interrupt enable flag)
-    u64 rsp = (u64)stack + stack_size;
+    u64 rsp = (u64)found_thread->stack + found_thread->stack_size;
 
     InterruptFrame* frame = (InterruptFrame*)(rsp - sizeof(InterruptFrame));
     found_thread->frame = frame;
@@ -127,16 +160,18 @@ bool EXEC_create_thread(void* entry) {
     frame->ss = KERNEL_DATA_SEGMENT;
     frame->rsp = rsp;
     frame->rflags = rflags;
-    frame->rip = (u64)entry;
+    frame->rdi = (u64)entry;
+    frame->rip = (u64)thread_bootstrap;
 
-    return true;
+exit:
+    UNLOCK_INT(&core->thread_lock);
+    return returnValue;
 }
+
 
 void thread_bootstrap(FN_ThreadEntry entry) {
     entry();
-
-    // @TODO Terminate thread
-    while (1) asm ( "hlt" );
+    EXEC_terminate_self();
 }
 
 

@@ -25,7 +25,7 @@
 
 bool load_font();
 
-
+void terminal_main();
 
 extern FN_KCON_write _write_hooks[4];
 
@@ -121,10 +121,12 @@ void kernel_entry(BootAPI* in_boot_api) {
 
     KCON_printf("END OF KERNEL_ENTRY!\n");
 
-    CPU_start_core(1, NULL);
+    // CPU_start_core(1, NULL);
 
     // KCON_printf("Started cores\n");
     EXEC_init();
+    
+    EXEC_create_thread(terminal_main, 0);
 
     while (1) {
         if (count) {

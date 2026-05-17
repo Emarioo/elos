@@ -49,7 +49,7 @@ timer_isr:
     mov rsp, rax
     
     # Clear EOI (end of interrupt), so next timer interrupt can arrive (and other interrupts like keyboard)
-    mov ebx, g_lapic_base
+    mov rbx, g_lapic_base
     mov DWORD PTR [rbx + APIC_EOI], 0
     
     pop r15
@@ -70,3 +70,11 @@ timer_isr:
 
     sti
     iretq
+
+
+.global EXEC_terminate_self_end
+.global EXEC_terminate_self
+EXEC_terminate_self:
+    int 48
+EXEC_terminate_self_end:
+    jmp EXEC_terminate_self_end

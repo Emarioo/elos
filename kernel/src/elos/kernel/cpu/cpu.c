@@ -26,6 +26,10 @@ void init_idt();
 void init_apic();
 void calibrate_tsc();
 
+
+uint32_t cpuReadIoApic(void *ioapicaddr, uint32_t reg);
+void cpuWriteIoApic(void *ioapicaddr, uint32_t reg, uint32_t value);
+
 u64 tsc_per_sec;
 
 void CPU_init(BootAPI* boot_api) {
@@ -36,6 +40,12 @@ void CPU_init(BootAPI* boot_api) {
     acpi_init(boot_api);
 
     init_apic();
+    
+
+    // Enable IRQ1 for keyboard interrupts for core 0 (apic id = 0)
+    cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x12, 33 | (1 << 15)); // 1<<15 does level trigger instead of edge, seems to work better?
+    cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x13, 0);
+
 
     calibrate_tsc();
 }
@@ -348,11 +358,6 @@ void init_apic() {
     // printf("SVR: %x\n", apic_base[APIC_SPURIOUS]);
 
 
-    // move APIC ID into ioapic here, currently fine since it's zero.
-    // IRQ1, for keyboard interrupts
-    cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x12, 33 | (1 << 15)); // 1<<15 does level trigger instead of edge, seems to work better?
-    cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x13, 0);
-
     sti();
 }
 
@@ -564,10 +569,10 @@ void CPU_start_core(u32 apic_id, InterruptFrame* frame) {
         return;
     }
 
-    for (int i=0;i<10;i++) {
-        printf("Waiting %d\n", i);
-        CPU_sleep(1000000000);
-    }
+    // for (int i=0;i<10;i++) {
+    //     printf("Waiting %d\n", i);
+    //     CPU_sleep(1000000000);
+    // }
 
     // This code will freeze if APIC ID doesn't exist.
 
@@ -604,14 +609,15 @@ void CPU_start_core(u32 apic_id, InterruptFrame* frame) {
 _align(4096) u8  initial_ap_stack[32 * 0x1000]; // 4K stack for each AP. They can setup more later.
 _align(4096) u32 initial_ap_stack_top;
 
-// ap = Application Processor, BSP = Boot processor?
+// ap = Application Processor, BSP = Bootstrap processor?
 void ap_entry(int id) {
-    
-
     int lapic_id = g_lapic_base[APIC_APICID/4] >> 24;
+    printf("AP #%d started (edi=%d)\n", lapic_id, id);
+    
+    init_apic();
+
     // while (1) pause();
 
-    printf("AP #%d started (edi=%d)\n", lapic_id, id);
 
     while (1) pause();
 }

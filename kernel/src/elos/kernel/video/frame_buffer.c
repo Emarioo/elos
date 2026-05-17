@@ -51,7 +51,9 @@ void FB_printf(const char* format, ...) {
 }
 
 void FB_write(const char* buffer, int len) {
-    CPU_disable_interrupt();
+    static u32 print_lock;
+
+    LOCK_INT(&print_lock);
 
     int start = 0;
     int head = 0;
@@ -109,6 +111,6 @@ void FB_write(const char* buffer, int len) {
             draw_rect(pos_x + pos_offset_x, pos_y, g_default_font->glyphWidth * 36, text_height, DARK_BLUE);
         }
     }
-
-    CPU_enable_interrupt();
+    
+    UNLOCK_INT(&print_lock);
 }

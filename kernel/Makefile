@@ -35,7 +35,8 @@ KERNEL_LD_SCRIPT := $(ROOT)/kernel/sections.ld
 LDFLAGS := -nostdlib  -T $(KERNEL_LD_SCRIPT) --no-warn-execstack
 
 SRC_DIRS := \
-	$(ROOT)/kernel/src/elos
+	$(ROOT)/kernel/src/elos \
+	$(ROOT)/kernel/src/user
 
 SRC_FILES := \
 	$(foreach dir,$(SRC_DIRS),$(shell find $(dir) \( -name '*.c' -o -name '*.s' \) )) \

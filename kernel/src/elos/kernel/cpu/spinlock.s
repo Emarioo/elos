@@ -48,20 +48,21 @@ LOCK_INT:
 
 .spin_enter:
     test eax, 0x200
-    jnz .spin_int
+    jz .spin_int
     sti
 .spin_int:
     pause
     test byte ptr [rdi], 1
     jnz .spin_int
+    cli
     jmp .try_again
 
 .global UNLOCK_INT
 UNLOCK_INT:
     mov ax, word ptr [rdi+2]
-    mov byte ptr [rdi], 0
+    mov dword ptr [rdi], 0
     cmp ax, 0x200
-    jnz .end
+    jz .end
     sti
 .end:
     ret
