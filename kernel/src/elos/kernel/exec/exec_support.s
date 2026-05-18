@@ -9,14 +9,8 @@
 
 .set APIC_EOI, 0x0B0
 
-
     .global timer_isr
 timer_isr:
-    cli
-    # Every time this is triggered we want to round robin threads.
-    
-    # First we must store all CPU state for the thread.
-
     # interrupt pushed
     #   rip
     #   cs
@@ -40,9 +34,27 @@ timer_isr:
     push r14
     push r15
 
+    sub rsp, 128
+
+    movsd [rsp],         xmm0
+    movsd [rsp +  1*8],  xmm1
+    movsd [rsp +  2*8],  xmm2
+    movsd [rsp +  3*8],  xmm3
+    movsd [rsp +  4*8],  xmm4
+    movsd [rsp +  5*8],  xmm5
+    movsd [rsp +  6*8],  xmm6
+    movsd [rsp +  7*8],  xmm7
+    movsd [rsp +  8*8],  xmm8
+    movsd [rsp +  9*8],  xmm9
+    movsd [rsp + 10*8], xmm10
+    movsd [rsp + 11*8], xmm11
+    movsd [rsp + 12*8], xmm12
+    movsd [rsp + 13*8], xmm13
+    movsd [rsp + 14*8], xmm14
+    movsd [rsp + 15*8], xmm15
+
     mov rdi, rsp
 
-    # @TODO Save float registers
     call EXEC_interrupt
 
     # Switch to different thread, the stack of that thread has all registers pushed
@@ -52,6 +64,24 @@ timer_isr:
     mov rbx, g_lapic_base
     mov DWORD PTR [rbx + APIC_EOI], 0
     
+    movsd xmm0,  [rsp]
+    movsd xmm1,  [rsp +  1*8]
+    movsd xmm2,  [rsp +  2*8]
+    movsd xmm3,  [rsp +  3*8]
+    movsd xmm4,  [rsp +  4*8]
+    movsd xmm5,  [rsp +  5*8]
+    movsd xmm6,  [rsp +  6*8]
+    movsd xmm7,  [rsp +  7*8]
+    movsd xmm8,  [rsp +  8*8]
+    movsd xmm9,  [rsp +  9*8]
+    movsd xmm10, [rsp + 10*8]
+    movsd xmm11, [rsp + 11*8]
+    movsd xmm12, [rsp + 12*8]
+    movsd xmm13, [rsp + 13*8]
+    movsd xmm14, [rsp + 14*8]
+    movsd xmm15, [rsp + 15*8]
+    add rsp, 128
+
     pop r15
     pop r14
     pop r13
@@ -68,7 +98,6 @@ timer_isr:
     pop rax
     pop rbp
 
-    sti
     iretq
 
 

@@ -34,6 +34,8 @@ void handle_packet(NetDevice device, NET_Packet* packet, void* user_data);
 BootAPI _boot_api;
 BootAPI* boot_api;
 void kernel_entry(BootAPI* in_boot_api) {
+    CPU_enable_sse();
+
     // Put BootAPI in kernel's memory space. in_boot_api will become invalid when
     // we setup our own page tables.
     _boot_api = *in_boot_api;
@@ -121,10 +123,9 @@ void kernel_entry(BootAPI* in_boot_api) {
 
     KCON_printf("END OF KERNEL_ENTRY!\n");
 
-    // KCON_printf("Started cores\n");
     EXEC_init();
-    
     EXEC_create_thread(terminal_main, 0);
+    
 
     while (1) {
         if (count) {
@@ -134,11 +135,6 @@ void kernel_entry(BootAPI* in_boot_api) {
                 NET_handle_packet(net_device, &packet);
                 NET_free_packet(net_device, &packet);
             }
-        }
-
-        int keycode = KBD_poll_key();
-        if (keycode == KEY_F1) {
-            CPU_reset();
         }
 
         pause();

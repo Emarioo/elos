@@ -27,6 +27,8 @@ CFLAGS += -fshort-wchar -Werror=implicit-function-declaration
 CFLAGS += -fno-asynchronous-unwind-tables -fno-exceptions
 CFLAGS += -Wall -Werror -Wno-multichar
 CFLAGS += -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable
+CFLAGS += -mno-red-zone
+# CFLAGS += -mno-sse -mno-sse2 -mno-mmx # For debugging disabling SSE can be useful
 
 ASFLAGS := -g
 

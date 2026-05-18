@@ -134,7 +134,7 @@ def main():
             -serial file:kernel.log 
             -s 
             {"-S " if gdb else ""}
-            -smp 16
+            -smp 2
 
             # -device ahci,id=ahci
             # -device ide-drive,drive=disk0,bus=ahci.0

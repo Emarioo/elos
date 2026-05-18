@@ -29,7 +29,6 @@ void thread_bootstrap(FN_ThreadEntry entry);
 
 u64 EXEC_interrupt(InterruptFrame* frame) {
     int coreIndex = CPU_get_core_index();
-    // printf("TIMED %d\n", coreIndex);
 
     if (!scheduling_enabled)
         return (u64)frame;
@@ -64,7 +63,6 @@ u64 EXEC_interrupt(InterruptFrame* frame) {
 
     currentThread->frame = frame;
     returnValue = (u64)nextThread->frame;
-    // printf("Switch to %d\n", core->active_thread);
 
 exit:
     UNLOCK(&core->thread_lock);
@@ -132,7 +130,6 @@ bool EXEC_create_thread(void* entry, int pinnedCoreIndex) {
     found_thread->used = true;
     found_thread->entry = entry;
 
-    u64 rflags = get_rflags(); // usually IOPL and IF flags (IO permission and interrupt enable flag)
     u64 rsp = (u64)found_thread->stack + found_thread->stack_size;
 
     InterruptFrame* frame = (InterruptFrame*)(rsp - sizeof(InterruptFrame));
@@ -140,7 +137,7 @@ bool EXEC_create_thread(void* entry, int pinnedCoreIndex) {
     frame->cs = KERNEL_CODE_SEGMENT;
     frame->ss = KERNEL_DATA_SEGMENT;
     frame->rsp = rsp;
-    frame->rflags = rflags;
+    frame->rflags = 0x200; // interrupt flag
     frame->rdi = (u64)entry;
     frame->rip = (u64)thread_bootstrap;
 

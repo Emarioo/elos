@@ -5,7 +5,7 @@ Keep the following in mind:
 - Writing/reading to registers may need to be done in a specific order or the hardware CPU thing won't get setup.
   Maybe you have to read/write multiple times even? The code you see in the editor and how it executes and affect real hardware
   are every different things!
-
+- Be aware of programs compiled assuming red zone.
 
 Guidelines
 

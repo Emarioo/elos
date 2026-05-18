@@ -2,16 +2,41 @@
 
 #include "elos/boot_api.h"
 
+#include "elos/common/types.h"
+
 typedef enum Keycode Keycode;
 
 
 void KBD_init(BootAPI* boot_api);
 
 // @param character is Unicode codepoint which is why it isn't char type (but we just support ASCII at the moment)
-Keycode KBD_read_key(int* character, int* mods);
+// Keycode KBD_read_key(int* character, int* mods);
 // int KBD_read_char();
 
-Keycode KBD_poll_key();
+// Keycode KBD_poll_key();
+
+
+typedef struct {
+    int scancode;
+    int keycode;
+    int character;
+    int mods;
+    int pressed;
+} KeyEvent;
+
+
+void KBD_push_key_event(int scancode, int pressed);
+bool KBD_poll_key_event(KeyEvent* keyEvent);
+
+
+// internals
+#define MAX_KEY_EVENTS 256
+extern KeyEvent keyEvents[MAX_KEY_EVENTS];
+extern volatile u32 keyEvents_head;
+extern volatile u32 keyEvents_tail;
+
+
+
 
 enum Keycode {
     KEY_NONE, // empty/invalid key

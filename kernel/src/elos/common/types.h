@@ -45,3 +45,6 @@ void kernel_bug();
 #else
 #define _align(N) __attribute__ ((aligned(4096)))
 #endif
+
+
+#define STALL while (1) pause();

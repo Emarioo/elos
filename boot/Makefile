@@ -23,6 +23,7 @@ CFLAGS += -I$(INCLUDE_EFI_DIR) -I$(INCLUDE_EFI_DIR)/x86_64 -I$(INCLUDE_EFI_DIR)/
 CFLAGS += -Wall -Werror -fshort-wchar -Werror=implicit-function-declaration
 CFLAGS += -Wno-multichar
 CFLAGS += -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable
+CFLAGS += -mno-red-zone
 
 LDFLAGS := -nostdlib --dll --image-base=0 -shared --subsystem 10 -e efi_main
 

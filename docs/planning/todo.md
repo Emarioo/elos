@@ -23,6 +23,8 @@ Tasks related to kernel and operating system
 - [ ] Driver for file system, disk device.
 
 ## @urgent
+- [ ] Exception handler that prints useful info. rax, rdx, RIP, RSP, RBP. This is currently not correct. It needs to be correct for page faults and general protection.
+     Some push and doens't push error codes and other information.
 
 ## @bug
 

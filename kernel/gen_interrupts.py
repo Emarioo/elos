@@ -40,7 +40,8 @@ pop_volatile = '''
         pop rax
 '''
 
-# We may need to save non-volatile registers in the handlers?
+def has_error_code(vector):
+    return vector in (8,10,11,12,13,14,17,21)
 
 for i in range(256):
     if i < 32:
@@ -49,32 +50,32 @@ for i in range(256):
         # don't assume stack is ok?
         # lea rsp, isr_stack
 
-        { 'pop rdx' if i == 13 else '' }
-
-        // error code is pushed by CPU
-
-        push rbp
-        mov rbp, rsp
+        # Error code is pushed by CPU for some exceptions.
+        # If not then we do dummy 0.
+        { 'push 0' if not has_error_code(i) else '' }
 
         {push_volatile}
 
         mov rdi, {i}  # isr number
         mov rsi, rsp  # pass pointer to stack frame
 
+        # 16-byte alignment
+        sub rsp, 8
+
         call exception_handler
         
+        add rsp, 8
+
         {pop_volatile}
 
-        pop rbp
+        # pop dummy error code
+        add rsp, 8
 
         iretq
         '''
     elif i == 33:
         text += f'''
     isr_stub_{i}:
-
-        push rbp
-        mov rbp, rsp
 
         {push_volatile}
 
@@ -84,8 +85,6 @@ for i in range(256):
         call interrupt_handler
 
         {pop_volatile}
-
-        pop rbp
 
         iretq
         '''

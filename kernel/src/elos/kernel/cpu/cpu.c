@@ -83,7 +83,6 @@ void CPU_init(BootAPI* boot_api) {
     calibrate_tsc();
 
 
-
     bool mapped = PMEM_map_memory(TRAMPOLINE_ADDRESS, TRAMPOLINE_ADDRESS, PAGE_SIZE, PMEM_FLAG_NONE);
     if (!mapped) {
         printf("Could not map AP trampoline\n");
@@ -143,9 +142,8 @@ static IDT_Entry _idt[256];
 
 
 typedef struct {
-    // uint64_t r11, r10, r9, r8;
-    // uint64_t rdi, rsi, rdx, rcx, rbx, rax;
-    uint64_t rbp;
+    uint64_t r11, r10, r9, r8;
+    uint64_t rdi, rsi, rdx, rcx, rax;
 
     uint64_t error_code;
     uint64_t rip;
@@ -161,32 +159,32 @@ typedef struct {
 
 
 void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
+    int coreIndex = CPU_get_core_index(); // a little dangerous if APIC address caused fault
     if (isr_number == 14) {
         u64 fault_address = read_cr2();
-        printf("EXCEPTION #%d (rip=0x%x addr=0x%x err=0x%x)\n", isr_number, frame->rip, fault_address, frame->error_code);
+        printf("EXCEPTION #%d (rip=%x err=%x core=%d rsp=0x%x addr=0x%x)\n", isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp, fault_address);
     } else {
-        printf("EXCEPTION #%d (error code=0x%x, rip=%x)\nHALTING\n", isr_number, frame->error_code, frame->rip);
+        printf("EXCEPTION #%d (rip=%x err=%x core=%d rsp=0x%x)\n", isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp);
     }
-    while (1) asm ( "cli\npause\n" );
+    while (1) asm ( "cli\nhlt\n" );
 }
 
 void interrupt_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     // printf("Interrupt #%d\n", isr_number);
 
     while (1) {
-        int scancode = ps2_poll_scancode();
+        int pressed;
+        int scancode = ps2_poll_scancode(&pressed);
         if (scancode == 0)
             break;
         
+        // @TODO Reboot key is nice but it should not be here.
         int keycode = scancode_to_keycode(scancode);
         if (keycode == KEY_F1) {
             CPU_reset();
         }
-        
-        int chr = scancode_to_char(scancode, 0);
-        if (chr == 0)
-            continue;
 
+        KBD_push_key_event(scancode, pressed);
 
         // printf("scancode %d, %c\n", scancode, chr);
     }
@@ -380,7 +378,9 @@ void init_apic() {
 
     g_lapic_base[APIC_TMRDIV/4] = 0x3;
     g_lapic_base[APIC_LVT_TMR/4] = 48 | (1 << 17); // periodic mode
-    g_lapic_base[APIC_TMRINITCNT/4] = 10000000;
+    g_lapic_base[APIC_TMRINITCNT/4] = 100000;
+
+    //  @TODO Calibrate APIC timer with HPET.
 
     // printf("LVT timer=%x\n", g_lapic_base[APIC_LVT_TMR / 4]);
 
@@ -463,7 +463,7 @@ void calibrate_tsc() {
 
     if (!chosen_timer) {
         printf("Could not find supported timer\n");
-        cli();
+        sti();
         return;
     }
     
@@ -622,22 +622,29 @@ _align(4096) u32 initial_ap_stack_top;
 
 // ap = Application Processor, BSP = Bootstrap processor?
 void ap_entry(int id) {
+    CPU_enable_sse();
+    
     int lapic_id = g_lapic_base[APIC_APICID/4] >> 24;
     printf("AP #%d started (edi=%d)\n", lapic_id, id);
-    
     
     int coreIndex = CPU_get_core_index();
     EXEC_Core* core = &cores[coreIndex];
     core->active_thread = 0;
     core->threads[core->active_thread].used = true;
-    
+    // @TODO I think every core needs an idle thread which is only chosen
+    //   If there's no other thread to execute.
 
     init_apic();
 
-    // while (1) pause();
-    
-    // printf("APIC setup\n");
-
-
     while (1) pause();
+}
+
+
+
+void CPU_enable_sse() {
+    asm (
+        "mov %cr4, %rax\n"
+        "or $0x200, %rax\n" // Set OSFXSR to enable SSE instructions/registers. XMM floating point registers.
+        "mov %rax, %cr4\n"
+    );
 }

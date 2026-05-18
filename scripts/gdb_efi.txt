@@ -8,7 +8,6 @@ add-symbol-file bin/boot.elf -o $base
 add-symbol-file bin/kernel.elf
 b catch_bad_status
 b kernel_bug
-b thread_bootstrap
+b exception_handler
 
-b calibrate_tsc
 c

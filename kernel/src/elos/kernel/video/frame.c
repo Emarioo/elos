@@ -185,8 +185,9 @@ void draw_shift_frame(int x, int y, u32 fill_color) {
     }
 }
 
+extern void serial_write(const char* buffer, int size);
+
 void draw_glyphs_from_text_bcolor(int x, int y, int height, const cstring text, const Font* font, u32 color, u32 back_color) {
-    // EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE* const mode = kernel__core_data->graphics_output->Mode;
     const int pixel_count = g_frame_buffer.pixels_per_scan_line * g_frame_buffer.height;
     int monospace_width  = 1; // determines aspect ratio, we use width and height to avoid floats
     int monospace_height = 2;
@@ -195,11 +196,12 @@ void draw_glyphs_from_text_bcolor(int x, int y, int height, const cstring text, 
     //   We use some when setting pixel for safety because i don't trust my math.
     //   We should add some up here too for quick check. Check if x,y and width of string is out of bounds.
     //   No need to check individual characters, unless you want too?
-
     for (int index=0; index < text.len; index++) {
         char chr = text.ptr[index];
 
         const Glyph* glyph = font__get_glyph(font, chr);
+        if (!glyph)
+            continue;
         if(glyph->format != GLYPH_FORMAT_GRAYMAP)
             continue; // TODO: Use missing glyph texture
 

@@ -4,6 +4,10 @@
 #include "elos/kernel/kbd/ps2.h"
 #include "elos/kernel/kbd/keys.h"
 
+#include "elos/kernel_console.h"
+
+
+#define printf(...) KCON_printf(__VA_ARGS__)
 
 
 extern const char* sv_keymap;
@@ -15,20 +19,93 @@ void KBD_init(BootAPI* boot_api) {
 }
 
 
-Keycode KBD_read_key(int* character, int* mods) {
-    // BLOCKING
-    int scancode = ps2_read_scancode();
+// Keycode KBD_read_key(int* character, int* mods) {
+//     // BLOCKING
+//     int scancode = ps2_read_scancode();
 
-    *character = scancode_to_char(scancode, 0);
-    return scancode_to_keycode(scancode);
-}
+//     *character = scancode_to_char(scancode, 0);
+//     return scancode_to_keycode(scancode);
+// }
 
 
-Keycode KBD_poll_key() {
-    int scancode = ps2_poll_scancode();
+// Keycode KBD_poll_key() {
+//     int scancode = ps2_poll_scancode();
     
-    return scancode_to_keycode(scancode);
+//     return scancode_to_keycode(scancode);
+// }
+
+KeyEvent keyEvents[MAX_KEY_EVENTS];
+volatile u32 keyEvents_head;
+volatile u32 keyEvents_tail;
+int keyboard_mods;
+
+void KBD_push_key_event(int scancode, int pressed) {
+    if (scancode == 0)
+        return;
+    
+    KeyEvent keyEvent = {
+        .scancode = scancode,
+        .pressed = pressed,
+        .keycode = scancode_to_keycode(scancode),
+    };
+
+    switch (keyEvent.keycode) {
+        case KEY_LSHIFT:
+        case KEY_RSHIFT: {
+            if (pressed)
+                keyboard_mods |= KEY_MOD_ALT;
+            else
+                keyboard_mods &= ~KEY_MOD_ALT;
+        } break;
+        case KEY_LCTRL:
+        case KEY_RCTRL: {
+            if (pressed)
+                keyboard_mods |= KEY_MOD_CTRL;
+            else
+                keyboard_mods &= ~KEY_MOD_CTRL;
+        } break;
+        case KEY_CAPSLOCK: {
+            if (pressed)
+                keyboard_mods |= KEY_MOD_CAPSLOCK;
+            else
+                keyboard_mods &= ~KEY_MOD_CAPSLOCK;
+        } break;
+        case KEY_RALT: {
+            if (pressed)
+                keyboard_mods |= KEY_MOD_ALT;
+            else
+                keyboard_mods &= ~KEY_MOD_ALT;
+        } break;
+    }
+    // printf("key=%d scan=%x mod=%d pressed=%d\n", keyEvent.keycode, scancode, keyboard_mods, pressed);
+    int chr = scancode_to_char(scancode, keyboard_mods);
+    keyEvent.mods      = keyboard_mods;
+    keyEvent.character = chr;
+
+    keyEvents[keyEvents_head] = keyEvent;
+    keyEvents_head = (keyEvents_head + 1) % MAX_KEY_EVENTS;
 }
+
+bool KBD_poll_key_event(KeyEvent* keyEvent) {
+    if (keyEvents[keyEvents_tail].scancode) {
+        // Don't lock because if we get interrupt in between
+        // and KBD_push_key_event is called which also locks
+        // then it will deadlock.
+        // Unless i'm mistaken this should be fine
+        // as long as application can poll events faster than
+        // you can type which is most likely the case.
+        // A problem though is that two applications may read
+        // the same key because we didn't increment tail.
+        // We could just lock the polling.
+        // We need to rethink this.
+        *keyEvent = keyEvents[keyEvents_tail];
+        keyEvents[keyEvents_tail].scancode = 0; // consumed
+        keyEvents_tail = (keyEvents_tail + 1) % MAX_KEY_EVENTS;
+        return true;
+    }
+    return false;
+}
+
 
 
                     // keycode scancode

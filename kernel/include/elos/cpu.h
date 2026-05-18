@@ -14,11 +14,13 @@ typedef struct {
     // @TODO Save float
     // @TODO GS,FS segments
 
+    u64 xmm[16];
+
     u64 r15;
     u64 r14;
     u64 r13;
-    u64 r11;
     u64 r12;
+    u64 r11;
     u64 r10;
     u64 r9;
     u64 r8;
@@ -40,6 +42,7 @@ typedef struct {
 
 void CPU_init(BootAPI* boot_api);
 
+void CPU_enable_sse();
 
 void CPU_enable_interrupt();
 void CPU_disable_interrupt();

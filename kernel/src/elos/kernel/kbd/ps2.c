@@ -78,7 +78,7 @@ int ps2_read_scancode() {
 }
 
 
-int ps2_poll_scancode() {
+int ps2_poll_scancode(int* pressed) {
     
     int res = inb(KBD_STATUS);
     if ((res & PS2_READ_STATUS_MASK) == 0) {
@@ -87,24 +87,20 @@ int ps2_poll_scancode() {
     }
 
     int data = inb(KBD_DATA);
+    int scancode = 0;
 
     if (data == 0xE0) {
-        int data2 = ps2_read_byte();
-        if (data2 == 0xF0) {
-            // Release don't care
-            data = ps2_read_byte();
-            return 0;
-        } else {
-            return 0xE000 | data2;
-        }
-    } else if (data == 0xF0) {
-        // Key release, don't care about data
+        scancode |= data << 8;
         data = ps2_read_byte();
-        return 0;
-    } else {
-        // key press, we want the code
-        return data;
     }
+    if (data == 0xF0) {
+        data = ps2_read_byte();
+        *pressed = 0;
+    } else {
+        *pressed = 1;
+    }
+    scancode |= data;
+    return scancode;
 }
 
 
@@ -168,10 +164,10 @@ int ps2_init() {
     config_byte = ps2_send_read_command(0x20);
     if (config_byte & 0b10000) {
         // PS2 is disabled
-        printf("second PS2 disabled\n");
+        // printf("second PS2 disabled\n");
     } else {
         // PS2 is enable
-        printf("second PS2 enabled, disabling...\n");
+        // printf("second PS2 enabled, disabling...\n");
 
         ps2_send_command(0xA7);
         config_byte = ps2_send_read_command(0x20);

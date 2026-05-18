@@ -180,7 +180,7 @@ There is a high chance it doesn't boot, this means my OS doesn't follow standard
 # Some output when booting
 
 ```log
-Image loaded at: 0x61a5000
+Image loaded at: 0x6198000
 Hello World
 static_ip = 192.168.100.54
 netboot_port = 2493
@@ -189,27 +189,38 @@ netboot_ips[1] = 192.168.0.60
 BOOT: Found ACPI 1.0, RSDP at 777e000.
 BOOT: Found ACPI 2.0, XSDP at 777e014.
 No response for DHCP, using static IP address: 192.168.100.54
-Got MAC from ARP, d2:10:42:53:3a:c6, 368 us
+Got MAC from ARP, d2:10:42:53:3a:c6, 380 us
 Requesting /KERNEL.IMG
-Finished /KERNEL.IMG
+No response on NETBOOT file request? (or incomplete response)
+Loading Kernel from disk
 UEFI - Exit boot services
 Loaded default font
 Initializing physical memory regions
-ps2: Set config byte 38
-second PS2 enabled, disabling...
-ps2: Ports are reset
-ps2: Pick scancode set
-Expected ACK: fa (0xFA)
-ps2: Enable scanning
-Expected ACK: fa (0xFA)
-[INFO] bar[1] 32-bit addr=81080000 size=128 KB
-[INFO] bar[2] IO-mapped addr=c000 size=0 KB
-[INFO] bar[3] 32-bit addr=0 size=0 KB
-[INFO] bar[4] 32-bit addr=0 size=0 KB
-[INFO] bar[5] 32-bit addr=0 size=0 KB
-[INFO] bar[6] 32-bit addr=0 size=0 KB
-NET_init: MAC Address: 52:54:00:12:34:56
+MADT LAPIC address: fee00000
+MADT flags: 1
+LAPIC (type=0 len=8)
+ acpiProcessorID: 0
+ apicID: 0
+ flags: 1
+LAPIC (type=0 len=8)
+ acpiProcessorID: 1
+ apicID: 1
+ flags: 1
+IOAPIC (type=1 len=12)
+ ioapicID: 0
+ ioapicAddress: fec00000
+ globalSystemInterruptBase: 0
+HPET measured: 428627 K cycles/ms
+AP #1 started (edi=1)
 END OF KERNEL_ENTRY!
+EXEC init
+Enable scheduling
+Starting terminal
+key=60 scan=34 mod=0 pressed=1
+key=60 scan=34 mod=0 pressed=0
+key=2 scan=12 mod=2 pressed=1
+key=2 scan=12 mod=0 pressed=0
+key=60 scan=34 mod=0 pressed=1
 ```
 
 # OS layout

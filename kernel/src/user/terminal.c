@@ -1,5 +1,14 @@
 /*
     Main terminal
+
+    Terminal app
+        scrolling
+        history
+        keyboard input
+
+    Shell executor
+        start processes
+            printed output sent to terminal, stdout handle.
 */
 
 #include "elos/keyboard.h"
@@ -15,89 +24,121 @@
 
 #include "user/pipe.h"
 
-int ring_size = 0x10000;
-Handle ringBuffer;
+// int ring_size = 0x10000;
+// Handle ringBuffer;
 
 #define printf(...) KCON_printf(__VA_ARGS__)
 
-void proc1();
-void proc2();
+
+void work();
 
 void terminal_main() {
 
     printf("Starting terminal\n");
     
-    int res = create_ringBuffer(ring_size, &ringBuffer);
-    if (res < 0) {
-        printf("Could not create ring buffer\n");
-        return;
-    }
-
-    int coreCount = CPU_get_core_count();
-    for (int i=0;i<coreCount;i++) {
-        EXEC_create_thread(proc1, i);
-        EXEC_create_thread(proc2, i);
-    }
-
-    while (1) pause();
+    work();
 }
-
-
-#define MS 1000000
-
 
 typedef struct {
-    char text[16];
-} Message;
+    char text[200];
+} Line;
 
-void proc1() {
-    int core = CPU_get_core_index();
-    printf("Proc 1, on core: %d\n", core);
+#define LINE_LIMIT 10000
+Line lines[1000];
+int lines_len;
+int lineStart;
+int lineScroll;
 
-    // while (1) pause();
+Line commandHistory[200];
+int commandHistory_len;
 
-    int index = 0;
+Line inputBuffer;
+int inputBuffer_len;
 
-    Message messages[] = {
-        { "Hello" },
-        { "World" },
-        { "Writing" },
-        { "Bytes" },
-        { "To you." },
-    };
+int g_terminal_cursor_pos;
+int g_terminal_x;
+int g_terminal_y;
+int g_terminal_width;
+int g_terminal_height;
+
+int fontHeight = 16;
+
+
+#define TERMINAL_BACK  0xFF053612
+
+int textColor = WHITE;
+int backColor = TERMINAL_BACK;
+
+
+void work() {
+
+    int screenWidth, screenHeight;
+    draw_frame_info(&screenWidth, &screenHeight);
+
+    g_terminal_height = 800;
+    g_terminal_width = screenHeight - 20;
+    g_terminal_x = screenWidth - g_terminal_width;
+    g_terminal_y = 10;
+
+    snprintf(inputBuffer.text, sizeof(inputBuffer.text), "> ");
+    inputBuffer_len = 2;
+
+    printf("Work\n");
 
     while (1) {
-        int written = write(ringBuffer, &messages[index], sizeof(messages[index]));
-        index = (index + 1) % ARRAY_LENGTH(messages);
 
-        printf("C%d Sent %d\n", core, index);
-        CPU_sleep(10 * MS);
-    }
-}
+        // Poll keyboard events
+        // Edit input buffer based on key events.
+        KeyEvent keyEvent;
+        while (1) {
+            bool has = KBD_poll_key_event(&keyEvent);
+            if (!has)
+                break;
+            
+            if (keyEvent.keycode == KEY_ENTER && keyEvent.pressed) {
+                printf("Send command\n");
+                inputBuffer_len = 2;
+                inputBuffer.text[inputBuffer_len] = 0;
+            } else if (keyEvent.character && keyEvent.pressed) {
+                if (inputBuffer_len+1 < sizeof(inputBuffer.text)) {
+                    inputBuffer.text[inputBuffer_len] = keyEvent.character;
+                    inputBuffer_len++;
+                    inputBuffer.text[inputBuffer_len] = 0;
+                }
+            }
+        }
+        
 
-void proc2() {
-    int core = CPU_get_core_index();
-    printf("Proc 2, on core: %d\n", core);
+        // Call shell executor (if ENTER and input text is non-empty)
 
-    // while (1) pause();
+        // If shell executor creates processes then we give them a handle to a PIPE (stdout).
+        // Prints they do end up in the PIPE and we read it and put it into
+        // our terminal line buffers.
 
-    Message msg;
+        // printf("%d \n", inputBuffer_len, );
 
-    while (1) {
-        int read_bytes = read(ringBuffer, &msg, sizeof(msg));
-        printf("C%d Read: %s\n", core, msg.text);
+        // Render terminal (input and line buffers)
 
-        CPU_sleep(300 * MS);
+        int maxLines = g_terminal_height / fontHeight;
+        int lineIndex = (lineStart + lineScroll) % LINE_LIMIT;
+        while (lineIndex < lines_len) {
+            Line* line = &lines[lineIndex];
+            cstring lineText = PTR_CSTR(line->text);
+            draw_glyphs_from_text_bcolor(g_terminal_x, g_terminal_y, fontHeight, lineText, g_default_font, textColor, backColor);
+
+            lineIndex++;
+        }
+
+        cstring lineText = PTR_CSTR(inputBuffer.text);
+        // printf("lineText %x %d\n", lineText.ptr, lineText.len);
+        draw_glyphs_from_text_bcolor(g_terminal_x, g_terminal_y, fontHeight, lineText, g_default_font, textColor, backColor);
+
     }
 }
 
 
 // char _text_buffer[4096];
 
-// string g_terminal_text;
-// int g_terminal_cursor_pos;
-// int g_terminal_text_x = 10;
-// int g_terminal_text_y = 10;
 
 
 // void apply_command(cstring text);
