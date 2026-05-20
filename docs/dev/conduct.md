@@ -1,11 +1,10 @@
 
 # Overall behaviour
 - Avoid shell scripts, they are very specific to an operating system (Windows vs Linux). Use python (there will be some `if platform.system() == "Windows/Linux"`).
-- Avoid makefiles also OS specific.
-- Try to use tools available on Linux and Windows (difficult but we can try).
-- All intermediate files are placed in `bin/int` (object files, images, binaries)
-- All intermediate files are placed in `bin/int` (object files, images, binaries)
+- All intermediate files are placed in `int`. (object files, images, binaries)
 - Write tests. Any test is fine, just write them, at least one when implementing something and integrate it with all tests so you can test them all and know if something broke which worked before.
+- A field, variable, function containing the word "size" is in units of bytes. A name like 'sectorSize' would refer to bytes per sector. Use count, amount, length followed by or prefixed with unit
+  if you refer to something other than bytes. Length in a string struct or count in an array or other storage type is fairly obvious it refers to character or number of elements, that is fine.
 
 # Branches
 - `main` release branch, always well tested and works as expected.

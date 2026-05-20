@@ -63,10 +63,21 @@ volatile u32* g_lapic_base;
 
 u64 tsc_per_sec;
 
-void CPU_init(BootAPI* boot_api) {
+static void disable_pit() {
+    outb(0x43, 0x30);
+    outb(0x40, 0);
+    outb(0x40, 0);
+    outb(0x21, 0xFF);
+    outb(0xA1, 0xFF);
+}
 
+void CPU_init(BootAPI* boot_api) {
+    
     init_gdt();
     init_idt();
+
+    // Disable PIT (gives out some stray IRQ2 in the beginning which inteferes with HPET interrupt)
+    disable_pit();
 
     acpi_init(boot_api);
 

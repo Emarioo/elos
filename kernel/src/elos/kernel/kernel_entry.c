@@ -42,12 +42,7 @@ void kernel_entry(BootAPI* in_boot_api) {
     _boot_api = *in_boot_api;
     boot_api = &_boot_api;
     
-    // Disable PIT (gives out some stray IRQ2 in the beginning which inteferes with HPET interrupt)
-    outb(0x43, 0x30);
-    outb(0x40, 0);
-    outb(0x40, 0);
-    outb(0x21, 0xFF);
-    outb(0xA1, 0xFF);
+    
 
     // Have .bss section in kernel image been memory mapped?
     // In theory the .data, .rodata, .text should be mapped because we allocate memory for kernel image from
@@ -100,20 +95,46 @@ void kernel_entry(BootAPI* in_boot_api) {
     // Timer interrupt, parse ACPI tables for IOAPIC, APIC, HPET
     CPU_init(boot_api);
 
+
     DiskDevice diskDevices[8];
     int diskDevices_len = ARRAY_LENGTH(diskDevices);
 
     DISK_scan_devices(diskDevices, &diskDevices_len);
     KCON_printf("Disk devices: %d\n", diskDevices_len);
 
-    if (diskDevices_len > 0) {
+    for (int i=0;i<diskDevices_len;i++) {
         DiskInfo diskInfo = {0};
-        DISK_get_info(diskDevices[0], &diskInfo);
+        DISK_get_info(diskDevices[i], &diskInfo);
 
-        KCON_printf("Disk %s: %x bytes, %x MB\n", diskInfo.name, diskInfo.blockSize, diskInfo.diskSize/1024/1024);
+        KCON_printf("Disk %s: %x MB (blocksize=%x)\n", diskInfo.name, diskInfo.diskSize/1024/1024, diskInfo.blockSize);
     }
 
-    // @TODO Initialize file system and disk devices
+    if (diskDevices_len > 0) {
+        char buffer[512];
+
+        DISK_read(diskDevices[0], 0, 512, buffer);
+        
+        KCON_printf("Data at sector 0: ");
+        for (int i=0;i<16;i++) {
+            KCON_printf("%c", buffer[i]);
+        }
+        KCON_printf("\n");
+
+        memcpy(buffer + 5, "----", 4);
+        
+        DISK_write(diskDevices[0], 0, 512, buffer);
+
+        memset(buffer, 0, 512);
+        
+        DISK_read(diskDevices[0], 0, 512, buffer);
+        
+        KCON_printf("Data at sector 0: ");
+        for (int i=0;i<16;i++) {
+            KCON_printf("%c", buffer[i]);
+        }
+        KCON_printf("\n");
+
+    }
 
     // NetDevice net_device = NULL;
     // int count = 1;

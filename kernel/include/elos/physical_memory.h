@@ -38,6 +38,8 @@ bool PMEM_map_memory(void* virtual_address, void* physical_address, u64 size, PM
 
 bool PMEM_unmap_memory(void* virtual_address, u64 size);
 
+void* PMEM_virt_to_phys(void* virtual_address);
+
 /*
     TODO: Allocates contiguous pages with some optional flags
     

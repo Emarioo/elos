@@ -203,7 +203,7 @@ bool unmap_memory(Page* root, void* virtual_address, u64 size, MapPageFlag flags
     return true;
 }
 
-void* retrieve_phys_address(Page* root, void* virtual_address) {
+void* retrieve_physical_address(Page* root, void* virtual_address) {
     u64 virt = (u64)virtual_address;
     int lvl4 = (virt >> 39) & 0x1FF;
     int lvl3 = (virt >> 30) & 0x1FF;

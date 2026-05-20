@@ -8,8 +8,8 @@
 
 
 
-typedef volatile struct tagHBA_PORT
-{
+#pragma pack(push, 1)
+typedef volatile struct tagHBA_PORT {
 	uint32_t clb;		// 0x00, command list base address, 1K-byte aligned
 	uint32_t clbu;		// 0x04, command list base address upper 32 bits
 	uint32_t fb;		// 0x08, FIS base address, 256-byte aligned
@@ -30,13 +30,13 @@ typedef volatile struct tagHBA_PORT
 	uint32_t rsv1[11];	// 0x44 ~ 0x6F, Reserved
 	uint32_t vendor[4];	// 0x70 ~ 0x7F, vendor specific
 } HBA_PORT;
-
+#pragma pack(pop)
 
 #define AHCI_CAP_SAM (1<<18)
 #define AHCI_GHC_AE (1<<31)
 
-typedef volatile struct tagHBA_MEM
-{
+#pragma pack(push, 1)
+typedef volatile struct tagHBA_MEM {
 	// 0x00 - 0x2B, Generic Host Control
 	uint32_t cap;		// 0x00, Host capability
 	uint32_t ghc;		// 0x04, Global host control
@@ -59,6 +59,7 @@ typedef volatile struct tagHBA_MEM
 	// 0x100 - 0x10FF, Port control registers
 	HBA_PORT	ports[];	// 1 ~ 32
 } HBA_MEM;
+#pragma pack(pop)
 
 typedef enum
 {
@@ -72,6 +73,7 @@ typedef enum
 	FIS_TYPE_DEV_BITS	= 0xA1,	// Set device bits FIS - device to host
 } FIS_TYPE;
 
+#pragma pack(push, 1)
 typedef struct tagFIS_REG_H2D
 {
 	// DWORD 0
@@ -105,8 +107,9 @@ typedef struct tagFIS_REG_H2D
 	// DWORD 4
 	uint8_t  rsv1[4];	// Reserved
 } FIS_REG_H2D;
+#pragma pack(pop)
 
-
+#pragma pack(push, 1)
 typedef struct tagFIS_REG_D2H
 {
 	// DWORD 0
@@ -140,11 +143,11 @@ typedef struct tagFIS_REG_D2H
 	// DWORD 4
 	uint8_t  rsv4[4];     // Reserved
 } FIS_REG_D2H;
+#pragma pack(pop)
 
 
-
-typedef struct tagFIS_DATA
-{
+#pragma pack(push, 1)
+typedef struct tagFIS_DATA {
 	// DWORD 0
 	uint8_t  fis_type;	// FIS_TYPE_DATA
 
@@ -156,9 +159,10 @@ typedef struct tagFIS_DATA
 	// DWORD 1 ~ N
 	uint32_t data[1];	// Payload
 } FIS_DATA;
+#pragma pack(pop)
 
-typedef struct tagFIS_PIO_SETUP
-{
+#pragma pack(push, 1)
+typedef struct tagFIS_PIO_SETUP {
 	// DWORD 0
 	uint8_t  fis_type;	// FIS_TYPE_PIO_SETUP
 
@@ -193,7 +197,9 @@ typedef struct tagFIS_PIO_SETUP
 	uint16_t tc;		// Transfer count
 	uint8_t  rsv4[2];	// Reserved
 } FIS_PIO_SETUP;
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 typedef struct tagFIS_DMA_SETUP
 {
 	// DWORD 0
@@ -225,9 +231,11 @@ typedef struct tagFIS_DMA_SETUP
         uint32_t resvd;          //Reserved
         
 } FIS_DMA_SETUP;
+#pragma pack(pop)
 
-typedef u32 FIS_DEV_BITS[2];
+typedef u32 FIS_DEV_BITS;
 
+#pragma pack(push, 1)
 typedef volatile struct tagHBA_FIS
 {
 	// 0x00
@@ -244,6 +252,7 @@ typedef volatile struct tagHBA_FIS
 
 	// 0x58
 	FIS_DEV_BITS	sdbfis;		// Set Device Bit FIS
+	uint8_t         pad3[4];
 	
 	// 0x60
 	uint8_t         ufis[64];
@@ -251,7 +260,9 @@ typedef volatile struct tagHBA_FIS
 	// 0xA0
 	uint8_t   	rsv[0x100-0xA0];
 } HBA_FIS;
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 typedef struct tagHBA_CMD_HEADER
 {
 	// DW0
@@ -279,7 +290,9 @@ typedef struct tagHBA_CMD_HEADER
 	// DW4 - 7
 	uint32_t rsv1[4];	// Reserved
 } HBA_CMD_HEADER;
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 typedef struct tagHBA_PRDT_ENTRY
 {
 	uint32_t dba;		// Data base address
@@ -291,9 +304,9 @@ typedef struct tagHBA_PRDT_ENTRY
 	uint32_t rsv1:9;		// Reserved
 	uint32_t i:1;		// Interrupt on completion
 } HBA_PRDT_ENTRY;
+#pragma pack(pop)
 
-
-
+#pragma pack(push, 1)
 typedef struct tagHBA_CMD_TBL
 {
 	// 0x00
@@ -308,15 +321,18 @@ typedef struct tagHBA_CMD_TBL
 	// 0x80
 	HBA_PRDT_ENTRY	prdt_entry[8];	// Physical region descriptor table entries, 0 ~ 65535
 } HBA_CMD_TBL;
+#pragma pack(pop)
 
+bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config);
 
-void ahci_init(DiskDevice_impl* device);
 
 int find_cmdslot(HBA_PORT *port);
 
-bool ahci_read(HBA_PORT *port, u64 start, u16 count, void *buf);
+bool ahci_read(DiskDevice_impl* device, u64 offset, u64 size, void* buffer);
+bool ahci_write(DiskDevice_impl* device, u64 offset, u64 size, void* buffer);
+
 void stop_cmd(HBA_PORT *port);
 void start_cmd(HBA_PORT *port);
-void port_rebase(HBA_PORT *port, int portno);
+bool port_rebase(HBA_PORT *port);
 static int check_type(HBA_PORT *port);
 int probe_port(HBA_MEM *abar);

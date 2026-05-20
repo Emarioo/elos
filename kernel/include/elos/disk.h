@@ -23,8 +23,8 @@ void DISK_scan_devices(DiskDevice* devices, int* count);
 
 void DISK_get_info(DiskDevice device, DiskInfo* info);
 
-void DISK_write(DiskDevice device, u64 offset, void* buffer, u64 size);
+bool DISK_write(DiskDevice device, u64 offset, u64 size, void* buffer);
 
-void DISK_read(DiskDevice device, u64 offset ,void* buffer, u64 size);
+bool DISK_read(DiskDevice device, u64 offset, u64 size, void* buffer);
 
 void DISK_flush(DiskDevice device);
