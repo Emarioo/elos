@@ -125,6 +125,11 @@ def main():
         # TODO: DON'T HARDCODE PATHS
         OVMF_FD = "extern/ovmf/OVMF.fd"
 
+        DISK_IMG = "int/disk.img"
+        if not os.path.exists(DISK_IMG):
+            cmd(f"qemu-img create -f raw {DISK_IMG} 64M")
+            cmd(f"gcc scripts/fwrite.c -g -o int/fwrite && int/fwrite {DISK_IMG}")
+
         qemu_flags = f'''
             -bios {OVMF_FD}
             -netdev tap,id=net0,ifname=tap0,script=no,downscript=no
@@ -134,10 +139,11 @@ def main():
             -serial file:kernel.log 
             -s 
             {"-S " if gdb else ""}
-            -smp 2
+            -smp 1
 
-            # -device ahci,id=ahci
-            # -device ide-drive,drive=disk0,bus=ahci.0
+            -device ahci,id=ahci
+            -drive  file={DISK_IMG},if=none,id=disk0,format=raw
+            -device ide-hd,drive=disk0,bus=ahci.0
             # -nographic
         '''
         # @NOTE Not sure what these flags do but seems useful/important

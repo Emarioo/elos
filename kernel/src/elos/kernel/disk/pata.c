@@ -1,5 +1,5 @@
 
-#include "elos/kernel/driver/pata.h"
+#include "elos/kernel/disk/pata.h"
 
 #include "elos/kernel_console.h"
 #include "elos/cpu.h"

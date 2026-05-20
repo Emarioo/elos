@@ -6,18 +6,19 @@ logs
 out
 *.log
 
-./*.out
-./*.exe
-./*.o
-./*.obj
-./*.so
-./*.a
-./*.dll
-./*.lib
-./*.exp
-./*.bin
-./*.img
-./*.iso
+/*.out
+/*.exe
+/*.o
+/*.obj
+/*.so
+/*.a
+/*.dll
+/*.lib
+/*.exp
+/*.bin
+/*.img
+/*.iso
+
 
 # IDE stuff
 .vscode

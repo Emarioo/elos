@@ -53,9 +53,9 @@ void KBD_push_key_event(int scancode, int pressed) {
         case KEY_LSHIFT:
         case KEY_RSHIFT: {
             if (pressed)
-                keyboard_mods |= KEY_MOD_ALT;
+                keyboard_mods |= KEY_MOD_SHIFT;
             else
-                keyboard_mods &= ~KEY_MOD_ALT;
+                keyboard_mods &= ~KEY_MOD_SHIFT;
         } break;
         case KEY_LCTRL:
         case KEY_RCTRL: {

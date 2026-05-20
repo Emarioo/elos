@@ -4,7 +4,6 @@
 #include "elos/kernel_console.h"
 #include "elos/common/intrinsics.h"
 
-#include "elos/kernel/driver/pata.h"
 
 
 
@@ -261,15 +260,19 @@ void decode_bar_size(PCI_ConfigSpace* config, int bar_index, u64* out_bar_size) 
 }
 void decode_bar(PCI_ConfigSpace* config, u64* first_ioaddr, u64* out_first_ioaddr_size, u64* first_maddr, u64* out_first_maddr_size) {
     
-    *first_ioaddr = 0;
-    *out_first_ioaddr_size = 0;
-    *first_maddr = 0;
-    *out_first_maddr_size = 0;
+    if (first_ioaddr)
+        *first_ioaddr = 0;
+    if (out_first_ioaddr_size)
+        *out_first_ioaddr_size = 0;
+    if (first_maddr)
+        *first_maddr = 0;
+    if (out_first_maddr_size)
+        *out_first_maddr_size = 0;
 
     u32* bars = &config->header0.bar0;
 
-    // #define debug(...) printf(__VA_ARGS__)
-    #define debug(...) 
+    #define debug(...) printf(__VA_ARGS__)
+    // #define debug(...) 
 
     int head = 0;
     while (head < 6) {
@@ -281,7 +284,7 @@ void decode_bar(PCI_ConfigSpace* config, u64* first_ioaddr, u64* out_first_ioadd
         if (bar & 0x1) {
             u32 addr = bar & ~0x3;
             debug("[INFO] bar[%d] IO-mapped addr=%x size=%d KB\n", head, addr, bar_size/1024);
-            if (*first_ioaddr == 0) {
+            if (first_ioaddr && (*first_ioaddr == 0)) {
                 *first_ioaddr = addr;
                 *out_first_ioaddr_size = bar_size;
             }
@@ -292,7 +295,7 @@ void decode_bar(PCI_ConfigSpace* config, u64* first_ioaddr, u64* out_first_ioadd
             } else {
                 debug("[INFO] bar[%d] 32-bit addr=%x size=%d KB\n", head,addr, bar_size/1024);
             }
-            if (*first_maddr == 0) {
+            if (first_maddr && (*first_maddr == 0)) {
                 *first_maddr = addr;
                 *out_first_maddr_size = bar_size;
             }
@@ -305,7 +308,7 @@ void decode_bar(PCI_ConfigSpace* config, u64* first_ioaddr, u64* out_first_ioadd
             } else {
                 debug("[INFO] bar[%d] 64-bit addr=%x size=%d KB\n", head, addr, bar_size/1024);
             }
-            if (*first_maddr == 0) {
+            if (first_maddr && (*first_maddr == 0)) {
                 *first_maddr = addr;
                 *out_first_maddr_size = bar_size;
             }

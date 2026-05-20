@@ -118,9 +118,13 @@ const char* key_name(int keycode) {
     return NULL;
 }
 
+int scancode_to_keycode(int scancode) {
+    return _default_keymap.scan_to_key[((scancode>>16) == 0xE0 ? 256 : 0) + (scancode&0xFF)].keycode;
+}
+
 
 int scancode_to_char(int scancode, int mod) {
-    int keycode = _default_keymap.scan_to_key[((scancode>>16) == 0xE0 ? 256 : 0) + (scancode&0xFF)].keycode;
+    int keycode = scancode_to_keycode(scancode);
 
     // @TODO These modifiers are specific to Swedish keyboard
 
@@ -268,7 +272,3 @@ int scancode_to_char(int scancode, int mod) {
     return 0;
 }
 
-
-int scancode_to_keycode(int scancode) {
-    return _default_keymap.scan_to_key[((scancode>>16) == 0xE0 ? 256 : 0) + (scancode&0xFF)].keycode;
-}

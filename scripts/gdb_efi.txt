@@ -10,4 +10,5 @@ b catch_bad_status
 b kernel_bug
 b exception_handler
 
+b ahci_init
 c

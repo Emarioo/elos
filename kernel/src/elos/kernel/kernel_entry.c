@@ -9,6 +9,7 @@
 #include "elos/frame_buffer.h"
 #include "elos/physical_memory.h"
 #include "elos/cpu.h"
+#include "elos/disk.h"
 
 #include "elos/common/intrinsics.h"
 #include "elos/common/string.h"
@@ -99,18 +100,30 @@ void kernel_entry(BootAPI* in_boot_api) {
     // Timer interrupt, parse ACPI tables for IOAPIC, APIC, HPET
     CPU_init(boot_api);
 
+    DiskDevice diskDevices[8];
+    int diskDevices_len = ARRAY_LENGTH(diskDevices);
+
+    DISK_scan_devices(diskDevices, &diskDevices_len);
+    KCON_printf("Disk devices: %d\n", diskDevices_len);
+
+    if (diskDevices_len > 0) {
+        DiskInfo diskInfo = {0};
+        DISK_get_info(diskDevices[0], &diskInfo);
+
+        KCON_printf("Disk %s: %x bytes, %x MB\n", diskInfo.name, diskInfo.blockSize, diskInfo.diskSize/1024/1024);
+    }
 
     // @TODO Initialize file system and disk devices
 
-    NetDevice net_device = NULL;
-    int count = 1;
-    NET_scan_devices(&net_device, &count);
+    // NetDevice net_device = NULL;
+    // int count = 1;
+    // NET_scan_devices(&net_device, &count);
     // @TODO Check that we got device
 
     
-    NET_set_receive_callback(net_device, handle_packet, NULL);
+    // NET_set_receive_callback(net_device, handle_packet, NULL);
 
-    u32 target_ip = ipv4_from_str("192.168.100.50");
+    // u32 target_ip = ipv4_from_str("192.168.100.50");
 
     // In QEMU you need to setup DHCP server or use "-netdev user,id=net0"
     // NET_send_dhcp_discover(net_device);
@@ -121,21 +134,21 @@ void kernel_entry(BootAPI* in_boot_api) {
 
 
 
-    KCON_printf("END OF KERNEL_ENTRY!\n");
+    // KCON_printf("END OF KERNEL_ENTRY!\n");
 
-    EXEC_init();
-    EXEC_create_thread(terminal_main, 0);
+    // EXEC_init();
+    // EXEC_create_thread(terminal_main, 0);
     
 
     while (1) {
-        if (count) {
-            NET_Packet packet;
-            bool yes = NET_poll_packet(net_device, &packet);
-            if (yes) {
-                NET_handle_packet(net_device, &packet);
-                NET_free_packet(net_device, &packet);
-            }
-        }
+        // if (count) {
+        //     NET_Packet packet;
+        //     bool yes = NET_poll_packet(net_device, &packet);
+        //     if (yes) {
+        //         NET_handle_packet(net_device, &packet);
+        //         NET_free_packet(net_device, &packet);
+        //     }
+        // }
 
         pause();
     }

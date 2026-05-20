@@ -69,6 +69,8 @@ int fontHeight = 16;
 int textColor = WHITE;
 int backColor = TERMINAL_BACK;
 
+void send_command(cstring text);
+
 
 void work() {
 
@@ -83,7 +85,7 @@ void work() {
     snprintf(inputBuffer.text, sizeof(inputBuffer.text), "> ");
     inputBuffer_len = 2;
 
-    printf("Work\n");
+    #define REFRESH_RATE (1000000000LU / 60LU)
 
     while (1) {
 
@@ -96,7 +98,9 @@ void work() {
                 break;
             
             if (keyEvent.keycode == KEY_ENTER && keyEvent.pressed) {
-                printf("Send command\n");
+                // First two characters are "> "
+                cstring cmd = { inputBuffer.text+2, inputBuffer_len };
+                send_command(cmd);
                 inputBuffer_len = 2;
                 inputBuffer.text[inputBuffer_len] = 0;
             } else if (keyEvent.character && keyEvent.pressed) {
@@ -124,14 +128,17 @@ void work() {
         while (lineIndex < lines_len) {
             Line* line = &lines[lineIndex];
             cstring lineText = PTR_CSTR(line->text);
-            draw_glyphs_from_text_bcolor(g_terminal_x, g_terminal_y, fontHeight, lineText, g_default_font, textColor, backColor);
+            draw_glyphs_from_text_bcolor(g_terminal_x, g_terminal_y + fontHeight * lineIndex, fontHeight, lineText, g_default_font, textColor, backColor);
 
             lineIndex++;
         }
 
         cstring lineText = PTR_CSTR(inputBuffer.text);
         // printf("lineText %x %d\n", lineText.ptr, lineText.len);
-        draw_glyphs_from_text_bcolor(g_terminal_x, g_terminal_y, fontHeight, lineText, g_default_font, textColor, backColor);
+        draw_rect(g_terminal_x, g_terminal_y + fontHeight * lines_len, fontHeight * 150, fontHeight, backColor);
+        draw_glyphs_from_text_bcolor(g_terminal_x, g_terminal_y + fontHeight * lines_len, fontHeight, lineText, g_default_font, textColor, backColor);
+
+        CPU_sleep(REFRESH_RATE);
 
     }
 }
@@ -141,7 +148,6 @@ void work() {
 
 
 
-// void apply_command(cstring text);
 
 // void edit_text(string* text, Keycode keycode, int character, int mods, int* cursor) {
 
@@ -228,13 +234,25 @@ void work() {
 // }
 
 
-// void apply_command(cstring text) {
+void respond_message(cstring text) {
+    Line* nextLine = &lines[lines_len];
+    lines_len++;
+    int cap = text.len < sizeof(nextLine->text)-1 ? text.len : sizeof(nextLine->text)-1;
+    // @TODO Split newlines in text
+    memcpy(nextLine->text, text.ptr, cap);
+}
 
-//     // Parse command
 
-//     // root := "/home/user"
+void send_command(cstring text) {
 
-//     // list_files(root)
+    // Shell executor
 
-// }
+    if (!strcmp(text.ptr, "cd")) {
+        respond_message(PTR_CSTR("No file system\n"));
+    } else if (!strcmp(text.ptr, "ls")) {
+        respond_message(PTR_CSTR("No file system\n"));
+    } else {
+        respond_message(PTR_CSTR("Unknown command\n"));
+    }
+}
 
