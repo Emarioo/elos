@@ -303,7 +303,7 @@ void memmove(void* dst, const void* src, int size) {
     }
 }
 
-int memcmp(void* dst, void* src, int size) {
+int memcmp(const void* dst, const void* src, int size) {
     for(int i=0;i<size;i++) {
         if ( ((char*)dst)[i] != ((char*)src)[i] )
             // Did i flip the subtraction?

@@ -10,6 +10,8 @@
 #include "elos/physical_memory.h"
 #include "elos/cpu.h"
 #include "elos/disk.h"
+#include "elos/execution.h"
+#include "elos/vfs.h"
 
 #include "elos/common/intrinsics.h"
 #include "elos/common/string.h"
@@ -22,7 +24,6 @@
 
 #include "elos/kernel/pmem/paging.h"
 
-#include "elos/execution.h"
 
 bool load_font();
 
@@ -103,10 +104,19 @@ void kernel_entry(BootAPI* in_boot_api) {
     KCON_printf("Disk devices: %d\n", diskDevices_len);
 
     for (int i=0;i<diskDevices_len;i++) {
+        DiskDevice dev = diskDevices[i];
         DiskInfo diskInfo = {0};
-        DISK_get_info(diskDevices[i], &diskInfo);
+        DISK_get_info(dev, &diskInfo);
 
-        KCON_printf("Disk %s: %x MB (blocksize=%x)\n", diskInfo.name, diskInfo.diskSize/1024/1024, diskInfo.blockSize);
+        char path[256];
+        snprintf(path, sizeof(path), "/dev%d", i);
+
+        bool res = VFS_mount(path, dev);
+        if (res) {
+            KCON_printf("Mounted %s (%d MB) at %s\n", diskInfo.name, diskInfo.diskSize/1024/1024, path);
+        } else {
+            KCON_printf("Could not mount %s at %s\n", diskInfo.name, path);
+        }
     }
 
     if (diskDevices_len > 0) {
@@ -135,6 +145,10 @@ void kernel_entry(BootAPI* in_boot_api) {
         KCON_printf("\n");
 
     }
+
+    
+
+
 
     // NetDevice net_device = NULL;
     // int count = 1;

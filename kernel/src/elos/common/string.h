@@ -12,7 +12,7 @@ int strlen(const char* ptr);
 void memcpy(void* dst, const void* src, int size);
 void memmove(void* dst, const void* src, int size);
 
-int memcmp(void* dst, void* src, int size);
+int memcmp(const void* dst, const void* src, int size);
 
 int strcmp(const char* dst, const char* src);
 int strncmp(const char* dst, const char* src, int);
@@ -28,5 +28,9 @@ static inline cstring PTR_CSTR(const char* s) {
     cstring st = { s, strlen(s) };
     return st;
 }
+
+// static inline cstring sub_cstring(const cstring str, int offset) {
+//     return (cstring){ str.ptr + offset, str.len - offset };
+// }
 
 u16* tmp_path_wstring(const char* str);

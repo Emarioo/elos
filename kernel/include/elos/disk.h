@@ -6,6 +6,8 @@
 //      TYPES
 //###########################
 
+#define DISK_NULL_DEVICE (NULL)
+
 typedef void* DiskDevice;
 
 typedef struct DiskInfo {
