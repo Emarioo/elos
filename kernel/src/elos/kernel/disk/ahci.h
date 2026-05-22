@@ -328,8 +328,8 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config);
 
 int find_cmdslot(HBA_PORT *port);
 
-bool ahci_read(DiskDevice_impl* device, u64 offset, u64 size, void* buffer);
-bool ahci_write(DiskDevice_impl* device, u64 offset, u64 size, void* buffer);
+bool ahci_read(DiskDevice_impl* device, u64 byteOffset, u64 byteSize, void* buffer);
+bool ahci_write(DiskDevice_impl* device, u64 byteOffset, u64 byteSize, void* buffer);
 
 void stop_cmd(HBA_PORT *port);
 void start_cmd(HBA_PORT *port);

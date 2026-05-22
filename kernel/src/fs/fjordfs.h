@@ -23,15 +23,13 @@
 */
 typedef struct fjord__Header {
     uint8_t  _reserved0[4];         // Not used, reserved for short jump
-    uint32_t  magic;                // FJRD, 0x44524a46 (little endian)
+    char     magic[4];              // "FJRD"
     uint16_t fs_version;            // 0
     uint16_t flags;                 // not used
     
     uint64_t total_bytes;           // Total size of the file system in byte (size of the partition the FS is on, sector_count * sector_size)
     
-
     // fill out sector with zeros.
-    // last 2 bytes may be 0x55 0xAA to indicate boot sector
 } fjord__Header;
 
 typedef struct fjord__NodeMetadata {
@@ -39,8 +37,6 @@ typedef struct fjord__NodeMetadata {
     uint8_t flags; // IS_DIRECTORY
     uint8_t flags; // PERMISIONS
 
-    // fill out sector with zeros.
-    // last 2 bytes may be 0x55 0xAA to indicate boot sector
 } fjord__NodeMetadata;
 
 

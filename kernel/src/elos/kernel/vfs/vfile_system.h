@@ -10,6 +10,7 @@ struct VFS_Node {
     u8 name_len;
 
     DiskDevice mounted_diskDevice;
+    int        mounted_partitionIndex;
 
     VFS_Node* parent;
     VFS_Node* child;

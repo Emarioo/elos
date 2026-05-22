@@ -502,7 +502,7 @@ bool ahci_identify(HBA_PORT *port, void* buffer) {
     return true;
 }
 
-bool ahci_read(DiskDevice_impl* device, u64 offset, u64 size, void* buffer) {
+bool ahci_read(DiskDevice_impl* device, u64 byteOffset, u64 byteSize, void* buffer) {
     HBA_PORT *port = device->port;
     int sectorSize = device->diskInfo.blockSize;
 
@@ -512,7 +512,8 @@ bool ahci_read(DiskDevice_impl* device, u64 offset, u64 size, void* buffer) {
     if (slot == -1)
         return false;
 
-    
+    u64 offset = byteOffset/sectorSize;
+    u64 size = byteSize/sectorSize;
 
     // HBA_FIS* fis = (void*)(u64)port->fb;
 
@@ -527,14 +528,14 @@ bool ahci_read(DiskDevice_impl* device, u64 offset, u64 size, void* buffer) {
     memset(cmdtbl, 0, sizeof(HBA_CMD_TBL));
     memset(&cmdtbl->prdt_entry[0], 0, sizeof(cmdtbl->prdt_entry[0]));
 
-    if (size >= 0x400000) {
-        printf("ahci_read: Cannot read so many bytes, %d\n", size);
+    if (byteSize >= 0x400000) {
+        printf("ahci_read: Cannot read so many bytes, %d\n", byteSize);
         return false;
     }
 
     cmdtbl->prdt_entry[0].dba = (u64)buffer & 0xFFFFFFFF;
     cmdtbl->prdt_entry[0].dbau = (u64)buffer >> 32;
-    cmdtbl->prdt_entry[0].dbc = size;
+    cmdtbl->prdt_entry[0].dbc = byteSize;
     // cmdtbl->prdt_entry[0].i = 1;
 
     // Setup command
@@ -553,8 +554,8 @@ bool ahci_read(DiskDevice_impl* device, u64 offset, u64 size, void* buffer) {
     cmdfis->lba4 = (uint8_t)(offset>>32);
     cmdfis->lba5 = (uint8_t)(offset>>40);
 
-    cmdfis->countl = (size / sectorSize) & 0xFF;
-    cmdfis->counth = ((size / sectorSize) >> 8) & 0xFF;
+    cmdfis->countl = (size) & 0xFF;
+    cmdfis->counth = ((size) >> 8) & 0xFF;
 
     // The below loop waits until the port is no longer busy before issuing a new command
     while ((port->tfd & (ATA_DEV_BUSY | ATA_DEV_DRQ)) && spin < 1000000)
@@ -602,7 +603,7 @@ bool ahci_read(DiskDevice_impl* device, u64 offset, u64 size, void* buffer) {
 }
 
 
-bool ahci_write(DiskDevice_impl* device, u64 offset, u64 size, void* buffer) {
+bool ahci_write(DiskDevice_impl* device, u64 byteOffset, u64 byteSize, void* buffer) {
     HBA_PORT *port = device->port;
     int sectorSize = device->diskInfo.blockSize;
 
@@ -612,7 +613,8 @@ bool ahci_write(DiskDevice_impl* device, u64 offset, u64 size, void* buffer) {
     if (slot == -1)
         return false;
 
-    
+    u64 offset = byteOffset/sectorSize;
+    u64 size = byteSize/sectorSize;
 
     // HBA_FIS* fis = (void*)(u64)port->fb;
 
@@ -627,14 +629,14 @@ bool ahci_write(DiskDevice_impl* device, u64 offset, u64 size, void* buffer) {
     memset(cmdtbl, 0, sizeof(HBA_CMD_TBL));
     memset(&cmdtbl->prdt_entry[0], 0, sizeof(cmdtbl->prdt_entry[0]));
 
-    if (size >= 0x400000) {
-        printf("ahci_read: Cannot read so many bytes, %d\n", size);
+    if (byteSize >= 0x400000) {
+        printf("ahci_read: Cannot read so many bytes, %d\n", byteSize);
         return false;
     }
 
     cmdtbl->prdt_entry[0].dba = (u64)buffer & 0xFFFFFFFF;
     cmdtbl->prdt_entry[0].dbau = (u64)buffer >> 32;
-    cmdtbl->prdt_entry[0].dbc = size;
+    cmdtbl->prdt_entry[0].dbc = byteSize;
     // cmdtbl->prdt_entry[0].i = 1;
 
     // Setup command
@@ -653,8 +655,8 @@ bool ahci_write(DiskDevice_impl* device, u64 offset, u64 size, void* buffer) {
     cmdfis->lba4 = (uint8_t)(offset>>32);
     cmdfis->lba5 = (uint8_t)(offset>>40);
 
-    cmdfis->countl = (size / sectorSize) & 0xFF;
-    cmdfis->counth = ((size / sectorSize) >> 8) & 0xFF;
+    cmdfis->countl = (size) & 0xFF;
+    cmdfis->counth = ((size) >> 8) & 0xFF;
 
     // The below loop waits until the port is no longer busy before issuing a new command
     while ((port->tfd & (ATA_DEV_BUSY | ATA_DEV_DRQ)) && spin < 1000000)

@@ -10,5 +10,5 @@ b catch_bad_status
 b kernel_bug
 b exception_handler
 
-b VFS_mount
+b search_fat
 c

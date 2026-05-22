@@ -24,6 +24,8 @@
 
 #include "elos/kernel/pmem/paging.h"
 
+#define printf(...) KCON_printf(__VA_ARGS__)
+
 
 bool load_font();
 
@@ -109,9 +111,9 @@ void kernel_entry(BootAPI* in_boot_api) {
         DISK_get_info(dev, &diskInfo);
 
         char path[256];
-        snprintf(path, sizeof(path), "/dev%d", i);
+        snprintf(path, sizeof(path), "/dev%dp%d", i, 0);
 
-        bool res = VFS_mount(path, dev);
+        bool res = VFS_mount(path, dev, 0);
         if (res) {
             KCON_printf("Mounted %s (%d MB) at %s\n", diskInfo.name, diskInfo.diskSize/1024/1024, path);
         } else {
@@ -119,32 +121,42 @@ void kernel_entry(BootAPI* in_boot_api) {
         }
     }
 
-    if (diskDevices_len > 0) {
-        char buffer[512];
-
-        DISK_read(diskDevices[0], 0, 512, buffer);
-        
-        KCON_printf("Data at sector 0: ");
-        for (int i=0;i<16;i++) {
-            KCON_printf("%c", buffer[i]);
-        }
-        KCON_printf("\n");
-
-        memcpy(buffer + 5, "----", 4);
-        
-        DISK_write(diskDevices[0], 0, 512, buffer);
-
-        memset(buffer, 0, 512);
-        
-        DISK_read(diskDevices[0], 0, 512, buffer);
-        
-        KCON_printf("Data at sector 0: ");
-        for (int i=0;i<16;i++) {
-            KCON_printf("%c", buffer[i]);
-        }
-        KCON_printf("\n");
-
+    const char* path = "/dev0p0/msg.txt";
+    VFS_Handle handle = VFS_open(path, VFS_FLAG_READ);
+    if (handle == VFS_NULL_HANDLE) {
+        printf("Could not open %s\n", path);
+    } else {
+        VFS_HandleInfo info = {0};
+        VFS_info(handle, &info);
+        printf("%s: %d bytes\n", path, info.fileSize);
     }
+
+    // if (diskDevices_len > 0) {
+    //     char buffer[512];
+
+    //     DISK_read(diskDevices[0], 0, 512, buffer);
+        
+    //     KCON_printf("Data at sector 0: ");
+    //     for (int i=0;i<16;i++) {
+    //         KCON_printf("%c", buffer[i]);
+    //     }
+    //     KCON_printf("\n");
+
+    //     memcpy(buffer + 5, "----", 4);
+        
+    //     DISK_write(diskDevices[0], 0, 512, buffer);
+
+    //     memset(buffer, 0, 512);
+        
+    //     DISK_read(diskDevices[0], 0, 512, buffer);
+        
+    //     KCON_printf("Data at sector 0: ");
+    //     for (int i=0;i<16;i++) {
+    //         KCON_printf("%c", buffer[i]);
+    //     }
+    //     KCON_printf("\n");
+
+    // }
 
     
 

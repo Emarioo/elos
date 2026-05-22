@@ -126,9 +126,15 @@ def main():
         OVMF_FD = "extern/ovmf/OVMF.fd"
 
         DISK_IMG = "int/disk.img"
-        if not os.path.exists(DISK_IMG):
-            cmd(f"qemu-img create -f raw {DISK_IMG} 64M")
-            cmd(f"gcc scripts/fwrite.c -g -o int/fwrite && int/fwrite {DISK_IMG}")
+        # if not os.path.exists(DISK_IMG):
+            
+        DEPS_SPEC: list[tuple[str,str]] = [
+            ("tests/disk_fs/*", ""),
+        ]
+        make_gpt(DISK_IMG, DEPS_SPEC)
+
+            # cmd(f"qemu-img create -f raw {DISK_IMG} 64M")
+            # cmd(f"gcc scripts/fwrite.c -g -o int/fwrite && int/fwrite {DISK_IMG}")
 
         qemu_flags = f'''
             -bios {OVMF_FD}
@@ -212,8 +218,7 @@ def package_elos(release_dir, build_iso = False):
         ("boot/template.cfg", "TEMPLATE.CFG"),
     ]
 
-    ISO_DIR = f"{INT_DIR}/image"
-    fat_size = make_fat(fat_path, DEPS_SPEC)
+    fat_size, ISO_DIR = make_fat(fat_path, DEPS_SPEC)
 
     cmd(f"cp {fat_path} {ISO_DIR}/fat.img")
     #                       GPT header info      fat    some extra rom
@@ -248,10 +253,23 @@ def package_elos(release_dir, build_iso = False):
 
     print(f"Successfully built \033[32m{temp_folder_path}\033[0m")
 
+def make_gpt(out_path: str, deps_spec: list[tuple[str,str]]):
+
+    fat_path = f"int/{os.path.splitext(os.path.basename(out_path))[0]}.fat"
+
+    os.makedirs(os.path.dirname(fat_path), exist_ok=True)
+    
+    fat_size, _ = make_fat(fat_path, deps_spec)
+
+    gpt_size_estimation = 2 * (2*512 + 128*128) + fat_size + (40 + 400) * 512
+    cmd(f"mkgpt -o {out_path} --image-size {gpt_size_estimation/512} --part {fat_path} --type system")
+
+
 # Returns FAT size
 def make_fat(out_path: str, deps_spec: list[tuple[str,str]]):
 
-    INT_DIR = "int/image"
+    INT_DIR = f"int/tmp_{os.path.splitext(os.path.basename(out_path))[0]}"
+    os.makedirs(INT_DIR, exist_ok=True)
     
     # Collect dependencies
     DEPS = []
@@ -263,7 +281,8 @@ def make_fat(out_path: str, deps_spec: list[tuple[str,str]]):
         else:
             # Wild card directory
             for f in glob.glob(d[0], recursive=True):
-                outf = os.path.join(d[1], os.path.basename(f))
+                # print(f[len(d[0])-1:])
+                outf = os.path.join(d[1], f[len(d[0])-1:])
                 # os.makedirs(d[1], exist_ok=True)
                 DEPS.append((f, outf))
 
@@ -300,7 +319,7 @@ def make_fat(out_path: str, deps_spec: list[tuple[str,str]]):
 
     # Copy files
     for src, dst in DEPS:
-        assert dst[0] != '/', f"{src} -> {dst}"
+        assert len(dst) == 0 or dst[0] != '/', f"{src} -> {dst}"
         
         split = os.path.dirname(dst).split("/")
         acc = ""
@@ -314,7 +333,7 @@ def make_fat(out_path: str, deps_spec: list[tuple[str,str]]):
         os.makedirs(os.path.dirname(int_dst), exist_ok=True)
         shutil.copy(src, int_dst)
 
-    return fatSize
+    return fatSize, INT_DIR
 
 
 def install_deps():
