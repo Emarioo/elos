@@ -81,7 +81,7 @@ void kernel_entry(BootAPI* in_boot_api) {
             KCON_printf("Loaded default font\n");
         }
     } else {
-        // We are in serious trouble without frame buffer.
+        // No display.
     }
 
     // Initialize physical memory component with:
@@ -121,7 +121,7 @@ void kernel_entry(BootAPI* in_boot_api) {
         }
     }
 
-    const char* path = "/dev0p0/msg.txt";
+    const char* path = "/dev0p0/hello.txt";
     VFS_Handle handle = VFS_open(path, VFS_FLAG_READ);
     if (handle == VFS_NULL_HANDLE) {
         printf("Could not open %s\n", path);
@@ -129,6 +129,17 @@ void kernel_entry(BootAPI* in_boot_api) {
         VFS_HandleInfo info = {0};
         VFS_info(handle, &info);
         printf("%s: %d bytes\n", path, info.fileSize);
+
+        char buffer[512];
+        u64 readBytes = VFS_read(handle, 0, 512, buffer);
+
+        printf("Content (%d bytes):\n", readBytes);
+        for(int i=0;i<readBytes;i++) {
+            if (buffer[i] == '\0') // @TODO Currently VFS_read reads all bytes of the sector even if DirectoryEntry file size isn't that big.
+                break;
+            printf("%c", buffer[i]);
+        }
+        printf("\n");
     }
 
     // if (diskDevices_len > 0) {

@@ -10,5 +10,5 @@ b catch_bad_status
 b kernel_bug
 b exception_handler
 
-b search_fat
+b read_fat
 c
