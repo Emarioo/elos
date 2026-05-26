@@ -334,24 +334,45 @@ void VFS_close(VFS_Handle _handle) {
     // handle->node = NULL;
     // @TODO Free handle
 }
+u64 fat__sane_mtime(const fat__DirectoryEntry* entry);
 
 void VFS_info(VFS_Handle _handle, VFS_HandleInfo* info) {
     VFS_Handle_impl* handle = (VFS_Handle)_handle;
     
     if (handle->type == VFS_HANDLE_FAT) {
-        memcpy(info, &handle->fat.info, sizeof(*info));
+        int res;
+        char stackBuffer[512];
+        int buffer_head = 0;
+        int sectorSize = 512;
+        VFS_FileObject* fileObject = handle->fat.fileObject;
+
+        fat__DirectoryEntry* direntryBlock = (fat__DirectoryEntry*)(stackBuffer + buffer_head);
+        buffer_head += sectorSize;
+
+        memset(info, 0, sizeof(*info));
+        
+        res = DISK_read(fileObject->device, (fileObject->start_lba + fileObject->direntrySector) * sectorSize, sectorSize, direntryBlock);
+        if (!res) return;
+
+        fat__DirectoryEntry* entry = &direntryBlock[fileObject->direntryIndex];
+        
+        info->isDirectory = entry->attributes & fat__DIRECTORY;
+        info->readOnly = entry->attributes & fat__READ_ONLY;
+        info->fileSize = entry->file_size;
+        info->blockSize = sectorSize;
+        info->lastWriteTime_us = fat__sane_mtime(entry);
     } else {
         memset(info, 0, sizeof(*info));
     }
 }
 
-u64 read_fat(DiskDevice device, u64 start_lba, int clusterIndex, u64 offset, u64 size, void* buffer);
+u64 read_fat(VFS_Handle_impl* handle, u64 offset, u64 size, void* buffer);
 
 u64 VFS_read(VFS_Handle _handle, u64 offset, u64 size, void* buffer) {
     VFS_Handle_impl* handle = (VFS_Handle)_handle;
     
     if (handle->type == VFS_HANDLE_FAT) {
-        return read_fat(handle->fat.device, handle->fat.start_lba, handle->fat.clusterIndex, offset, size, buffer);
+        return read_fat(handle, offset, size, buffer);
     } else {
         return 0;
     }
@@ -624,6 +645,28 @@ bool fat__string_equal(const fat__DirectoryEntry* entry, const cstring name) {
     return true;
 }
 
+static VFS_FileObject fileObjects[1000];
+
+
+VFS_FileObject* find_file_object(DiskDevice device, u64 start_lba, u32 clusterIndex) {
+    // @TODO Use hash map of some sort. Maybe binary search.
+    VFS_FileObject* free_obj = NULL;
+    for (int i = 0; i < ARRAY_LENGTH(fileObjects); i++) {
+        VFS_FileObject* obj = &fileObjects[i];
+        if (obj->clusterIndex == clusterIndex && obj->device == device && obj->start_lba == start_lba) {
+            return obj;
+        }
+        if (fileObjects[i].clusterIndex == 0) {
+            free_obj = obj;
+        }
+    }
+    if (free_obj) {
+        free_obj->clusterIndex = clusterIndex;
+        free_obj->device = device;
+        free_obj->start_lba = start_lba;
+    }
+    return free_obj;
+}
 
 
 VFS_Handle_impl* search_fat(DiskDevice device, const cstring path, u64 start_lba, u64 end_lba) {
@@ -755,18 +798,21 @@ VFS_Handle_impl* search_fat(DiskDevice device, const cstring path, u64 start_lba
                 VFS_Handle_impl* handle = reserve_handle();
 
                 handle->type = VFS_HANDLE_FAT;
-                
-                handle->fat.device = device;
-                
-                // snprintf(handle->fat.name, sizeof(handle->fat.name), "%s", subname.ptr);
-                handle->fat.start_lba = start_lba;
+                u32 clusterIndex = entry->cluster_low | (entry->cluster_high << 16);
 
-                handle->fat.info.isDirectory = entry->attributes & fat__DIRECTORY;
-                handle->fat.info.readOnly = entry->attributes & fat__READ_ONLY;
-                handle->fat.info.fileSize = entry->file_size;
-                handle->fat.info.blockSize = bootBlock->bytes_per_sector;
-                handle->fat.info.lastWriteTime_us = fat__sane_mtime(entry);
-                handle->fat.clusterIndex = entry->cluster_low | (entry->cluster_high << 16);
+                // Check if (diskDevice,clusterIndex) refers to a VFS_Node already.
+                // If not create on with that identity.
+
+                // VFS_Node refers to a file object.
+
+                // If we move a directory entry to another file then cluster still refers to the correct
+                // file. The VFS_Node refers to directoryEntrySector + directoryEntryIndex which is updated
+                // when we move. If we find a node with the cluster info then we can move it.
+
+                VFS_FileObject* fileObject = find_file_object(device, start_lba, clusterIndex);
+                fileObject->direntryIndex = i;
+                fileObject->direntrySector = sector_start + sector_index;
+                handle->fat.fileObject = fileObject;
       
                 return handle;
             }
@@ -825,12 +871,17 @@ int fat__detect_type(fat__BPB* bpb) {
 
 int fat__read_fat(FATContext* context, int cluster);
 
-u64 read_fat(DiskDevice device, u64 start_lba, int clusterIndex, u64 offset, u64 size, void* buffer) {
+u64 read_fat(VFS_Handle_impl* handle, u64 offset, u64 size, void* buffer) {
     int res;
 
     #define SECTOR_SIZE 512
 
-    u8 stackBuffer[512];
+    DiskDevice device = handle->fat.fileObject->device;
+    u64 start_lba = handle->fat.fileObject->start_lba;
+
+    VFS_FileObject* fileObject = handle->fat.fileObject;
+
+    u8 stackBuffer[2*512];
     int buffer_head = 0;
 
     fat__BPB* bootBlock = (fat__BPB*)(stackBuffer + buffer_head);
@@ -863,8 +914,19 @@ u64 read_fat(DiskDevice device, u64 start_lba, int clusterIndex, u64 offset, u64
         context->fat_entries_per_sector = 0; // Can't use this for fat12, doesn't divide cleanly
     }
 
-    // Finally time to write data
-    uint32_t cluster = clusterIndex;
+
+    fat__DirectoryEntry* direntryBlock = (fat__DirectoryEntry*)(stackBuffer + buffer_head);
+    buffer_head += SECTOR_SIZE;
+
+    res = DISK_read(device, (start_lba + fileObject->direntrySector) * SECTOR_SIZE, SECTOR_SIZE, direntryBlock);
+    if (!res) return 0;
+
+    fat__DirectoryEntry* direntry = &direntryBlock[fileObject->direntryIndex];
+    u64 fileSize = direntry->file_size;
+
+    // @TODO Update access time
+
+    uint32_t cluster = fileObject->clusterIndex;
     int advance_clusters = offset / (bootBlock->bytes_per_sector * bootBlock->sectors_per_cluster);
 
     while (advance_clusters) {
@@ -878,8 +940,6 @@ u64 read_fat(DiskDevice device, u64 start_lba, int clusterIndex, u64 offset, u64
         }
     }
 
-    // @TODO Write multiple sectors at once, one whole cluster since it's contiguous. 
-
     char data_sector[512];
 
     int sector_index = 0;
@@ -888,10 +948,12 @@ u64 read_fat(DiskDevice device, u64 start_lba, int clusterIndex, u64 offset, u64
 
         if (sector_index >= context->bpb->sectors_per_cluster) {
             uint32_t next_cluster = fat__read_fat(context, cluster);
-            if (next_cluster == -1)
+            if (next_cluster == -1) {
+                printf("No more clusters, %d -> %d\n", cluster, next_cluster);
                 return buffer_offset;
-            if (next_cluster == fat__END_OF_FILE) {
+            } else if (next_cluster == fat__END_OF_FILE) {
                 // No more to read, return what we did read.
+                printf("No more clusters, %d -> %d\n", cluster, next_cluster);
                 return buffer_offset;
             } else {
                 cluster = next_cluster;
@@ -905,43 +967,39 @@ u64 read_fat(DiskDevice device, u64 start_lba, int clusterIndex, u64 offset, u64
 
         // @TODO Don't read more than file size.
 
-        if ((alignment != 0) || (buffer_offset + context->sector_size > size)) {
+        if ((alignment != 0) || (buffer_offset + context->sector_size > size) || (buffer_offset + context->sector_size > fileSize)) {
             // writing a partial sector.
             // We must read the sector
             // memcpy in our partial data to write then
             // do a full sector write
             res = DISK_read(device, (context->start_lba + sector_offset) * context->sector_size, context->sector_size, data_sector);
-            if (!res) return buffer_offset;
+            if (!res) {
+                printf("Failed read at sector %d\n", context->start_lba + sector_offset);
+                return buffer_offset;
+            }
 
             int part_size = context->sector_size - alignment;
             if (part_size > size - buffer_offset) {
                 part_size = size - buffer_offset;
             }
+            if (part_size > fileSize - buffer_offset) {
+                part_size = fileSize - buffer_offset;
+            }
             memcpy((char*)buffer + buffer_offset, data_sector + alignment, part_size);
-
-            // res = context->write_sectors(data_sector, context->lba_start + sector_offset, 1, context->user_data);
-            // if (res) return res;
 
             buffer_offset += part_size;
             sector_index++;
         } else {
             res = DISK_read(device, (context->start_lba + sector_offset) * context->sector_size, context->sector_size, (char*)buffer + buffer_offset);
-            if (!res) return buffer_offset;
+            if (!res) {
+                printf("Failed read at sector %d\n", context->start_lba + sector_offset);
+                return buffer_offset;
+            }
 
             buffer_offset += context->sector_size;
             sector_index++;
         }
     }
-
-    // if (offset + size > found_entry->file_size)
-    //     found_entry->file_size = offset + size;
-
-    // int sector_offset = fat__cluster_to_sector_offset(internal, dir_cluster) + entries_sector_index;
-    // res = context->write_sectors(temp_sector, context->lba_start + sector_offset, 1, context->user_data);
-    // if (res) return res;
-
-    // res = fat__copy_fat(internal);
-    // if (res) return res;
 
     return buffer_offset;
 }
@@ -963,7 +1021,7 @@ int fat__read_fat(FATContext* context, int cluster) {
         // Clean cluster number divide, FAT entry can't span across sectors.
         int sector_index = context->bpb->reserved_sectors + cluster / context->fat_entries_per_sector;
         res = DISK_read(context->device, (context->start_lba + sector_index) * context->sector_size, context->sector_size, tempBuffer);
-        if (res) return -1;
+        if (!res) return -1;
 
         void* sector_buffer = tempBuffer;
         int entry_index = cluster % context->fat_entries_per_sector;
@@ -983,7 +1041,7 @@ int fat__read_fat(FATContext* context, int cluster) {
         int sector_index = context->bpb->reserved_sectors + fat_offset / context->sector_size;
 
         res = DISK_read(context->device, (context->start_lba + sector_index) * context->sector_size, 2 * context->sector_size, tempBuffer);
-        if (res) return -1;
+        if (!res) return -1;
 
         char* sector_buffer = tempBuffer;
 

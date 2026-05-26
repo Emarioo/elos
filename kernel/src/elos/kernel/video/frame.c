@@ -6,6 +6,15 @@
 #include "elos/common/types.h"
 #include "elos/common/string.h"
 #include "elos/frame_buffer.h"
+#include "elos/physical_memory.h"
+#include "elos/kernel_console.h"
+
+#define printf(...) KCON_printf(__VA_ARGS__)
+
+#define STBI_NO_STDIO
+#include "vendor/stb_image.h"
+
+#include "elos/vfs.h"
 
     #define PixelBlueGreenRedReserved8BitPerColor 0
     #define PixelRedGreenBlueReserved8BitPerColor 1
@@ -264,3 +273,109 @@ void draw_glyphs_from_text_bcolor(int x, int y, int height, const cstring text, 
     }
 }
 
+
+
+
+Texture* load_texture(const char* path) {
+
+    // @TODO Handle cleanup of allocations if a later one fails.
+
+    VFS_Handle handle = VFS_open(path, VFS_FLAG_READ);
+    if (!handle) {
+        printf("Couldn't open %s\n", path);
+        return NULL;
+    }
+
+    VFS_HandleInfo info;
+    VFS_info(handle, &info);
+
+    u8* data = PMEM_alloc(info.fileSize);
+    if (!data) {
+        printf("Couldn't allocate %d\n", info.fileSize);
+        return NULL;
+    }
+
+    Texture* texture = PMEM_alloc(sizeof(Texture));
+    if (!texture)
+        return NULL;
+    memset(texture, 0, sizeof(*texture));
+
+    u64 readBytes = VFS_read(handle, 0, info.fileSize, data);
+    if (readBytes != info.fileSize) {
+        printf("Could not load texture, (read %d bytes, texture is %d bytes)\n", readBytes, info.fileSize);
+        return NULL;
+    }
+
+    printf("STBI parse\n");
+    int width, height, channels;
+    stbi_uc* rawData = stbi_load_from_memory((stbi_uc*)data, readBytes, &width, &height, &channels, 4); 
+    if (!rawData) {
+        printf("Could not parse PNG\n");
+        return NULL;
+    }
+
+    texture->data = (u32*)rawData;
+    texture->width = width;
+    texture->height = height;
+
+    // @TODO Free unused buffers.
+
+    return texture;
+}
+
+void draw_texture(int x, int y, int w, int h, int sub_x, int sub_y, int sub_w, int sub_h, Texture* texture) {
+    if (x < 0) {
+        w += x;
+        x += -x;
+        sub_w += (x * sub_w) / w;
+        sub_x += (-x * sub_w) / w;
+    }
+    if (y < 0) {
+        h += y;
+        y += -y;
+        sub_h += (y * sub_h) / h;
+        sub_y += (-y * sub_h) / h;
+    }
+    if (x + w > g_frame_buffer.width) {
+        w += -w + g_frame_buffer.width - x;
+        sub_w += ((-w + g_frame_buffer.width - x) * sub_w) / w;
+    }
+    if (y + h > g_frame_buffer.height) {
+        h += -h + g_frame_buffer.height - y;
+        sub_h += ((-h + g_frame_buffer.height - y) * sub_h) / h;
+    }
+
+    switch(0) {
+        case PixelRedGreenBlueReserved8BitPerColor: {
+            // TODO: FIX
+            // color = ((rgba >> 16) & 0xFF) |
+            // ((rgba << 16) & 0xFF0000) |
+            // ((rgba      ) & 0xFF00FF00); // keep green and alpha (alpha part is reserved and not used though)
+        } 
+        // fallthrough
+        case PixelBlueGreenRedReserved8BitPerColor: {
+            // TODO: SIMD
+            u32* const pixels           = (u32*)g_frame_buffer.base;
+            u32  const pixels_per_line  = g_frame_buffer.pixels_per_scan_line;
+            for (int iy = y; iy < y + h; iy++) {
+                for (int ix = x; ix < x + w; ix++) {
+                    int sx = ((ix - x) * sub_w) / w;
+                    int sy = ((iy - y) * sub_h) / h;
+                    u32 color_rgba = texture->data[sx + sy * texture->width];
+                    u32 color = ((color_rgba >> 16) & 0xFF)
+                        | ((color_rgba << 16) & 0xFF0000)
+                        | (color_rgba & 0xFF00FF00);
+
+                    pixels[ix + iy * pixels_per_line] = color;
+                }
+            }
+        }
+        break; case PixelBitMask: {
+            // TODO: implement
+        }
+        break; case PixelBltOnly: {
+            // TODO: implement
+        }
+        break; case PixelFormatMax: // do nothing
+    }
+}

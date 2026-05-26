@@ -163,24 +163,12 @@ Then press enter or click and it should boot up.
 There is a high chance it doesn't boot, this means my OS doesn't follow standards and there is probably nothing you can do about it.
 
 
-# File structure
-
-- `docs` contains design decisions, information, specifications
-- `include` contains headers for the public interface of software components
-- `src` implementation of software components
-- `src/elos` operating system, kernel, bootloader
-- `src/c` standard library used in ELOS
-- `src/fs` file system implementation, used by `tools` and `elos`
-- `src/tools` tools for creating kernel images, testing and what not
-- `res` resources of type texture and font.
-- `image` content for the OS image and ISO, text files, textures, fonts currently included.
-- `tests` has tests
-- `scripts` useful developer scripts, like gdb qemu commands
-
 # Some output when booting
 
+![](./docs/img/texture_render.png)
+
 ```log
-Image loaded at: 0x6198000
+Image loaded at: 0x6022000
 Hello World
 static_ip = 192.168.100.54
 netboot_port = 2493
@@ -189,9 +177,7 @@ netboot_ips[1] = 192.168.0.60
 BOOT: Found ACPI 1.0, RSDP at 777e000.
 BOOT: Found ACPI 2.0, XSDP at 777e014.
 No response for DHCP, using static IP address: 192.168.100.54
-Got MAC from ARP, d2:10:42:53:3a:c6, 380 us
-Requesting /KERNEL.IMG
-No response on NETBOOT file request? (or incomplete response)
+Did not receive ARP reply. IP doesn't exist or we need to wait longer.
 Loading Kernel from disk
 UEFI - Exit boot services
 Loaded default font
@@ -202,25 +188,47 @@ LAPIC (type=0 len=8)
  acpiProcessorID: 0
  apicID: 0
  flags: 1
-LAPIC (type=0 len=8)
- acpiProcessorID: 1
- apicID: 1
- flags: 1
 IOAPIC (type=1 len=12)
  ioapicID: 0
  ioapicAddress: fec00000
  globalSystemInterruptBase: 0
-HPET measured: 428627 K cycles/ms
-AP #1 started (edi=1)
-END OF KERNEL_ENTRY!
-EXEC init
-Enable scheduling
-Starting terminal
-key=60 scan=34 mod=0 pressed=1
-key=60 scan=34 mod=0 pressed=0
-key=2 scan=12 mod=2 pressed=1
-key=2 scan=12 mod=0 pressed=0
-key=60 scan=34 mod=0 pressed=1
+IOAPIC int.src.ovr. (type=2 len=10)
+ busSource: 0
+ irqSource: 0
+ globalSystemInterrupt: 2
+ flags: 0
+IOAPIC int.src.ovr. (type=2 len=10)
+ busSource: 0
+ irqSource: 5
+ globalSystemInterrupt: 5
+ flags: d
+IOAPIC int.src.ovr. (type=2 len=10)
+ busSource: 0
+ irqSource: 9
+ globalSystemInterrupt: 9
+ flags: d
+IOAPIC int.src.ovr. (type=2 len=10)
+ busSource: 0
+ irqSource: 10
+ globalSystemInterrupt: 10
+ flags: d
+IOAPIC int.src.ovr. (type=2 len=10)
+ busSource: 0
+ irqSource: 11
+ globalSystemInterrupt: 11
+ flags: d
+LAPIC nonmask.int. (type=4 len=6)
+ acpiProcessorID: 255
+ flags: 0
+ LINT: 1
+HPET measured: 427886 K cycles/ms
+Disk devices: 1
+Mounted QEMU HARDDISK (7 MB) at /dev0p0
+Searching mounted device QEMU HARDDISK (7 MB)
+Found GPT Partition 'part1' (#0) at LBA 34 - 15362
+Found file/directory back1.png
+STBI parse
+Rendered
 ```
 
 # OS layout

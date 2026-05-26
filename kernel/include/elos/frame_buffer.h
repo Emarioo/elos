@@ -21,4 +21,7 @@ void FB_printf(const char* format, ...);
 
 void FB_write(const char* text, int len);
 
+
+
+
 // @TODO Draw rectangles, text

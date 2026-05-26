@@ -15,8 +15,19 @@ struct VFS_Node {
     VFS_Node* parent;
     VFS_Node* child;
     VFS_Node* sibling;
-
 };
+
+typedef struct {
+    // disk and partition
+    DiskDevice device;
+    u64 start_lba; // @TODO If we move partitions then this breaks. But if we change partitions we may shrink or ruin FAT anyway so we should probably flush all file objects.
+
+    // Specific to FAT
+    u32 clusterIndex;
+    // Below must be updated when we rename/move file.
+    u32 direntrySector; // Relative to start of partition (start_lba + direntrySector is relative to whole disk).
+    u32 direntryIndex;
+} VFS_FileObject;
 
 typedef enum {
     VFS_HANDLE_NONE,
@@ -32,13 +43,8 @@ typedef struct {
             
         } vfs_node;
         struct {
-            DiskDevice device;
-            VFS_HandleInfo info;
-            u32 clusterIndex;
-            u64 start_lba;
-            // char name[64];
+            VFS_FileObject* fileObject;
         } fat;
-        // @TODO Access/open flags
     };
 
 

@@ -15,6 +15,13 @@
 
 #define DARK_BLUE  0xFF242a48
 
+typedef struct {
+    u32* data;
+    u32  width;
+    u32  height;
+} Texture;
+
+
 void draw_frame_info(int* width, int* height);
 
 // void draw_char_bcolor(int x, int y, int h, char c, u32 color, u32 back_color);
@@ -34,3 +41,9 @@ void draw_glyphs_from_text_bcolor(int x, int y, int height, const cstring text, 
 void draw_refresh();
 
 void draw_shift_frame(int x, int y, u32 fill_color);
+
+Texture* load_texture(const char* path);
+
+void draw_texture(int x, int y, int w, int h, int sub_x, int sub_y, int sub_w, int sub_h, Texture* texture);
+
+

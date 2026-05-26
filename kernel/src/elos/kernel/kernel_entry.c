@@ -121,26 +121,37 @@ void kernel_entry(BootAPI* in_boot_api) {
         }
     }
 
-    const char* path = "/dev0p0/hello.txt";
-    VFS_Handle handle = VFS_open(path, VFS_FLAG_READ);
-    if (handle == VFS_NULL_HANDLE) {
-        printf("Could not open %s\n", path);
+    Texture* texture = load_texture("/dev0p0/back1.png");
+    if (texture) {
+        int width, height;
+        draw_frame_info(&width,&height);
+        draw_texture(0, 0, width, height, 0, 0, texture->width, texture->height, texture);
     } else {
-        VFS_HandleInfo info = {0};
-        VFS_info(handle, &info);
-        printf("%s: %d bytes\n", path, info.fileSize);
-
-        char buffer[512];
-        u64 readBytes = VFS_read(handle, 0, 512, buffer);
-
-        printf("Content (%d bytes):\n", readBytes);
-        for(int i=0;i<readBytes;i++) {
-            if (buffer[i] == '\0') // @TODO Currently VFS_read reads all bytes of the sector even if DirectoryEntry file size isn't that big.
-                break;
-            printf("%c", buffer[i]);
-        }
-        printf("\n");
+        printf("No texture\n");
     }
+
+    printf("Rendered\n");
+
+    // const char* path = "/dev0p0/hello.txt";
+    // VFS_Handle handle = VFS_open(path, VFS_FLAG_READ);
+    // if (handle == VFS_NULL_HANDLE) {
+    //     printf("Could not open %s\n", path);
+    // } else {
+    //     VFS_HandleInfo info = {0};
+    //     VFS_info(handle, &info);
+    //     printf("%s: %d bytes\n", path, info.fileSize);
+
+    //     char buffer[512];
+    //     u64 readBytes = VFS_read(handle, 0, 512, buffer);
+
+    //     printf("Content (%d bytes):\n", readBytes);
+    //     for(int i=0;i<readBytes;i++) {
+    //         if (buffer[i] == '\0') // @TODO Currently VFS_read reads all bytes of the sector even if DirectoryEntry file size isn't that big.
+    //             break;
+    //         printf("%c", buffer[i]);
+    //     }
+    //     printf("\n");
+    // }
 
     // if (diskDevices_len > 0) {
     //     char buffer[512];

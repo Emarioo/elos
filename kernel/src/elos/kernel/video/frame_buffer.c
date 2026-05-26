@@ -78,9 +78,10 @@ void FB_write(const char* buffer, int len) {
         start = head;
 
         if (text.len > 0) {
+            int text_width = draw_text_width(text, text_height, g_default_font);
+            draw_rect(pos_x + pos_offset_x, pos_y, text_width, text_height, DARK_BLUE);
             draw_glyphs_from_text_bcolor(pos_x + pos_offset_x, pos_y, text_height, text, g_default_font, WHITE, 0);
             // draw_glyphs_from_text_bcolor(pos_x, pos_y, text_height, text, g_default_font, WHITE, DARK_BLUE);
-            int text_width = draw_text_width(text, text_height, g_default_font);
             pos_offset_x += text_width;
         }
         if (chr == '\r') {
@@ -107,8 +108,6 @@ void FB_write(const char* buffer, int len) {
 
                 // draw_shift_frame(0, -text_height, DARK_BLUE);
             }
-
-            draw_rect(pos_x + pos_offset_x, pos_y, g_default_font->glyphWidth * 36, text_height, DARK_BLUE);
         }
     }
     

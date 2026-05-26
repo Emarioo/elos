@@ -159,22 +159,25 @@ u32 allocate_spinlock;
 void* PMEM_allocate(u64 size, void* ptr) {
     void* returnValue;
 
-    LOCK_INT(&allocate_spinlock);
+    // printf("ALLOCATE %d 0x%x\n", size, ptr);
+
 
     const int requested_pages = (size + PAGE_SIZE-1) / PAGE_SIZE;
     const int requested_aligned_size = ((size + PAGE_SIZE-1) / PAGE_SIZE) * PAGE_SIZE;
     // in pages, same as PhysicalMemoryRegion.virtualStart
     const u64 old_virtual_address = (u64)ptr;
-    void* const old_aligned_ptr   = (void*)(((u64)ptr) * PAGE_SIZE);
+    void* const old_aligned_ptr   = (void*)(((u64)ptr / PAGE_SIZE) * PAGE_SIZE);
 
     if (!size && !old_virtual_address) {
-        returnValue = NULL;
-        goto cleanup;
+        return NULL;
     }
 
 
     if (old_virtual_address && size) {
         // RESIZE MEMORY
+
+        LOCK_INT(&allocate_spinlock);
+
         
         int found_used_index = -1;
         for (int i = 0; i < g_num_used_regions; i++) {
@@ -193,10 +196,18 @@ void* PMEM_allocate(u64 size, void* ptr) {
             goto cleanup;
         }
 
+        UNLOCK_INT(&allocate_spinlock);
+
+        // @DANGEROUS MIDDLE WHERE STUFF ISn'T LOCKED!
+
         PhysicalMemoryRegion* used_alloc = &g_used_regions[found_used_index];
         const u64 old_aligned_size = used_alloc->pageCount * PAGE_SIZE;
 
         void* new_ptr = PMEM_allocate(requested_aligned_size, NULL);
+        if (!new_ptr) {
+            printf("Alloc failed %d\n", requested_aligned_size);
+            goto cleanup;
+        }
         memcpy(new_ptr, old_aligned_ptr, old_aligned_size);
         // TODO: We are doing a loop over used regions once above and then
         //   once below when freeing old allocation. OPTIMIZE.
@@ -210,6 +221,8 @@ void* PMEM_allocate(u64 size, void* ptr) {
     } else if (old_virtual_address) {
         // FREE MEMORY
         
+        LOCK_INT(&allocate_spinlock);
+
         // TODO: If the ptr you passed is valid then this function should always succeed.
         //   If g_free_regions is full then we will fail however. Memory is too scattered.
         //   Also, we can't indicate whether we succeded or not. return (void*)1 to indicate
@@ -277,6 +290,8 @@ void* PMEM_allocate(u64 size, void* ptr) {
     } else /* if (size) */ {
         // ALLOCATE MEMORY
 
+        LOCK_INT(&allocate_spinlock);
+
         int found_free_index = -1;
         for (int i = 0; i < g_num_free_regions; i++) {
             PhysicalMemoryRegion* alloc = &g_free_regions[i];
@@ -291,6 +306,7 @@ void* PMEM_allocate(u64 size, void* ptr) {
         }
 
         if (found_free_index == -1) {
+            printf("No free index\n");
             returnValue = NULL;
             goto cleanup;
         }
@@ -306,6 +322,7 @@ void* PMEM_allocate(u64 size, void* ptr) {
         }
 
         if (found_used_index == -1) {
+            printf("No used index\n");
             returnValue = NULL;
             goto cleanup;
         }
@@ -346,6 +363,7 @@ void* PMEM_allocate(u64 size, void* ptr) {
     }
 cleanup:
     UNLOCK_INT(&allocate_spinlock);
+    // printf(" return 0x%x\n", returnValue);
     return returnValue;
 }
 
