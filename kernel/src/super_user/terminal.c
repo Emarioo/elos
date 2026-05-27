@@ -22,7 +22,7 @@
 #include "elos/execution.h"
 #include "elos/kernel_console.h"
 
-#include "user/pipe.h"
+#include "super_user/pipe.h"
 
 // int ring_size = 0x10000;
 // Handle ringBuffer;

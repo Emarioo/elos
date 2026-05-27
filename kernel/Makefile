@@ -26,7 +26,7 @@ CFLAGS += -I$(ROOT)/kernel/src -I$(ROOT)/kernel/include
 CFLAGS += -fshort-wchar -Werror=implicit-function-declaration
 CFLAGS += -fno-asynchronous-unwind-tables -fno-exceptions
 CFLAGS += -Wall -Werror -Wno-multichar
-CFLAGS += -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable
+CFLAGS += -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable -Wno-unused-label
 CFLAGS += -mno-red-zone
 # CFLAGS += -mno-sse -mno-sse2 -mno-mmx # For debugging disabling SSE can be useful
 
@@ -38,7 +38,7 @@ LDFLAGS := -nostdlib  -T $(KERNEL_LD_SCRIPT) --no-warn-execstack
 
 SRC_DIRS := \
 	$(ROOT)/kernel/src/elos \
-	$(ROOT)/kernel/src/user
+	$(ROOT)/kernel/src/super_user
 
 SRC_FILES := \
 	$(foreach dir,$(SRC_DIRS),$(shell find $(dir) \( -name '*.c' -o -name '*.s' \) )) \

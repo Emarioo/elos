@@ -14,6 +14,7 @@ typedef enum fat__DirectoryAttributes {
     fat__LFN_MASK   = fat__READ_ONLY | fat__HIDDEN | fat__SYSTEM | fat__VOLUME_ID | fat__DIRECTORY | fat__ARCHIVE,
 } fat__DirectoryAttributes;
 
+#define fat__LAST_LONG_ENTRY 0x40
 
 #pragma pack(push, 1)
 typedef struct fat__BPB {
@@ -112,10 +113,10 @@ typedef struct {
     uint8_t  attributes;
     uint8_t  _zero0;
     uint8_t  checksum;
-    uint16_t file_name6[6];
+    uint16_t file_name1[6];
     uint16_t _zero1;
     uint16_t file_name2[2];
-} LongNameEntry;
+} fat__LongNameEntry;
 #pragma pack(pop)
 
 

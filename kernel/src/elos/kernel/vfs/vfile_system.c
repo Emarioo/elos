@@ -620,16 +620,13 @@ u64 fat__sane_mtime(const fat__DirectoryEntry* entry) {
 
 
 
-bool fat__string_equal(const fat__DirectoryEntry* entry, const cstring name) {
-    char entryName[20];
-    int  entryName_len = fat__sane_cstring(entry, entryName);
-
-    if (entryName_len != name.len) {
+bool fat__string_equal(const cstring name, const cstring entryName) {
+    if (entryName.len != name.len) {
         return false;
     }
 
-    for (int i=0;i<entryName_len;i++) {
-        char chr0 = entryName[i];
+    for (int i=0;i<entryName.len;i++) {
+        char chr0 = entryName.ptr[i];
         char chr1 = name.ptr[i];
 
         // Case-insensitive compare
@@ -731,6 +728,11 @@ VFS_Handle_impl* search_fat(DiskDevice device, const cstring path, u64 start_lba
     cstring subname = { 0 };
     int slash_pos = -1;
 
+    char longName_buffer[256];
+    const int longName_lastIndex = sizeof(longName_buffer)-1;
+    int longName_startIndex = longName_lastIndex;
+    longName_buffer[longName_lastIndex] = '\0';
+
     while (1) {
         
         if (subname.ptr != path.ptr + path_index) {
@@ -767,7 +769,30 @@ VFS_Handle_impl* search_fat(DiskDevice device, const cstring path, u64 start_lba
             entry_number++;
 
             if (entry->attributes == fat__LFN) {
-                // Can't handle
+                fat__LongNameEntry* nameEntry = (fat__LongNameEntry*)entry;
+                if (nameEntry->order & fat__LAST_LONG_ENTRY) {
+                    longName_startIndex = longName_lastIndex;
+                }
+                for (int ci=5+6+2-1;ci>=0;ci--) {
+                    u16 chr;
+                    if (ci >= 0 && ci < 5) {
+                        chr = nameEntry->file_name0[ci];
+                    } else if (ci >= 5 && ci < 5+6) {
+                        chr = nameEntry->file_name1[ci-5];
+                    } else if (ci >= 5+6 && ci < 5+6+2) {
+                        chr = nameEntry->file_name2[ci-5-6];
+                    }
+
+                    if (chr == 0 || chr == 0xFFFF || (chr == ' '
+                        && longName_startIndex == longName_lastIndex))
+                    {
+                        // End character.
+                        longName_startIndex = longName_lastIndex;
+                    } else {
+                        longName_startIndex--;
+                        longName_buffer[longName_startIndex] = chr;
+                    }
+                }
                 continue;
             }
             if (entry->file_name[0] == 0xE5) {
@@ -785,8 +810,20 @@ VFS_Handle_impl* search_fat(DiskDevice device, const cstring path, u64 start_lba
             if (entry->file_name[0] == '.' && entry->file_name[1] == '.' && entry->file_name[2] == ' ')
                 continue;
             
-
-            bool same = fat__string_equal(entry, subname);
+            bool same;
+            if (longName_startIndex != longName_lastIndex) {
+                cstring entryName2 = {
+                    .ptr = longName_buffer + longName_startIndex,
+                    .len = longName_lastIndex - longName_startIndex,
+                };
+                longName_startIndex = longName_lastIndex;
+                same = fat__string_equal(subname, entryName2);
+            } else {
+                char entryName[20];
+                int  entryName_len = fat__sane_cstring(entry, entryName);
+                cstring entryName2 = { entryName, entryName_len };
+                same = fat__string_equal(subname, entryName2);
+            }
 
             if (!same) {
                 continue;

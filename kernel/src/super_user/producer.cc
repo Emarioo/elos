@@ -35,8 +35,8 @@ void producer_main() {
 
     int coreCount = CPU_get_core_count();
     for (int i=0;i<coreCount;i++) {
-        EXEC_create_thread(proc1, i);
-        EXEC_create_thread(proc2, i);
+        EXEC_create_kernel_thread(proc1, i);
+        EXEC_create_kernel_thread(proc2, i);
     }
 
     while (1) pause();
