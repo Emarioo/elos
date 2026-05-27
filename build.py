@@ -129,7 +129,7 @@ def main():
         # if not os.path.exists(DISK_IMG):
             
         DEPS_SPEC: list[tuple[str,str]] = [
-            ("tests/disk_fs/*", ""),
+            ("scripts/disk_fs/*", ""),
         ]
         make_gpt(DISK_IMG, DEPS_SPEC)
 
