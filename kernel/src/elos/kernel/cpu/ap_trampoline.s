@@ -71,6 +71,9 @@ _8060:
     or eax, 0x80000000 # PG bit (paging)
     mov cr0, eax
 
+    # @TODO I think each processor needs it's own Task State Segment
+    #   with their own ring0 stack and therefore their own GDT.
+
     lgdt [_gdt_register] # Prepared by BSP in Kernel C code
     lidt [_idt_register]
 
@@ -80,11 +83,15 @@ _8060:
     .align 256
     .code64
 _8100:
-    // 64-bit long mode with paging
+    # 64-bit long mode with paging
     mov ax, 0x10
     mov ds, ax
     mov es, ax
     mov ss, ax
+ 
+    # Load Task State Segment
+    mov ax, 0x28
+    ltr ax
 
     # Get Local APIC ID
     mov eax, 1

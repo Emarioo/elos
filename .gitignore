@@ -19,6 +19,8 @@ out
 /*.img
 /*.iso
 
+scripts/disk_fs/*.elf
+
 
 # IDE stuff
 .vscode

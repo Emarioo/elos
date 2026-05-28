@@ -77,12 +77,16 @@ void init_paging(BootAPI* boot_api) {
 
 bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 size, MapPageFlag flags) {
 
+    u64 extra_bits_mask = (PAGE_BIT_WRITE|PAGE_BIT_PCD|PAGE_BIT_USER);
     u64 extra_bits = PAGE_BIT_WRITE;
     if (flags & PAGING_FLAG_READONLY) {
         extra_bits = extra_bits & ~PAGE_BIT_WRITE;
     }
-     if (flags & PAGING_FLAG_NOT_CACHED) {
+    if (flags & PAGING_FLAG_NOT_CACHED) {
         extra_bits = extra_bits | PAGE_BIT_PCD;
+    }
+    if (flags & PAGING_FLAG_USER_SPACE) {
+        extra_bits = extra_bits | PAGE_BIT_USER;
     }
 
     u64 voff = (u64)virtual_address & 0xFFF;
@@ -116,6 +120,8 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
             }
             entry4 = PAGE_BIT_PRESENT | extra_bits | ((u64)page & MASK_48_4KB_ADDRESS);
             root->entries[lvl4] = entry4;
+        } else {
+            root->entries[lvl4] = (entry4 & ~extra_bits_mask) | extra_bits;
         }
 
         Page* page_table_3 = (Page*)(entry4 & MASK_48_4KB_ADDRESS);
@@ -149,6 +155,8 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
             }
             entry3 = PAGE_BIT_PRESENT | extra_bits | ((u64)page & MASK_48_4KB_ADDRESS);
             page_table_3->entries[lvl3] = entry3;
+        } else {
+            page_table_3->entries[lvl3] = (entry3 & ~extra_bits_mask) | extra_bits;
         }
         
         Page* page_table_2 = (Page*)(entry3 & MASK_48_4KB_ADDRESS);
@@ -179,12 +187,13 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
             }
             entry2 = PAGE_BIT_PRESENT | extra_bits | ((u64)page & MASK_48_4KB_ADDRESS);
             page_table_2->entries[lvl2] = entry2;
+        } else {
+            page_table_2->entries[lvl2] = (entry2 & ~extra_bits_mask) | extra_bits;
         }
 
         Page* page_table_1 = (Page*)(entry2 & MASK_48_4KB_ADDRESS);
         u64 entry1 = page_table_1->entries[lvl1];
 
-        // U/S bit is cleared for supervisor, @TODO change later
         entry1 = PAGE_BIT_PRESENT | extra_bits | (phys & MASK_48_4KB_ADDRESS);
 
         page_table_1->entries[lvl1] = entry1;

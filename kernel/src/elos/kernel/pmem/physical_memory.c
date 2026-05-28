@@ -548,6 +548,9 @@ bool PMEM_map_memory(void* virtual_address, void* physical_address, u64 size, PM
     if (flags & PMEM_FLAG_READ_ONLY) {
         pflags |= PAGING_FLAG_READONLY;
     }
+    if (flags & PMEM_FLAG_USER_SPACE) {
+        pflags |= PAGING_FLAG_USER_SPACE;
+    }
     return map_memory(rootTable, virtual_address, physical_address, size, pflags);
 }
 

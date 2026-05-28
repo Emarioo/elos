@@ -13,6 +13,7 @@ typedef struct {
     FN_ThreadEntry  entry;
     u32             stack_size;
     bool            used;
+    bool            userSpace;
 } EXEC_Thread;
 
 #define THREAD_LIMIT 32
@@ -32,7 +33,12 @@ void EXEC_init();
 /*
     @param pinnedCoreIndex Specifies which core to pin the thread to. -1 for any core.
 */
-bool EXEC_create_thread(void* entry, int pinnedCoreIndex);
+bool EXEC_create_kernel_thread(void* entry, int pinnedCoreIndex);
+
+/*
+    @param pinnedCoreIndex Specifies which core to pin the thread to. -1 for any core.
+*/
+bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex);
 
 void EXEC_terminate_self();
 

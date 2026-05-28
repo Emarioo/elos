@@ -143,10 +143,33 @@ typedef struct IDT_Entry {
 } IDT_Entry;
 #pragma pack(pop)
 
+#pragma pack(push, 1)
+typedef struct {
+	uint32_t _reserved0;
+	uint64_t rsp0;
+	uint64_t rsp1;
+	uint64_t rsp2;
+	uint64_t _reserved1;
+	uint64_t ist1;
+	uint64_t ist2;
+	uint64_t ist3;
+	uint64_t ist4;
+	uint64_t ist5;
+	uint64_t ist6;
+	uint64_t ist7;
+	uint64_t _reserved2;
+	uint16_t _reserved3;
+	uint16_t iomap_base;
+} TSS_Entry;
+#pragma pack(pop)
+
+
 GDT_Register _gdt_register;
 IDT_Register _idt_register;
+TSS_Entry    _tss_entry;
 
-static u64 _gdt[3];
+static u64 _gdt[7]; // null, code_kernel, data_kernel, code_user, data_user,
+                    // task_state_low, task_state_high
 
 _align(16)
 static IDT_Entry _idt[256];
@@ -229,14 +252,12 @@ static bool vectors[IDT_MAX_DESCRIPTORS];
 
 extern void* isr_stub_table[];
 
-// offset to Kernel code descriptor, set int init_gdb_idt
-#define GDT_OFFSET_KERNEL_CODE 8
 
 void idt_set_descriptor(uint8_t vector, void* isr, uint8_t flags) {
     IDT_Entry* descriptor = &_idt[vector];
 
     descriptor->isr_low        = (uint64_t)isr & 0xFFFF;
-    descriptor->kernel_cs      = GDT_OFFSET_KERNEL_CODE;
+    descriptor->kernel_cs      = KERNEL_CODE_SEGMENT;
     descriptor->ist            = 0;
     descriptor->attributes     = flags;
     descriptor->isr_mid        = ((uint64_t)isr >> 16) & 0xFFFF;
@@ -247,25 +268,47 @@ void idt_set_descriptor(uint8_t vector, void* isr, uint8_t flags) {
 extern u8 __text_start;
 extern u8 __data_start;
 
+u8 tss_stack_space[0x4000];
+
 void init_gdt() {
     
     asm ( "cli\n" );
 
-    // Base and LIMIT are set to zero because they are ignored in 64-bit mode.
-
-    // Ensure the macros KERNEL_CODE_SEGMENT, KERNEL_DATA_SEGMENT
-    // Match with below.
+    _tss_entry.rsp0 = (u64)&tss_stack_space + sizeof(tss_stack_space);
 
     // Null descriptor.
-    _gdt[0] = MAKE_SEGMENT_DESC(0,0,0,0);
-    // Kernel code descriptor
-    _gdt[1] = MAKE_SEGMENT_DESC(0, 0, 0x9A, 0xA); // executable and readable bit, long mode code flag VERY IMPORTANT FLAG,
-                                                  // page granularity for limit field (ignored since 64-bit mode?), 
-    // Kernel data descriptor
-    _gdt[2] = MAKE_SEGMENT_DESC(0, 0, 0x92, 0xC); // writable bit, page granularity for limit field (ignored since we are 64-bit mode?)
-    // @TODO User mode descriptor
-    // @TOD Task descriptor? if needed?
-    // _gdt[3] = MAKE_SEGMENT_DESC(0, 0, 0x89, 0);
+    _gdt[0] = 0;
+
+    #define GDT_PRESENT             0x80
+    #define GDT_CODE_OR_DATA        0x10
+    #define GDT_TSS                 0x00
+    #define GDT_RING0               0x00
+    #define GDT_RING3               0x60
+    #define GDT_EXEC_READ           0xA
+    #define GDT_WRITE_READ          0x2
+    #define GDT_TYPE_TSS_AVAILABLE  0x9
+
+    #define GDT_LONG_MODE   0x2
+    
+    // Base and LIMIT are set to zero because they are ignored in 64-bit mode.
+
+    _gdt[KERNEL_CODE_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
+        GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING0|GDT_EXEC_READ, GDT_LONG_MODE);
+    
+    _gdt[KERNEL_DATA_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
+        GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING0|GDT_WRITE_READ, 0);
+    
+    _gdt[USER_CODE_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
+        GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING3|GDT_EXEC_READ, GDT_LONG_MODE);
+    
+    _gdt[USER_DATA_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
+        GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING3|GDT_WRITE_READ, 0);
+
+    _gdt[TASK_STATE_SEGMENT/8] = MAKE_SEGMENT_DESC(&_tss_entry, sizeof(_tss_entry),
+        GDT_PRESENT|GDT_TSS|GDT_TYPE_TSS_AVAILABLE, 0);
+
+    _gdt[TASK_STATE_SEGMENT/8 + 1] = 0; // _tss_entry exists in low 32-bit addess space so the "higher" part of TSS can just be zero.
+
 
     
     _gdt_register.limit = sizeof(_gdt) - 1;
@@ -273,6 +316,10 @@ void init_gdt() {
     
     asm ( "lgdt %0\n" : : "m" (_gdt_register) );
 
+    // Load new descriptors.
+    // We hardcode these in the inline assembly:
+    //   0x8  = KERNEL_CODE_SEGMENT
+    //   0x10 = KERNEL_DATA_SEGMENT
     asm volatile (
         "mov $0x10, %%ax\n"
         "mov %%ax, %%ds\n"
@@ -283,6 +330,14 @@ void init_gdt() {
         "pushq %%rax\n"
         "lretq\n"
         "1:\n"
+        :::"rax"
+    );
+    
+    // Hardcoded values:
+    //   0x28 = TASK_STATE_SEGMENT
+    asm (
+        "mov $0x28, %%ax\n"
+        "ltr %%ax\n"
         :::"rax"
     );
 
@@ -654,8 +709,17 @@ void ap_entry(int id) {
 
 void CPU_enable_sse() {
     asm (
+        "mov %cr0, %rax\n"
+        "or $(1 << 1), %rax\n"    // MP
+        "and $~(1 << 2), %rax\n"  // EM
+        "and $~(1 << 3), %rax\n"  // TS
+        "mov %rax, %cr0\n"
         "mov %cr4, %rax\n"
-        "or $0x200, %rax\n" // Set OSFXSR to enable SSE instructions/registers. XMM floating point registers.
+        "or $(1 << 9), %rax\n"  // OSFXSR
+        "or $(1 << 10), %rax\n" // OSXMMEXCPT
+        // I freeze on these? check cpuid
+        // "or $(1 << 16), %rax\n" // FSGSBASE
+        // "or $(1 << 18), %rax\n" // OSXSAVE
         "mov %rax, %cr4\n"
     );
 }

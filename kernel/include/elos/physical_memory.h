@@ -12,6 +12,7 @@ typedef enum PMEM_Flags {
     PMEM_FLAG_IDENTITY_MAPPED = 0x1,
     PMEM_FLAG_NOT_CACHED      = 0x2,
     PMEM_FLAG_READ_ONLY       = 0x4,
+    PMEM_FLAG_USER_SPACE      = 0x8,
 } PMEM_Flags;
 
 void PMEM_init(BootAPI* boot_api);

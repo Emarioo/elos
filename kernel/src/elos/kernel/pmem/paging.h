@@ -20,6 +20,7 @@ typedef enum MapPageFlag {
     PAGING_FLAG_USE_RESERVED_TABLE = 0x1,
     PAGING_FLAG_READONLY = 0x2,
     PAGING_FLAG_NOT_CACHED = 0x4,
+    PAGING_FLAG_USER_SPACE = 0x8,
 } MapPageFlag;
 
 typedef struct Page {

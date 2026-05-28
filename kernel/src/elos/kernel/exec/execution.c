@@ -9,6 +9,8 @@
 #include "elos/common/string.h"
 #include "elos/kernel_console.h"
 
+#include "elos/kernel/exec/read_elf.h"
+
 #include "elos/physical_memory.h"
 
 #include "elos/cpu.h"
@@ -79,19 +81,19 @@ void EXEC_init() {
     this_thread->used = true;
     core->active_thread = 0;
 
-    // EXEC_create_thread(test_thread1);
-    // EXEC_create_thread(test_thread2);
+    // EXEC_create_kernel_thread(test_thread1);
+    // EXEC_create_kernel_thread(test_thread2);
 
     printf("Enable scheduling\n");
     scheduling_enabled = true;
 }
 
-bool EXEC_create_thread(void* entry, int pinnedCoreIndex) {
-    bool returnValue;
+bool EXEC_create_kernel_thread(void* entry, int pinnedCoreIndex) {
+    bool returnValue = false;
     int coreIndex;
     if (pinnedCoreIndex != -1) {
         if (pinnedCoreIndex < 0 || pinnedCoreIndex > CORE_LIMIT) {
-            printf("EXEC_create_thread: Invalid pinnedCoreIndex %d (0 - %d)\n", pinnedCoreIndex, CORE_LIMIT-1);
+            printf("EXEC_create_kernel_thread: Invalid pinnedCoreIndex %d (0 - %d)\n", pinnedCoreIndex, CORE_LIMIT-1);
             return false;
         }
         coreIndex = pinnedCoreIndex;
@@ -111,7 +113,6 @@ bool EXEC_create_thread(void* entry, int pinnedCoreIndex) {
         }
     }
     if (!found_thread) {
-        returnValue = false;
         goto exit;
     }
 
@@ -120,7 +121,6 @@ bool EXEC_create_thread(void* entry, int pinnedCoreIndex) {
         int stack_size = 0x10000;
         void* stack = PMEM_alloc(stack_size);
         if (!stack) {
-            returnValue = false;
             goto exit;
         }
         found_thread->stack_size = stack_size;
@@ -131,6 +131,7 @@ bool EXEC_create_thread(void* entry, int pinnedCoreIndex) {
     found_thread->entry = entry;
 
     u64 rsp = (u64)found_thread->stack + found_thread->stack_size;
+    rsp -= 0x100; // get some extra room
 
     InterruptFrame* frame = (InterruptFrame*)(rsp - sizeof(InterruptFrame));
     found_thread->frame = frame;
@@ -146,6 +147,76 @@ exit:
     return returnValue;
 }
 
+bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex) {
+    bool returnValue = false;
+
+    ElfObject object;
+    bool result = read_elf(path, &object);
+
+    if (!result) {
+        return false;
+    }
+
+    int coreIndex;
+    if (pinnedCoreIndex != -1) {
+        if (pinnedCoreIndex < 0 || pinnedCoreIndex > CORE_LIMIT) {
+            printf("EXEC_create_kernel_thread: Invalid pinnedCoreIndex %d (0 - %d)\n", pinnedCoreIndex, CORE_LIMIT-1);
+            return false;
+        }
+        coreIndex = pinnedCoreIndex;
+    } else {
+        coreIndex = CPU_get_core_index();
+    }
+    EXEC_Core* core = &cores[coreIndex];
+
+    LOCK_INT(&core->thread_lock);
+
+    EXEC_Thread* found_thread = NULL;
+    for (int i=0;i<ARRAY_LENGTH(core->threads);i++) {
+        EXEC_Thread* thread = &core->threads[i];
+        if (!thread->used) {
+            found_thread = thread;
+            break;
+        }
+    }
+    if (!found_thread) {
+        goto exit;
+    }
+
+    // @TODO We should free stack from terminated threads.
+    //   Reusing for user mode is bad.
+    // if (!found_thread->stack) { }
+
+    int stack_size = 0x10000; // @TODO Increase
+    void* phys_stack = PMEM_alloc_phys(stack_size, PMEM_FLAG_NONE);
+    if (!phys_stack) {
+        goto exit;
+    }
+    void* virt_stack = (void*)(u64)0xF0000000;
+    PMEM_map_memory(virt_stack, phys_stack, stack_size, PMEM_FLAG_USER_SPACE);
+    found_thread->stack_size = stack_size;
+    found_thread->stack = virt_stack;
+
+    found_thread->used = true;
+    found_thread->userSpace = true;
+    found_thread->entry = object.entry_point;
+
+    u64 rsp = (u64)found_thread->stack + found_thread->stack_size;
+    rsp -= 0x100; // get some extra room
+
+    InterruptFrame* frame = (InterruptFrame*)(rsp - sizeof(InterruptFrame));
+    found_thread->frame = frame;
+    frame->cs = USER_CODE_SEGMENT | 3;
+    frame->ss = USER_DATA_SEGMENT | 3;
+    frame->rsp = rsp;
+    frame->rflags = 0x202; // interrupt flag, disable IOPL
+    frame->rip = (u64)object.entry_point;
+
+exit:
+    // @TODO Cleanup allocated stuff.
+    UNLOCK_INT(&core->thread_lock);
+    return returnValue;
+}
 
 void thread_bootstrap(FN_ThreadEntry entry) {
     entry();

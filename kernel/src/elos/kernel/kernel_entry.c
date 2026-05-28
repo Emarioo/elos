@@ -35,11 +35,15 @@ extern FN_KCON_write _write_hooks[4];
 
 void handle_packet(NetDevice device, NET_Packet* packet, void* user_data);
 
-BootAPI _boot_api;
-BootAPI* boot_api;
-void kernel_entry(BootAPI* in_boot_api) {
-    CPU_enable_sse();
 
+void kernel_idle();
+
+static BootAPI _boot_api;
+BootAPI* boot_api;
+
+void kernel_entry(BootAPI* in_boot_api) {
+
+    CPU_enable_sse();
     // Put BootAPI in kernel's memory space. in_boot_api will become invalid when
     // we setup our own page tables.
     _boot_api = *in_boot_api;
@@ -121,16 +125,24 @@ void kernel_entry(BootAPI* in_boot_api) {
         }
     }
 
-    Texture* texture = load_texture("/dev0p0/back1.png");
-    if (texture) {
-        int width, height;
-        draw_frame_info(&width,&height);
-        draw_texture(0, 0, width, height, 0, 0, texture->width, texture->height, texture);
-    } else {
-        printf("No texture\n");
-    }
+    //###############################
+    //   LOAD AND DRAW BACKGROUND
+    //###############################
 
-    printf("Rendered\n");
+    // Texture* texture = load_texture("/dev0p0/back1.png");
+    // if (texture) {
+    //     int width, height;
+    //     draw_frame_info(&width,&height);
+    //     draw_texture(0, 0, width, height, 0, 0, texture->width, texture->height, texture);
+    // } else {
+    //     printf("No texture\n");
+    // }
+
+    // printf("Rendered\n");
+
+    //#####################
+    //   READ TEXT FILE
+    //#####################
 
     // const char* path = "/dev0p0/hello.txt";
     // VFS_Handle handle = VFS_open(path, VFS_FLAG_READ);
@@ -153,42 +165,15 @@ void kernel_entry(BootAPI* in_boot_api) {
     //     printf("\n");
     // }
 
-    // if (diskDevices_len > 0) {
-    //     char buffer[512];
 
-    //     DISK_read(diskDevices[0], 0, 512, buffer);
-        
-    //     KCON_printf("Data at sector 0: ");
-    //     for (int i=0;i<16;i++) {
-    //         KCON_printf("%c", buffer[i]);
-    //     }
-    //     KCON_printf("\n");
-
-    //     memcpy(buffer + 5, "----", 4);
-        
-    //     DISK_write(diskDevices[0], 0, 512, buffer);
-
-    //     memset(buffer, 0, 512);
-        
-    //     DISK_read(diskDevices[0], 0, 512, buffer);
-        
-    //     KCON_printf("Data at sector 0: ");
-    //     for (int i=0;i<16;i++) {
-    //         KCON_printf("%c", buffer[i]);
-    //     }
-    //     KCON_printf("\n");
-
-    // }
-
-    
-
-
+    //#####################
+    //   NETWORK STUFF?
+    //#####################
 
     // NetDevice net_device = NULL;
     // int count = 1;
     // NET_scan_devices(&net_device, &count);
     // @TODO Check that we got device
-
     
     // NET_set_receive_callback(net_device, handle_packet, NULL);
 
@@ -203,11 +188,27 @@ void kernel_entry(BootAPI* in_boot_api) {
 
 
 
-    // KCON_printf("END OF KERNEL_ENTRY!\n");
+    //#############################
+    //   KERNEL TERMINAL STUFF?
+    //#############################
+
 
     // EXEC_init();
-    // EXEC_create_thread(terminal_main, 0);
+    // EXEC_create_kernel_thread(terminal_main, 0);
     
+    //######################
+    //   USER MODE TEST
+    //######################
+    
+    // Start scheduling
+    EXEC_init();
+
+    // Create user terminal process
+    EXEC_create_user_thread("/dev0p0/user_test.elf", -1);
+
+
+    kernel_idle();
+
 
     while (1) {
         // if (count) {
@@ -224,6 +225,9 @@ void kernel_entry(BootAPI* in_boot_api) {
 
 }
 
+void kernel_idle() {
+    while (1) pause();
+}
 void handle_packet(NetDevice device, NET_Packet* packet, void* user_data) {
     NET_handle_packet(device, packet);
 }

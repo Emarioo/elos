@@ -36,7 +36,7 @@ typedef struct bytearray {
 void kernel_bug();
 
 #define min(X,Y) ( (X) < (Y) ? (X) : (Y) )
-#define max(X,Y) ( (X) < (Y) ? (Y) : (X) )
+#define max(X,Y) ( (X) > (Y) ? (X) : (Y) )
 
 #define ARRAY_LENGTH(ARR) (sizeof(ARR)/sizeof(*ARR))
 
