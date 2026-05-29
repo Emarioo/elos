@@ -14,13 +14,13 @@ void _start() {
     while (1) {
 
         // Test that we can't access IO ports.
-        #define STRIDE 100000
+        #define STRIDE 10000
         
         counter++;
 
-        // if (counter % STRIDE == 0) {
-        //     syscall_test(counter/STRIDE);
-        // }
+        if (counter % STRIDE == 0) {
+            syscall_test(counter/STRIDE);
+        }
     }
 
     exit();
@@ -32,13 +32,13 @@ void exit() {
     while (1) pause();
 }
 
-// void syscall_test(int value) {
-//     asm (
-//         "mov %0, %%edi\n"
-//         "mov $0, %%eax\n"
-//         "syscall\n"
-//         :
-//         : "edi" (value)
-//         : "rax"
-//     );
-// }
+void syscall_test(int value) {
+    asm (
+        "mov %0, %%edi\n"
+        "mov $3, %%eax\n"
+        "syscall\n"
+        :
+        : "edi" (value)
+        : "rax"
+    );
+}

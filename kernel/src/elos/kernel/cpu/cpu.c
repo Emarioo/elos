@@ -45,6 +45,10 @@
 #define APIC_CPUFOCUS	0x200
 #define APIC_NMI	 (4<<8)
 
+
+#define MSR_GS_BASE        0xC0000101
+#define MSR_KERNEL_GS_BASE 0xC0000102
+
 void ap_trampoline(); // defined in assembly
 
 
@@ -84,7 +88,39 @@ void CPU_init(BootAPI* boot_api) {
     g_lapic_base = (void*)acpi_lapic_address;
 
     init_apic();
+
+
+    // Setup syscalls
+    // @TODO Check cpuid
     
+
+    #define MSR_STAR 0xc0000081
+    #define MSR_LSTAR 0xc0000082
+    #define MSR_CSTAR 0xc0000083
+    #define MSR_SFMASK 0xc0000084
+
+    // @TODO data segment must be CS+8 in GDT. syscall expects this.
+    //    Similar restriction for user land CS and SS.
+    //    (add assert for this)
+
+    // We assume that
+    //   userland SS = USER_CODE_COMPATIBILITY_SEGMENT+8
+    //   userland CS = USER_CODE_COMPATIBILITY_SEGMENT+16
+    //   32-bit compatiblity CS = USER_CODE_COMPATIBILITY_SEGMENT
+    u64 star = ((u64)(KERNEL_CODE_SEGMENT) << 32)
+        | ((u64)(USER_CODE_COMPATIBILITY_SEGMENT) << 48);
+    u64 lstar = (u64)syscall_handler;
+    u64 sfmask = 0x200LU; // Clears interrupt enable flag.
+    wrmsr(MSR_STAR,   star);
+    wrmsr(MSR_LSTAR,  lstar);
+    wrmsr(MSR_SFMASK, sfmask);
+
+    #define MSR_IA32_EFER 0xC0000080
+    u64 efer = rdmsr(MSR_IA32_EFER);
+    efer |= 1; // SYSCALL ENABLE (for 64-bit intel)
+    wrmsr(MSR_IA32_EFER, efer);
+
+
 
     // Enable IRQ1 for keyboard interrupts for core 0 (apic id = 0)
     cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x12, 33 | (1 << 15)); // 1<<15 does level trigger instead of edge, seems to work better?
@@ -168,8 +204,7 @@ GDT_Register _gdt_register;
 IDT_Register _idt_register;
 TSS_Entry    _tss_entry;
 
-static u64 _gdt[7]; // null, code_kernel, data_kernel, code_user, data_user,
-                    // task_state_low, task_state_high
+static u64 _gdt[(LAST_SEGMENT+16)/8]; // +16 for NULL and the width of the last segment
 
 _align(16)
 static IDT_Entry _idt[256];
@@ -287,6 +322,7 @@ void init_gdt() {
     #define GDT_EXEC_READ           0xA
     #define GDT_WRITE_READ          0x2
     #define GDT_TYPE_TSS_AVAILABLE  0x9
+    #define GDT_32_BIT_PROTECTED    0x4
 
     #define GDT_LONG_MODE   0x2
     
@@ -298,17 +334,22 @@ void init_gdt() {
     _gdt[KERNEL_DATA_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
         GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING0|GDT_WRITE_READ, 0);
     
-    _gdt[USER_CODE_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
-        GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING3|GDT_EXEC_READ, GDT_LONG_MODE);
-    
+    // THIS IS NOT USED but here for completeness? base/limit needs to be set for correctness.
+    _gdt[USER_CODE_COMPATIBILITY_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
+        GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING3|GDT_EXEC_READ, GDT_32_BIT_PROTECTED);
+
     _gdt[USER_DATA_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
         GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING3|GDT_WRITE_READ, 0);
+
+    _gdt[USER_CODE_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
+        GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING3|GDT_EXEC_READ, GDT_LONG_MODE);
 
     _gdt[TASK_STATE_SEGMENT/8] = MAKE_SEGMENT_DESC(&_tss_entry, sizeof(_tss_entry),
         GDT_PRESENT|GDT_TSS|GDT_TYPE_TSS_AVAILABLE, 0);
 
     _gdt[TASK_STATE_SEGMENT/8 + 1] = 0; // _tss_entry exists in low 32-bit addess space so the "higher" part of TSS can just be zero.
 
+    // User data and code segment are in this order because of sysret loading CS = STAR 63:48 +16 and SS = STAR 63:48 +8
 
     
     _gdt_register.limit = sizeof(_gdt) - 1;
@@ -334,9 +375,9 @@ void init_gdt() {
     );
     
     // Hardcoded values:
-    //   0x28 = TASK_STATE_SEGMENT
+    //   0x30 = TASK_STATE_SEGMENT
     asm (
-        "mov $0x28, %%ax\n"
+        "mov $0x30, %%ax\n"
         "ltr %%ax\n"
         :::"rax"
     );
@@ -391,6 +432,16 @@ void init_apic() {
 
     
     cli();
+
+
+    int coreIndex = CPU_get_core_index();
+    EXEC_Core* core = &cores[coreIndex];
+    u64 syscall_stack_max = 0x4000;
+    void* syscall_stack = PMEM_alloc(syscall_stack_max);
+    core->syscall_stack = (char*)syscall_stack + syscall_stack_max;
+    
+    wrmsr(MSR_KERNEL_GS_BASE, (u64)core);
+
 
     #define IA32_APIC_BASE_MSR 0x1B
     #define APIC_SOFTWARE_ENABLE 0x100
@@ -695,6 +746,7 @@ void ap_entry(int id) {
     
     int coreIndex = CPU_get_core_index();
     EXEC_Core* core = &cores[coreIndex];
+
     core->active_thread = 0;
     core->threads[core->active_thread].used = true;
     // @TODO I think every core needs an idle thread which is only chosen
@@ -708,6 +760,11 @@ void ap_entry(int id) {
 
 
 void CPU_enable_sse() {
+    u32 eax, ebx, ecx, edx;
+    cpuid(7, 0, &eax, &ebx, &ecx, &edx);
+    bool has_fsgsbase = ebx & (1 << 0);
+    // printf("Has fs %d, %d\n", has_fsgsbase, ebx);
+
     asm (
         "mov %cr0, %rax\n"
         "or $(1 << 1), %rax\n"    // MP

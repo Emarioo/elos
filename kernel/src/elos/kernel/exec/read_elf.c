@@ -147,10 +147,13 @@ bool parse_elf(ParseContext* ctx) {
         if (!strcmp(name, ".text")
             || !strcmp(name, ".rodata")
             || !strcmp(name, ".data")
-            || !strcmp(name, ".bss")
         ) {
             memcpy((u8*)virt_image_base + section->sh_addr - vaddr_low,
                 ctx->fileData + section->sh_offset,
+                section->sh_size);
+        } else if (!strcmp(name, ".bss")) {
+            memset((u8*)virt_image_base + section->sh_addr - vaddr_low,
+                0,
                 section->sh_size);
         }
     }

@@ -29,7 +29,17 @@ void test_thread2();
 void EXEC_terminate_self_end();
 void thread_bootstrap(FN_ThreadEntry entry);
 
-u64 EXEC_interrupt(InterruptFrame* frame) {
+
+void EXEC_syscall_handler(int arg0, int arg1, int arg2, int arg3) {
+    u64 rax;
+    asm volatile (
+        "mov %%rax, %0"
+        : "=a" (rax)
+    );
+    printf("Syscall %d, %d\n", rax, arg0);
+}
+
+u64 EXEC_timer_handler(InterruptFrame* frame) {
     int coreIndex = CPU_get_core_index();
 
     if (!scheduling_enabled)

@@ -7,9 +7,12 @@
 
 #define KERNEL_CODE_SEGMENT 0x8
 #define KERNEL_DATA_SEGMENT 0x10
-#define USER_CODE_SEGMENT 0x18
-#define USER_DATA_SEGMENT 0x20
-#define TASK_STATE_SEGMENT 0x28
+// Theoretical segment you might want, aligns nicely with syscall/sysret
+#define USER_CODE_COMPATIBILITY_SEGMENT   0x18
+#define USER_DATA_SEGMENT   0x20
+#define USER_CODE_SEGMENT   0x28
+#define TASK_STATE_SEGMENT  0x30
+#define LAST_SEGMENT TASK_STATE_SEGMENT
 // task state takes up two slots
 
 typedef struct {

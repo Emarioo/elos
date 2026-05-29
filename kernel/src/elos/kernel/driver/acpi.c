@@ -11,6 +11,8 @@
 #include "elos/cpu.h"
 
 #define printf(...) KCON_printf(__VA_ARGS__)
+// #define debug(...) KCON_printf(__VA_ARGS__)
+#define debug(...)
 
 
 
@@ -90,8 +92,8 @@ void acpi_init(BootAPI* boot_api) {
 
     if (madt_header) {
         MADT_header* madt = (MADT_header*)((char*)madt_header + sizeof(ACPI_SDTHeader));
-        printf("MADT LAPIC address: %x\n", madt->lapic_address);
-        printf("MADT flags: %x\n", madt->flags);
+        debug("MADT LAPIC address: %x\n", madt->lapic_address);
+        debug("MADT flags: %x\n", madt->flags);
 
         acpi_lapic_address = madt->lapic_address;
         PMEM_map_memory((void*)acpi_lapic_address, (void*)acpi_lapic_address, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
@@ -107,20 +109,20 @@ void acpi_init(BootAPI* boot_api) {
             switch (entry_base->entryType) {
                 case MADT_ENTRY_LAPIC: {
                     MADT_lapic* entry = (MADT_lapic*)entry_base;
-                    printf("LAPIC (type=%d len=%d)\n", entry->entryType, entry->entryLength);
-                    printf(" acpiProcessorID: %d\n", entry->acpiProcessorID);
-                    printf(" apicID: %d\n", entry->apicID);
-                    printf(" flags: %x\n", entry->flags);
+                    debug("LAPIC (type=%d len=%d)\n", entry->entryType, entry->entryLength);
+                    debug(" acpiProcessorID: %d\n", entry->acpiProcessorID);
+                    debug(" apicID: %d\n", entry->apicID);
+                    debug(" flags: %x\n", entry->flags);
 
                     acpi_lapic_ids[acpi_lapic_ids_len] = entry->apicID;
                     acpi_lapic_ids_len++;
                 } break;
                 case MADT_ENTRY_IOAPIC: {
                     MADT_ioapic* entry = (MADT_ioapic*)entry_base;
-                    printf("IOAPIC (type=%d len=%d)\n", entry->entryType, entry->entryLength);
-                    printf(" ioapicID: %d\n", entry->ioapicID);
-                    printf(" ioapicAddress: %x\n", entry->ioapicAddress);
-                    printf(" globalSystemInterruptBase: %x\n", entry->globalSystemInterruptBase);
+                    debug("IOAPIC (type=%d len=%d)\n", entry->entryType, entry->entryLength);
+                    debug(" ioapicID: %d\n", entry->ioapicID);
+                    debug(" ioapicAddress: %x\n", entry->ioapicAddress);
+                    debug(" globalSystemInterruptBase: %x\n", entry->globalSystemInterruptBase);
                     
                     acpi_ioapic_array[acpi_ioapic_array_len].address = entry->ioapicAddress;
                     acpi_ioapic_array[acpi_ioapic_array_len].interruptBaseNumber = entry->globalSystemInterruptBase;
@@ -130,30 +132,30 @@ void acpi_init(BootAPI* boot_api) {
                 } break;
                 case MADT_ENTRY_IOAPIC_INTERRUPT_SRC_OVERRIDE: {
                     MADT_ioapic_interrupt_source_override* entry = (MADT_ioapic_interrupt_source_override*)entry_base;
-                    printf("IOAPIC int.src.ovr. (type=%d len=%d)\n", entry->entryType, entry->entryLength);
-                    printf(" busSource: %d\n", entry->busSource);
-                    printf(" irqSource: %d\n", entry->irqSource);
-                    printf(" globalSystemInterrupt: %d\n", entry->globalSystemInterrupt);
-                    printf(" flags: %x\n", entry->flags);
+                    debug("IOAPIC int.src.ovr. (type=%d len=%d)\n", entry->entryType, entry->entryLength);
+                    debug(" busSource: %d\n", entry->busSource);
+                    debug(" irqSource: %d\n", entry->irqSource);
+                    debug(" globalSystemInterrupt: %d\n", entry->globalSystemInterrupt);
+                    debug(" flags: %x\n", entry->flags);
                 } break;
                 case MADT_ENTRY_IOAPIC_NON_MASKABLE_INTERRUPT_SRC: {
                     MADT_ioapic_non_maskable_interrupt_source* entry = (MADT_ioapic_non_maskable_interrupt_source*)entry_base;
-                    printf("IOAPIC nonmask.int.src. (type=%d len=%d)\n", entry->entryType, entry->entryLength);
-                    printf(" nmiSource: %d\n", entry->nmiSource);
-                    printf(" flags: %x\n", entry->flags);
-                    printf(" globalSystemInterrupt: %d\n", entry->globalSysteminterrupt);
+                    debug("IOAPIC nonmask.int.src. (type=%d len=%d)\n", entry->entryType, entry->entryLength);
+                    debug(" nmiSource: %d\n", entry->nmiSource);
+                    debug(" flags: %x\n", entry->flags);
+                    debug(" globalSystemInterrupt: %d\n", entry->globalSysteminterrupt);
                 } break;
                 case MADT_ENTRY_LAPIC_NON_MASKABLE_INTERRUPT: {
                     MADT_lapic_non_maskable_interrupt* entry = (MADT_lapic_non_maskable_interrupt*)entry_base;
-                    printf("LAPIC nonmask.int. (type=%d len=%d)\n", entry->entryType, entry->entryLength);
-                    printf(" acpiProcessorID: %d\n", entry->acpiProcessorID);
-                    printf(" flags: %x\n", entry->flags);
-                    printf(" LINT: %d\n", entry->lint);
+                    debug("LAPIC nonmask.int. (type=%d len=%d)\n", entry->entryType, entry->entryLength);
+                    debug(" acpiProcessorID: %d\n", entry->acpiProcessorID);
+                    debug(" flags: %x\n", entry->flags);
+                    debug(" LINT: %d\n", entry->lint);
                 } break;
                 case MADT_ENTRY_LAPIC_ADDRESS_OVERRIDE: {
                     MADT_lapic_address_override* entry = (MADT_lapic_address_override*)entry_base;
-                    printf("LAPIC addr.ovr. (type=%d len=%d)\n", entry->entryType, entry->entryLength);
-                    printf(" address64: %d\n", entry->address64);
+                    debug("LAPIC addr.ovr. (type=%d len=%d)\n", entry->entryType, entry->entryLength);
+                    debug(" address64: %d\n", entry->address64);
                     
                     if (entry->address64 != acpi_lapic_address) {
                         acpi_lapic_address = entry->address64;
@@ -162,10 +164,10 @@ void acpi_init(BootAPI* boot_api) {
                 } break;
                 case MADT_ENTRY_LOCAL_X2APIC: {
                     MADT_local_x2apic* entry = (MADT_local_x2apic*)entry_base;
-                    printf("Lx2APIC (type=%d len=%d)\n", entry->entryType, entry->entryLength);
-                    printf(" x2apicID: %d\n", entry->x2apicID);
-                    printf(" flags: %x\n", entry->flags);
-                    printf(" acpiID: %d\n", entry->acpiID);
+                    debug("Lx2APIC (type=%d len=%d)\n", entry->entryType, entry->entryLength);
+                    debug(" x2apicID: %d\n", entry->x2apicID);
+                    debug(" flags: %x\n", entry->flags);
+                    debug(" acpiID: %d\n", entry->acpiID);
                 } break;
             }
 
@@ -179,10 +181,10 @@ void acpi_init(BootAPI* boot_api) {
         if ((char*)&fadt->ResetValue - (char*)fadt_header < fadt_header->Length) {
             // Some FADT are smaller and may not have reset capability.
 
-            printf("fadt.ResetReg.AccessSize: %d\n", fadt->ResetReg.AccessSize);
-            printf("fadt.ResetReg.Address: %x\n", fadt->ResetReg.Address);
-            printf("fadt.ResetReg.AddressSpace: %d\n", fadt->ResetReg.AddressSpace);
-            printf("fadt.ResetValue: %d\n", fadt->ResetValue);
+            debug("fadt.ResetReg.AccessSize: %d\n", fadt->ResetReg.AccessSize);
+            debug("fadt.ResetReg.Address: %x\n", fadt->ResetReg.Address);
+            debug("fadt.ResetReg.AddressSpace: %d\n", fadt->ResetReg.AddressSpace);
+            debug("fadt.ResetValue: %d\n", fadt->ResetValue);
             
             #define ADDRESS_SPACE_SYSTEM_MEMORY 0
             #define ADDRESS_SPACE_SYSTEM_IO 0

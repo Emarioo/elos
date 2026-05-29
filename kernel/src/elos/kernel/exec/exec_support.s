@@ -1,7 +1,8 @@
 .intel_syntax noprefix
 
 .extern thread_bootstrap
-.extern EXEC_interrupt
+.extern EXEC_timer_handler
+.extern EXEC_syscall_handler
 
 .extern g_lapic_base
 
@@ -55,7 +56,7 @@ timer_isr:
 
     mov rdi, rsp
 
-    call EXEC_interrupt
+    call EXEC_timer_handler
 
     # Switch to different thread, the stack of that thread has all registers pushed
     mov rsp, rax
@@ -106,6 +107,41 @@ timer_isr:
     pop rbp
 
     iretq
+
+
+.set SYSCALL_STACK_OFFSET, 0
+.set USER_STACK_OFFSET, 8
+
+.global syscall_handler
+syscall_handler:
+
+    swapgs
+
+    mov gs:USER_STACK_OFFSET, rsp
+    mov rsp, gs:SYSCALL_STACK_OFFSET
+
+
+    push r11
+    push rcx
+
+    call EXEC_syscall_handler
+
+    pop rcx
+    pop r11
+
+    mov rsp, gs:USER_STACK_OFFSET
+
+    swapgs
+
+    // @TODO @SECURITY Do not allow RCX (user RIP) to be above 48-bit address space. crashes, security problems?
+    //   We can simply not allow anyone to map anything above that address and we should be fine. 256 TB of addressable space should be enough anyway.
+
+    sti
+    /* @TODO @SECURITY
+        "For both AMD and Intel, it is up to the kernel to switch stack back to the userspace stack before executing SYSRET. This opens a race condition where the NMIs and MCEs exception handlers will be executed on a guest controlled stack. For 64bit mode, the kernel must use Interrupt Stack Tables to safely move NMIs/MCEs onto a properly designated kernel stack. For 32bit mode AMD systems, the kernel must use Task Gates for NMIs and MCEs to switch stack." - osdev.org
+    */
+    sysretq
+
 
 
 .global EXEC_terminate_self_end

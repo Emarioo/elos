@@ -125,6 +125,8 @@ def main():
         # TODO: DON'T HARDCODE PATHS
         OVMF_FD = "extern/ovmf/OVMF.fd"
 
+        cmd("gcc -o scripts/disk_fs/user_test.elf kernel/src/user/user_test.c -pie -fpic -nostdlib -nostartfiles -I kernel/src")
+
         DISK_IMG = "int/disk.img"
         # if not os.path.exists(DISK_IMG):
             

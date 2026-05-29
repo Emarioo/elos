@@ -20,6 +20,12 @@ typedef struct {
 #define CORE_LIMIT 32
 
 typedef struct {
+    // @IMPORTANT DO NOT MOVE AROUND THESE FIELDS.
+    //   They are hardcoded in assembly.
+    void* syscall_stack;
+    void* user_stack; // saved user stack on syscall
+
+    // Free to modify, not used by assembly
     EXEC_Thread threads[THREAD_LIMIT];
     int active_thread;
     volatile u32 thread_lock;
@@ -42,4 +48,8 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex);
 
 void EXEC_terminate_self();
 
-u64 EXEC_interrupt(InterruptFrame* frame);
+u64 EXEC_timer_handler(InterruptFrame* frame);
+
+void EXEC_syscall_handler(int arg0, int arg1, int arg2, int arg3);
+
+void syscall_handler(); // defined in exec_support.s

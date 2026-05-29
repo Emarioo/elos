@@ -43,7 +43,6 @@ BootAPI* boot_api;
 
 void kernel_entry(BootAPI* in_boot_api) {
 
-    CPU_enable_sse();
     // Put BootAPI in kernel's memory space. in_boot_api will become invalid when
     // we setup our own page tables.
     _boot_api = *in_boot_api;
@@ -94,6 +93,8 @@ void kernel_entry(BootAPI* in_boot_api) {
 
     KCON_printf("Initializing physical memory regions\n");
     PMEM_init(boot_api);
+
+    CPU_enable_sse();
 
     // Initialize simple keyboard
     KBD_init(boot_api);
