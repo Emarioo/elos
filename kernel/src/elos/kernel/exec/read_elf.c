@@ -142,7 +142,7 @@ bool parse_elf(ParseContext* ctx) {
         Elf64_Shdr* section = &sections[si];
 
         const char* name = &sectionNames[section->sh_name];
-        printf("%s: %d bytes\n", name, section->sh_size);
+        // printf("%s: %d bytes\n", name, section->sh_size);
 
         if (!strcmp(name, ".text")
             || !strcmp(name, ".rodata")

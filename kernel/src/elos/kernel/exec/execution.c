@@ -16,6 +16,7 @@
 #include "elos/cpu.h"
 
 
+
 #define printf(...) KCON_printf(__VA_ARGS__)
 
 
@@ -30,14 +31,6 @@ void EXEC_terminate_self_end();
 void thread_bootstrap(FN_ThreadEntry entry);
 
 
-void EXEC_syscall_handler(int arg0, int arg1, int arg2, int arg3) {
-    u64 rax;
-    asm volatile (
-        "mov %%rax, %0"
-        : "=a" (rax)
-    );
-    printf("Syscall %d, %d\n", rax, arg0);
-}
 
 u64 EXEC_timer_handler(InterruptFrame* frame) {
     int coreIndex = CPU_get_core_index();

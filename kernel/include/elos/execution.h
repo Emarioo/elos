@@ -50,6 +50,6 @@ void EXEC_terminate_self();
 
 u64 EXEC_timer_handler(InterruptFrame* frame);
 
-void EXEC_syscall_handler(int arg0, int arg1, int arg2, int arg3);
+u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3);
 
 void syscall_handler(); // defined in exec_support.s
