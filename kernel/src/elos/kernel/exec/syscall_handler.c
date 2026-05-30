@@ -13,6 +13,7 @@
 #include "elos/kernel/exec/read_elf.h"
 
 #include "elos/physical_memory.h"
+#include "elos/monitor.h"
 
 #include "elos/cpu.h"
 
@@ -30,6 +31,10 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3) {
         : "=a" (syscall_id)
     );
     // @TODO Validate parameters! Accessible address by user process. Valid sizes and lengths?
+
+    // @TODO For the user processes we need to swap out their pages so they can't
+    //   access each others ELF image or HEAP or frame buffers.
+
     switch (syscall_id) {
         case _SYS_CAPABILITIES: {
             ELOS_Capabilities* cap = (ELOS_Capabilities*)arg0;
@@ -128,6 +133,37 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3) {
                 }
             } else {
                 returnValue = ELOS_GENERIC_ERROR;
+            }
+        } break;
+        case _SYS_DEFAULT_MONITOR: {
+            ELOS_FrameBuffer*  frameBuffer = (void*)arg0;
+
+            // @TODO Check capability and heap limit
+
+            MonitorDevice devices[1];
+            int count = ARRAY_LENGTH(devices);
+            MON_scan_devices(devices, &count);
+
+            if (count <= 0) {
+                returnValue = ELOS_GENERIC_ERROR;
+            } else {
+                MON_FrameBuffer mon_frameBuffer;
+                bool yes = MON_get_frame_buffer(devices[0], &mon_frameBuffer);
+                if (!yes) {
+                    returnValue = ELOS_GENERIC_ERROR;
+                } else {
+                    bool mapped = PMEM_map_memory(mon_frameBuffer.phys_address, mon_frameBuffer.phys_address, mon_frameBuffer.size, PMEM_FLAG_USER_SPACE|PMEM_FLAG_NOT_CACHED);
+                    if (!mapped) {
+                        returnValue = ELOS_GENERIC_ERROR;
+                    } else {
+                        frameBuffer->width = mon_frameBuffer.width;
+                        frameBuffer->height = mon_frameBuffer.height;
+                        frameBuffer->size = mon_frameBuffer.size;
+                        frameBuffer->pixels_per_scan_line = mon_frameBuffer.pixels_per_scan_line;
+                        frameBuffer->pixels = mon_frameBuffer.phys_address;
+                        returnValue = ELOS_OK;
+                    }
+                }
             }
         } break;
     }

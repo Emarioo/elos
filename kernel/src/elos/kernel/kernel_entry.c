@@ -7,6 +7,7 @@
 #include "elos/kernel_console.h"
 #include "elos/network.h"
 #include "elos/frame_buffer.h"
+#include "elos/monitor.h"
 #include "elos/physical_memory.h"
 #include "elos/cpu.h"
 #include "elos/disk.h"
@@ -93,6 +94,12 @@ void kernel_entry(BootAPI* in_boot_api) {
 
     KCON_printf("Initializing physical memory regions\n");
     PMEM_init(boot_api);
+
+    MON_init(boot_api);
+
+    MonitorDevice monDevices[1];
+    int monCount = ARRAY_LENGTH(monDevices);
+    MON_scan_devices(monDevices, &monCount);
 
     CPU_enable_sse();
 

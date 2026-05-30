@@ -25,9 +25,9 @@ typedef enum {
 typedef enum {
     GLOBAL_CAP_HEAP     = (1<<0),
     GLOBAL_CAP_FILE     = (1<<1),
-    GLOBAL_CAP_FRAME    = (1<<2),
+    GLOBAL_CAP_MONITOR  = (1<<2),
     GLOBAL_CAP_THREAD   = (1<<3),
-    GLOBAL_CAP_DOMAIN   = (1<<4),
+    GLOBAL_CAP_PROCESS  = (1<<4),
     GLOBAL_CAP_NETWORK  = (1<<5),
 } ELOS_GlobalCapability;
 
@@ -54,6 +54,15 @@ typedef struct {
 
 
 
+typedef struct {
+    u32  width;
+    u32  height;
+    u32  size;
+    u32  pixels_per_scan_line;
+    u32* pixels;
+} ELOS_FrameBuffer;
+
+
 /*
     Returns capabilities of process.
 
@@ -73,12 +82,6 @@ void SYS_capabilites(ELOS_Capabilities* capabilities);
 void SYS_request_capabilites(ELOS_Capabilities* capabilities);
 
 
-ELOS_Error SYS_heap_allocate(void** newAddress, u64 size);
-ELOS_Error SYS_heap_free(void* oldAddress);
-ELOS_Error SYS_heap_reallocate(void** newAddress, u64 size, void* oldAddress);
-ELOS_Error SYS_heap_map(void* virtAddress, u64 size);
-
-
 /*
     Sends text to OS. It may print it to serial out, to frame buffer or do nothing.
 
@@ -87,13 +90,33 @@ ELOS_Error SYS_heap_map(void* virtAddress, u64 size);
 void SYS_debug_log(const char* text, u32 length);
 
 
+/*
+    Allocates memory from the heap.
+
+    @pre GLOBAL_CAP_HEAP capability is required.
+*/
+ELOS_Error SYS_heap_allocate(void** newAddress, u64 size);
+ELOS_Error SYS_heap_free(void* oldAddress);
+ELOS_Error SYS_heap_reallocate(void** newAddress, u64 size, void* oldAddress);
+ELOS_Error SYS_heap_map(void* virtAddress, u64 size);
+
+
+/*
+    Retrieves a frame buffer to the default monitor.
+
+    @pre GLOBAL_CAP_MONITOR capability is required.
+
+    @param frameBuffer Filled with information.
+*/
+ELOS_Error SYS_default_monitor(ELOS_FrameBuffer* frameBuffer);
+
 
 
 
 
 
 typedef enum {
-    // Zero is reserved for invalid. (or testing)
+    // Zero is reserved for invalid.
     _SYS_CAPABILITIES = 1,
     _SYS_REQUEST_CAPABILITIES,
     _SYS_DEBUG_LOG,
@@ -101,6 +124,7 @@ typedef enum {
     _SYS_HEAP_FREE,
     _SYS_HEAP_REALLOCATE,
     _SYS_HEAP_MAP,
+    _SYS_DEFAULT_MONITOR,
 } ELOS_SyscallID;
 
 
@@ -151,6 +175,10 @@ void SYS_request_capabilites(ELOS_Capabilities* capabilities) {
     SYSCALL1(_SYS_REQUEST_CAPABILITIES, capabilities);
 }
 
+void SYS_debug_log(const char* text, u32 length) {
+    ELOS_Error rax;
+    SYSCALL2(_SYS_DEBUG_LOG, text, length);
+}
 
 ELOS_Error SYS_heap_allocate(void** newAddress, u64 size) {
     ELOS_Error rax;
@@ -176,10 +204,10 @@ ELOS_Error SYS_heap_map(void* virtAddress, u64 size) {
     return rax;
 }
 
-
-void SYS_debug_log(const char* text, u32 length) {
+ELOS_Error SYS_default_monitor(ELOS_FrameBuffer* frameBuffer) {
     ELOS_Error rax;
-    SYSCALL2(_SYS_DEBUG_LOG, text, length);
+    SYSCALL1(_SYS_DEFAULT_MONITOR, frameBuffer);
+    return rax;
 }
 
 

@@ -17,7 +17,6 @@ typedef enum PMEM_Flags {
 
 void PMEM_init(BootAPI* boot_api);
 
-
 /*
     Allocate generic mapped memory.
     Memory may not be identity mapped to physical addresses.
