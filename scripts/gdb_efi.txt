@@ -10,7 +10,7 @@ b catch_bad_status
 b kernel_bug
 b exception_handler
 
-b init_gdt
+b dbg
 c
 #b syscall_handler
 # hb *0xc0000009

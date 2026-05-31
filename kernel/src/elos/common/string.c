@@ -263,10 +263,22 @@ long strtol(const char* ptr, char** endptr, int base) {
 
 
 
-int strlen(const char* ptr) {
+size_t strlen(const char* ptr) {
     const char* base = ptr;
     while(*(ptr++)) ;
     return (u64)ptr - (u64)base - 1;
+}
+size_t strnlen(const char* ptr, size_t maxlen) {
+    int index = 0;
+    while(1) {
+        if (index >= maxlen)
+            return maxlen;
+        char chr = ptr[index];
+        if (chr == '\0')
+            break;
+        index++;
+    }
+    return index;
 }
 void memcpy(void* dst, const void* src, int size) {
     if (dst == src)

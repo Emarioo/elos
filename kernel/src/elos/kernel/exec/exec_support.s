@@ -155,9 +155,10 @@ syscall_handler:
     mov gs:USER_STACK_OFFSET, rsp
     mov rsp, gs:SYSCALL_STACK_OFFSET
 
-
     push r11
     push rcx
+
+    mov rcx, r10
 
     call EXEC_syscall_handler
 

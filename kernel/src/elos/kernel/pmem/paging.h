@@ -4,16 +4,16 @@
 
 #include "elos/boot_api.h"
 
-#define PAGE_BIT_PRESENT   (1 << 0)
-#define PAGE_BIT_WRITE     (1 << 1)
-#define PAGE_BIT_USER      (1 << 2)
-#define PAGE_BIT_PWT       (1 << 3)
-#define PAGE_BIT_PCD       (1 << 4)
-#define PAGE_BIT_ACCESSED  (1 << 5)
-#define PAGE_BIT_DIRTY     (1 << 6)
-#define PAGE_BIT_PAT       (1 << 7)
-#define PAGE_BIT_HUGE_PAGE (1 << 7)
-#define PAGE_BIT_GLOBAL    (1 << 8)
+#define PAGE_BIT_PRESENT   (1LU << 0)
+#define PAGE_BIT_WRITE     (1LU << 1)
+#define PAGE_BIT_USER      (1LU << 2)
+#define PAGE_BIT_PWT       (1LU << 3)
+#define PAGE_BIT_PCD       (1LU << 4)
+#define PAGE_BIT_ACCESSED  (1LU << 5)
+#define PAGE_BIT_DIRTY     (1LU << 6)
+#define PAGE_BIT_PAT       (1LU << 7)
+#define PAGE_BIT_HUGE_PAGE (1LU << 7)
+#define PAGE_BIT_GLOBAL    (1LU << 8)
 
 
 typedef enum MapPageFlag {

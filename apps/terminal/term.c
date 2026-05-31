@@ -11,7 +11,7 @@
 #include <stdarg.h>
 
 void exit(int code);
-
+void test_messaging();
 
 void printf(const char* format, ...);
 
@@ -65,8 +65,10 @@ void sleep(u64 ns) {
 void _start() {
 
     SYS_ticks_per_second(&tsc_per_sec);
-
     printf("Starting terminal\n");
+
+    test_messaging();
+
     while (1) {
         printf("Running terminal\n");
         sleep(500*1000000);
@@ -93,6 +95,41 @@ void _start() {
     }
 
     exit(0);
+}
+
+void test_messaging() {
+    ELOS_Error error;
+    ELOS_ServiceEndpoint endpoint;
+    while (1) {
+        error = SYS_service_connect("compositor", &endpoint, 0x1000);
+        if (error == ELOS_OK)
+            break;
+        printf("terminal: Waiting for compositor service...\n");
+        sleep(500*1000000);
+    }
+
+    printf("terminal: Established compositor endpoint.\n");
+
+    // while (1) pause();
+
+    int counter = 0;
+    while (1) {
+        counter++;
+
+        ELOS_ServiceEndpoint senderEndpoint;
+        char buffer[256];
+        int len = snprintf(buffer, sizeof(buffer), "M%d", counter),
+        error = SYS_service_send(endpoint, ELOS_NULL_ENDPOINT, buffer, len + 1);
+        if (error != ELOS_OK) {
+            printf("terminal: Could not send\n");
+            sleep(1200*1000000);
+            continue;
+        }
+
+        printf("terminal: Sent number %d\n", counter);
+
+        sleep(100*1000000);
+    }
 }
 
 

@@ -20,16 +20,20 @@ typedef enum {
     ELOS_CAP_DENIED,
     ELOS_INVALID_PARAM,
     ELOS_INVALID_SYSCALL,
+    ELOS_IPC_FULL,
 } ELOS_Error;
 
 typedef enum {
-    GLOBAL_CAP_HEAP     = (1<<0),
-    GLOBAL_CAP_FILE     = (1<<1),
-    GLOBAL_CAP_MONITOR  = (1<<2),
-    GLOBAL_CAP_THREAD   = (1<<3),
-    GLOBAL_CAP_PROCESS  = (1<<4),
-    GLOBAL_CAP_NETWORK  = (1<<5),
-    GLOBAL_CAP_TIME     = (1<<5),
+    GLOBAL_CAP_HEAP            = (1<<0),
+    GLOBAL_CAP_FILE            = (1<<1),
+    GLOBAL_CAP_MONITOR         = (1<<2),
+    GLOBAL_CAP_THREAD          = (1<<3),
+    GLOBAL_CAP_PROCESS         = (1<<4),
+    GLOBAL_CAP_NETWORK         = (1<<5),
+    GLOBAL_CAP_TIME            = (1<<6),
+    GLOBAL_CAP_SHM             = (1<<7),
+    GLOBAL_CAP_SERVICE_SERVER  = (1<<8),
+    GLOBAL_CAP_SERVICE_CLIENT  = (1<<9),
 } ELOS_GlobalCapability;
 
 
@@ -63,6 +67,10 @@ typedef struct {
     u32* pixels;
 } ELOS_FrameBuffer;
 
+typedef void* ELOS_ServiceEndpoint;
+typedef void* ELOS_SHMHandle;
+
+#define ELOS_NULL_ENDPOINT (0)
 
 /*
     Returns capabilities of process.
@@ -135,14 +143,69 @@ void SYS_sleep_ns(u64 nanoseconds);
 
 
 /*
-    Retrieves a frame buffer to the default monitor.
-
-    @pre GLOBAL_CAP_MONITOR capability is required.
-
-    @param frameBuffer Filled with information.
+    @pre GLOBAL_CAP_SERVICE_SERVER capability is required.
 */
-ELOS_Error SYS_shm_(ELOS_FrameBuffer* frameBuffer);
+ELOS_Error SYS_service_create(const char* name, ELOS_ServiceEndpoint* endpoint, u64 queueSize);
 
+
+/*
+    @pre GLOBAL_CAP_SERVICE_CLIENT capability is required.
+*/
+ELOS_Error SYS_service_connect(const char* name, ELOS_ServiceEndpoint* endpoint, u64 queueSize);
+
+
+/*
+    Sends messages to the service channel.
+
+    @pre GLOBAL_CAP_SERVICE_SERVER or GLOBAL_CAP_SERVICE_CLIENT capability is required.
+
+    @param endpoint The endpoint to send from.
+    @param senderEndpoint Only relevant if endpoint is a servie and not the connection to the service.
+    @param data Buffer to send.
+    @param size Size of buffer to send.
+    @return ELOS_IPC_FULL if service channel is full. ELOS_INVALID_PARAM if endpoint or data pointer are invalid.
+*/
+ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint senderEndpoint, const u8* data, u64 size);
+
+
+/*
+    Receive messages from the service channel.
+
+    @pre GLOBAL_CAP_SERVICE capability is required.
+
+    @param endpoint Endpoint to receive to.
+    @param senderHandle Endpoint to receive from.
+    @param data Buffer to received message data. NULL if no messages were received. Kernel prepares the buffer and it is valid until next recv call on the same endpoint. 
+    @param size Size of received message. 0 if no messages received.
+    @param timeout_ns If no messages then function will block for this amount of time.
+        -1 to block until message is received.
+    @return ELOS_INVALID_PARAM if handle or data pointer are invalid.
+*/
+ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint* senderEndpoint, const u8** data, u64* size, u64 timeout_ns);
+
+
+/*
+    Allocate memory that can be shared with other processes.
+
+    @pre GLOBAL_CAP_SHM capability is required.
+*/
+ELOS_Error SYS_shm_create(u64 size, ELOS_SHMHandle* handle);
+
+
+/*
+    Share memory with another process. Use service functions to acquire the endpoint.
+
+    @pre GLOBAL_CAP_SHM capability is required.
+*/
+ELOS_Error SYS_shm_grant(ELOS_SHMHandle handle, ELOS_ServiceEndpoint endpoint);
+
+
+/*
+    Information about the shared memory.
+
+    @pre GLOBAL_CAP_SHM capability is required.
+*/
+ELOS_Error SYS_shm_info(ELOS_SHMHandle handle, void** buffer, u64* size);
 
 
 
@@ -162,6 +225,13 @@ typedef enum {
     _SYS_DEFAULT_MONITOR,
     _SYS_TICKS_PER_SECOND,
     _SYS_SLEEP_NS,
+    _SYS_SERVICE_CREATE,
+    _SYS_SERVICE_CONNECT,
+    _SYS_SERVICE_SEND,
+    _SYS_SERVICE_RECV,
+    _SYS_SHM_CREATE,
+    _SYS_SHM_GRANT,
+    _SYS_SHM_INFO,
 } ELOS_SyscallID;
 
 
@@ -200,6 +270,25 @@ typedef enum {
         : "=a" (rax)                                    \
         : "a" (ID), "D" (ARG0), "S" (ARG1), "d" (ARG2)  \
         : "rcx", "r11", "memory"                        \
+    )
+
+#define SYSCALL4(ID, ARG0, ARG1, ARG2, ARG3)                       \
+    register u64 r10 asm ("r10") = (u64)(ARG3);                           \
+    asm volatile (                                                 \
+        "syscall"                                                  \
+        : "=a" (rax)                                               \
+        : "a" (ID), "D" (ARG0), "S" (ARG1), "d" (ARG2), "r" (r10)  \
+        : "rcx", "r11", "memory"                                   \
+    )
+
+#define SYSCALL5(ID, ARG0, ARG1, ARG2, ARG3, ARG4)                            \
+    register u64 r10 asm ("r10") = (u64)(ARG3);                                      \
+    register u64 r8 asm ("r8") = (u64)(ARG4);                                        \
+    asm volatile (                                                            \
+        "syscall"                                                             \
+        : "=a" (rax)                                                          \
+        : "a" (ID), "D" (ARG0), "S" (ARG1), "d" (ARG2), "r" (r10), "r" (r8)   \
+        : "rcx", "r11", "memory"                                              \
     )
 
 void SYS_capabilites(ELOS_Capabilities* capabilities)  {
@@ -258,6 +347,47 @@ void SYS_sleep_ns(u64 nanoseconds) {
     SYSCALL1(_SYS_SLEEP_NS, nanoseconds);
 }
 
+ELOS_Error SYS_service_create(const char* name, ELOS_ServiceEndpoint* endpoint, u64 queueSize) {
+    ELOS_Error rax;
+    SYSCALL3(_SYS_SERVICE_CREATE, name, endpoint, queueSize);
+    return rax;
+}
+
+ELOS_Error SYS_service_connect(const char* name, ELOS_ServiceEndpoint* endpoint, u64 queueSize) {
+    ELOS_Error rax;
+    SYSCALL3(_SYS_SERVICE_CONNECT, name, endpoint, queueSize);
+    return rax;
+}
+
+ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint senderEndpoint, const u8* data, u64 size) {
+    ELOS_Error rax;
+    SYSCALL4(_SYS_SERVICE_SEND, endpoint, senderEndpoint, data, size);
+    return rax;
+}
+
+ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint* senderEndpoint, const u8** data, u64* size, u64 timeout_ns) {
+    ELOS_Error rax;
+    SYSCALL5(_SYS_SERVICE_RECV, endpoint, senderEndpoint, data, size, timeout_ns);
+    return rax;
+}
+
+ELOS_Error SYS_shm_create(u64 size, ELOS_SHMHandle* handle) {
+    ELOS_Error rax;
+    SYSCALL2(_SYS_SHM_CREATE, size, handle);
+    return rax;
+}
+
+ELOS_Error SYS_shm_grant(ELOS_SHMHandle handle, ELOS_ServiceEndpoint endpoint) {
+    ELOS_Error rax;
+    SYSCALL2(_SYS_SHM_GRANT, handle, endpoint);
+    return rax;
+}
+
+ELOS_Error SYS_shm_info(ELOS_SHMHandle handle, void** buffer, u64* size)  {
+    ELOS_Error rax;
+    SYSCALL3(_SYS_SHM_INFO, handle, buffer, size);
+    return rax;
+}
 
 
 

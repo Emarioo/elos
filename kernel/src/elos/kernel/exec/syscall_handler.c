@@ -14,6 +14,7 @@
 
 #include "elos/physical_memory.h"
 #include "elos/monitor.h"
+#include "elos/service.h"
 
 #include "elos/cpu.h"
 
@@ -23,8 +24,8 @@
 #define printf(...) KCON_printf(__VA_ARGS__)
 
 
-u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3) {
-    u64 returnValue = ELOS_INVALID_SYSCALL;
+u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 arg5) {
+    u64 returnValue = ELOS_GENERIC_ERROR;
     u64 syscall_id;
     asm volatile (
         "mov %%rax, %0"
@@ -80,7 +81,9 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3) {
 
             void* address = PMEM_alloc_phys(size, PMEM_FLAG_USER_SPACE);
             if (address) {
+                write_cr3((u64)g_kernelPageTable);
                 PMEM_map_memory(userPageTable, address, address, size, PMEM_FLAG_USER_SPACE);
+                write_cr3((u64)userPageTable);
                 memset(address, 0x9A, size);
                 *newAddress = address;
                 returnValue = ELOS_OK;
@@ -127,7 +130,9 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3) {
 
             void* phys_address = PMEM_alloc_phys(size, PMEM_FLAG_USER_SPACE);
             if (phys_address) {
+                write_cr3((u64)g_kernelPageTable);
                 bool mapped = PMEM_map_memory(userPageTable, virtAddress, phys_address, size, PMEM_FLAG_USER_SPACE);
+                write_cr3((u64)userPageTable);
                 if (mapped) {
                     memset(virtAddress, 0x9A, size);
                     returnValue = ELOS_OK;
@@ -190,6 +195,164 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3) {
             // @TODO Implement sleep.
 
             returnValue = ELOS_OK;
+        } break;
+        case _SYS_SERVICE_CREATE: {
+            const char* name = (void*)arg0;
+            ELOS_ServiceEndpoint* endpoint = (void*)arg1;
+            u64 queueSize = arg2;
+
+            int maxlen = 64;
+            int name_len = strnlen(name, maxlen + 1);
+            if (name_len > maxlen) {
+                returnValue = ELOS_INVALID_PARAM;
+                break;
+            }
+
+            // @TODO Check capability
+
+            write_cr3((u64)g_kernelPageTable);
+
+            const char* phys_name = PMEM_virt_to_phys(userPageTable, (void*)name);
+
+            bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)phys_name, (void*)phys_name, PAGE_SIZE, PMEM_FLAG_NONE);
+            if (!mapped) {
+                returnValue = ELOS_GENERIC_ERROR;
+                break;
+            }
+
+            ServiceEndpoint* tmp_endpoint;
+            bool result = SRV_service_create(phys_name, &tmp_endpoint, queueSize);
+            
+            write_cr3((u64)userPageTable);
+            
+            if (!result) {
+                returnValue = ELOS_GENERIC_ERROR;
+            } else {
+                *endpoint = tmp_endpoint;
+                returnValue = ELOS_OK;
+            }
+
+        } break;
+        case _SYS_SERVICE_CONNECT: {
+            const char* name = (void*)arg0;
+            ELOS_ServiceEndpoint* endpoint = (void*)arg1;
+            u64 queueSize = arg2;
+            
+            int maxlen = 64;
+            int name_len = strnlen(name, maxlen + 1);
+            if (name_len > maxlen) {
+                returnValue = ELOS_INVALID_PARAM;
+                break;
+            }
+
+            // @TODO Check capability
+
+            write_cr3((u64)g_kernelPageTable);
+
+            const char* phys_name = PMEM_virt_to_phys(userPageTable, (void*)name);
+
+            bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)phys_name, (void*)phys_name, PAGE_SIZE, PMEM_FLAG_NONE);
+            if (!mapped) {
+                returnValue = ELOS_GENERIC_ERROR;
+                break;
+            }
+
+            ServiceEndpoint* tmp_endpoint;
+            bool result = SRV_service_connect(phys_name, &tmp_endpoint, queueSize);
+            
+            write_cr3((u64)userPageTable);
+            
+            if (!result) {
+                returnValue = ELOS_GENERIC_ERROR;
+            } else {
+                *endpoint = tmp_endpoint;
+                returnValue = ELOS_OK;
+            }
+        } break;
+        case _SYS_SERVICE_SEND: {
+            ELOS_ServiceEndpoint endpoint = (void*)arg0;
+            ELOS_ServiceEndpoint senderEndpoint = (void*)arg1;
+            const u8* data = (void*)arg2;
+            u64 size = arg3;
+
+            // @TODO Check capability
+            
+            write_cr3((u64)g_kernelPageTable);
+
+            const u8* phys_data = PMEM_virt_to_phys(userPageTable, (void*)data);
+            
+            bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)phys_data, (void*)phys_data, PAGE_SIZE, PMEM_FLAG_NONE);
+            if (!mapped) {
+                returnValue = ELOS_GENERIC_ERROR;
+                break;
+            }
+
+            bool result = SRV_service_send((ServiceEndpoint*)endpoint, (ServiceEndpoint*)senderEndpoint, phys_data, size);
+            
+            write_cr3((u64)userPageTable);
+
+            if (!result) {
+                returnValue = ELOS_GENERIC_ERROR;
+            } else {
+                returnValue = ELOS_OK;
+            }
+        } break;
+        case _SYS_SERVICE_RECV: {
+            ELOS_ServiceEndpoint endpoint = (void*)arg0;
+            ELOS_ServiceEndpoint* senderEndpoint = (void*)arg1;
+            u8** data = (void*)arg2;
+            u64* size = (void*)arg3;
+            u64  timeout_ns = arg4;
+
+            // @TODO Check capability
+            
+            write_cr3((u64)g_kernelPageTable);
+
+            ServiceEndpoint* tmp_senderEndpoint;
+            u8* tmp_data;
+            u64 tmp_size;
+
+            bool result = SRV_service_recv((ServiceEndpoint*)endpoint, &tmp_senderEndpoint, &tmp_data, &tmp_size, timeout_ns);
+            
+            if (tmp_data) {
+                PMEM_map_memory(userPageTable, tmp_data, tmp_data, tmp_size, PMEM_FLAG_USER_SPACE);
+            }
+
+            write_cr3((u64)userPageTable);
+
+            *senderEndpoint = (ELOS_ServiceEndpoint)tmp_senderEndpoint;
+            *data = tmp_data;
+            *size = tmp_size;
+
+            if (!result) {
+                returnValue = ELOS_GENERIC_ERROR;
+            } else {
+                returnValue = ELOS_OK;
+            }
+        } break;
+        /*
+
+ELOS_Error SYS_shm_create(u64 size, ELOS_SHMHandle* handle) {
+    ELOS_Error rax;
+    SYSCALL2(_SYS_SHM_CREATE, size, handle);
+    return rax;
+}
+
+ELOS_Error SYS_shm_grant(ELOS_SHMHandle handle, ELOS_ServiceEndpoint endpoint) {
+    ELOS_Error rax;
+    SYSCALL2(_SYS_SHM_GRANT, handle, endpoint);
+    return rax;
+}
+
+ELOS_Error SYS_shm_info(ELOS_SHMHandle handle, void** buffer, u64* size)  {
+    ELOS_Error rax;
+    SYSCALL3(_SYS_SHM_INFO, handle, buffer, size);
+    return rax;
+}
+
+        */
+        default: {
+            returnValue = ELOS_INVALID_SYSCALL;
         } break;
     }
 

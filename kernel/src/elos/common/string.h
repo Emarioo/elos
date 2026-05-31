@@ -8,7 +8,8 @@
 int snprintf(char* buffer, int size, const char* format, ...);
 int vsnprintf(char* buffer, int size, const char* format, va_list va);
 
-int strlen(const char* ptr);
+size_t strlen(const char* ptr);
+size_t strnlen(const char* ptr, size_t maxlen);
 void memcpy(void* dst, const void* src, int size);
 void memmove(void* dst, const void* src, int size);
 
