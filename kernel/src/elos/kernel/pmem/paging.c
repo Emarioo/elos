@@ -23,8 +23,6 @@
 
 
 
-Page* rootTable;
-
 _align(4096) Page fixedTables[15];
 int  fixedTables_len;
 
@@ -61,7 +59,8 @@ void init_paging(BootAPI* boot_api) {
 
     // We assume EFI identically mapped physical and virtual address of the kernel.
 
-    rootTable = get_fixed_table();
+    g_kernelPageTable = get_fixed_table();
+    Page* rootTable = g_kernelPageTable;
 
     dynamicTable_base = (u64)PMEM_alloc_phys(dynamicTable_size, PMEM_FLAG_NONE);
 

@@ -101,7 +101,7 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
         return stopSearching;
     }
 
-    PMEM_map_memory((void*)(u64)ahci_base, (void*)(u64)ahci_base, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
+    PMEM_map_memory(g_kernelPageTable, (void*)(u64)ahci_base, (void*)(u64)ahci_base, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
 
     HBA_MEM* abar = (void*)(u64)ahci_base;
 
@@ -194,7 +194,7 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
     */
 
     u16 buffer[512/2];
-    void* phys_buffer = PMEM_virt_to_phys(buffer);  // In case buffer isn't identity mapped to physical page.
+    void* phys_buffer = PMEM_virt_to_phys(g_kernelPageTable, buffer);  // In case buffer isn't identity mapped to physical page.
 
     for (int i = 0; i < diskDevices_len; i++) {
         DiskDevice_impl* dev = diskDevices[i];

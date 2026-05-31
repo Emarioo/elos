@@ -4,7 +4,6 @@
 #include "elos/common/intrinsics.h"
 
 #define ELOS_SYSCALL_IMPL
-
 #include "elos/syscalls.h"
 
 #include "elos/common/string.h"
@@ -14,16 +13,7 @@
 void exit(int code);
 
 
-void printf(const char* format, ...) {
-    char buffer[256];
-
-    va_list va;
-    va_start(va, format);
-    int len = vsnprintf(buffer, sizeof(buffer), format, va);
-    va_end(va);
-
-    SYS_debug_log(buffer, len);
-}
+void printf(const char* format, ...);
 
 
 
@@ -60,6 +50,8 @@ void draw_rect(int x, int y, int w, int h, u32 rgba) {
 #define COLOR 0xFF861394
 
 void _start() {
+
+    printf("Start terminal\n");
 
     ELOS_Error error = SYS_default_monitor(&g_frame_buffer);
     if (error != ELOS_OK) {

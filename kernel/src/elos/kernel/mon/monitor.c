@@ -34,8 +34,6 @@ void MON_scan_devices(MonitorDevice devices[], int* count) {
     *count = 1;
 }
 
-extern void* rootTable;
-
 bool MON_get_frame_buffer(MonitorDevice device, MON_FrameBuffer* frameBuffer) {
     if (device == &g_defaultFrameBuffer) {
         *frameBuffer = g_defaultFrameBuffer;

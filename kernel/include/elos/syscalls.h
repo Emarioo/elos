@@ -29,6 +29,7 @@ typedef enum {
     GLOBAL_CAP_THREAD   = (1<<3),
     GLOBAL_CAP_PROCESS  = (1<<4),
     GLOBAL_CAP_NETWORK  = (1<<5),
+    GLOBAL_CAP_TIME     = (1<<5),
 } ELOS_GlobalCapability;
 
 
@@ -111,6 +112,40 @@ ELOS_Error SYS_heap_map(void* virtAddress, u64 size);
 ELOS_Error SYS_default_monitor(ELOS_FrameBuffer* frameBuffer);
 
 
+/*
+    Tick refers to Real Time Clock or Time Stamp Counter.
+    Use with rdtsc to measure elapsed seconds.
+
+    @pre GLOBAL_CAP_TIME capability is required.
+
+    @param tps Filled with information.
+*/
+ELOS_Error SYS_ticks_per_second(u64* tps);
+
+
+/*
+    Sleeps for an amount of time. Can also be used
+    to yield the process and reschedule another.
+
+    @pre No capability required.
+
+    @param nanoseconds Amount of time to sleep. Yields process if 0.
+*/
+void SYS_sleep_ns(u64 nanoseconds);
+
+
+/*
+    Retrieves a frame buffer to the default monitor.
+
+    @pre GLOBAL_CAP_MONITOR capability is required.
+
+    @param frameBuffer Filled with information.
+*/
+ELOS_Error SYS_shm_(ELOS_FrameBuffer* frameBuffer);
+
+
+
+
 
 
 
@@ -125,6 +160,8 @@ typedef enum {
     _SYS_HEAP_REALLOCATE,
     _SYS_HEAP_MAP,
     _SYS_DEFAULT_MONITOR,
+    _SYS_TICKS_PER_SECOND,
+    _SYS_SLEEP_NS,
 } ELOS_SyscallID;
 
 
@@ -208,6 +245,17 @@ ELOS_Error SYS_default_monitor(ELOS_FrameBuffer* frameBuffer) {
     ELOS_Error rax;
     SYSCALL1(_SYS_DEFAULT_MONITOR, frameBuffer);
     return rax;
+}
+
+ELOS_Error SYS_ticks_per_second(u64* tps) {
+    ELOS_Error rax;
+    SYSCALL1(_SYS_TICKS_PER_SECOND, tps);
+    return rax;
+}
+
+void SYS_sleep_ns(u64 nanoseconds) {
+    ELOS_Error rax;
+    SYSCALL1(_SYS_SLEEP_NS, nanoseconds);
 }
 
 

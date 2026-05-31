@@ -9,6 +9,16 @@
 #include "elos/physical_memory.h"
 #include "elos/kernel_console.h"
 
+#include "elos/kernel/pmem/paging.h"
+
+#include "elos/kernel/config.h"
+
+#include "elos/execution.h"
+
+#include "elos/frame_buffer.h"
+
+
+
 #define printf(...) KCON_printf(__VA_ARGS__)
 
 #define debug(...) printf(__VA_ARGS__)
@@ -134,8 +144,24 @@ bool parse_elf(ParseContext* ctx) {
     void* virt_image_base = (void*)(u64)0xC0000000;
     void* phys_image_base = PMEM_alloc_phys(image_size, PMEM_FLAG_NONE);
     
-    // @TODO Map readonly, executable.
-    PMEM_map_memory(virt_image_base, phys_image_base, image_size, PMEM_FLAG_USER_SPACE);
+
+    PageTable* pageTable = PMEM_allocPageTable();
+    
+    // Map kernel into user page table (needed when we do syscall)
+
+    // @TODO parse_elf should not be mapping in kernel to user page table...
+    PMEM_map_memory(pageTable, __kernel_start, __kernel_start, __kernel_end - __kernel_start, PMEM_FLAG_NONE);
+    PMEM_map_memory(pageTable, __stack_start, __stack_start, __stack_end - __stack_start, PMEM_FLAG_NONE);
+    PMEM_map_memory(pageTable, g_frame_buffer.base, g_frame_buffer.base, g_frame_buffer.size, PMEM_FLAG_NOT_CACHED);
+    for (int ci=0;ci<ARRAY_LENGTH(cores);ci++) {
+        EXEC_Core* core = &cores[ci];
+        u8* stack_start = (u8*)core->syscall_stack - core->syscall_stack_size;
+        PMEM_map_memory(pageTable, stack_start, stack_start, core->syscall_stack_size, PMEM_FLAG_NONE);
+    }
+
+    
+    // Map whole image into kernel page tables so we can copy memory from ELF there.
+    PMEM_map_memory(g_kernelPageTable, virt_image_base, phys_image_base, image_size, PMEM_FLAG_NONE);
 
     // first section is NULL
     for (int si = 1; si < elfHeader->e_shnum; si++) {
@@ -144,17 +170,29 @@ bool parse_elf(ParseContext* ctx) {
         const char* name = &sectionNames[section->sh_name];
         // printf("%s: %d bytes\n", name, section->sh_size);
 
-        if (!strcmp(name, ".text")
-            || !strcmp(name, ".rodata")
-            || !strcmp(name, ".data")
-        ) {
-            memcpy((u8*)virt_image_base + section->sh_addr - vaddr_low,
-                ctx->fileData + section->sh_offset,
+        #define COPY_DATA  memcpy((u8*)virt_image_base + section->sh_addr - vaddr_low, \
+                ctx->fileData + section->sh_offset, \
                 section->sh_size);
+
+        u8* vaddr = (u8*)virt_image_base + section->sh_addr - vaddr_low;
+        u8* paddr = (u8*)phys_image_base + section->sh_addr - vaddr_low;
+        u8* src = ctx->fileData + section->sh_offset;
+
+        // @TODO Check that the virtual addresses for sections don't overlap in pages.
+        //    Issues with exec/read only flags otherwise.
+
+        if (!strcmp(name, ".text")) {
+            PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_EXECUTABLE|PMEM_FLAG_READ_ONLY|PMEM_FLAG_USER_SPACE);
+            memcpy(vaddr, src, section->sh_size);
+        } else if (!strcmp(name, ".rodata")) {
+            PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_READ_ONLY|PMEM_FLAG_USER_SPACE);
+            memcpy(vaddr, src, section->sh_size);
+        } else if (!strcmp(name, ".data")) {
+            PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE);
+            memcpy(vaddr, src, section->sh_size);
         } else if (!strcmp(name, ".bss")) {
-            memset((u8*)virt_image_base + section->sh_addr - vaddr_low,
-                0,
-                section->sh_size);
+            PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE);
+            memset(vaddr, 0, section->sh_size);
         }
     }
 
@@ -162,6 +200,7 @@ bool parse_elf(ParseContext* ctx) {
     ctx->object->phys_image_base = phys_image_base;
     ctx->object->image_size = image_size;
     ctx->object->entry_point = (u8*)virt_image_base + elfHeader->e_entry - vaddr_low;
+    ctx->object->pageTable = pageTable;
 
     returnValue = true;
 

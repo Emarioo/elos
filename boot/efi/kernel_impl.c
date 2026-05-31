@@ -39,6 +39,9 @@ NetBoot_Device netboot_device;
 
 KernelConfig kernel_config;
 
+typedef void PageTable;
+
+PageTable* g_kernelPageTable;
 
 void KCON_printf(const char* format, ...) {
     char buffer[256];

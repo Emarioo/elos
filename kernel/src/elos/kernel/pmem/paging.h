@@ -18,9 +18,10 @@
 
 typedef enum MapPageFlag {
     PAGING_FLAG_USE_RESERVED_TABLE = 0x1,
-    PAGING_FLAG_READONLY = 0x2,
-    PAGING_FLAG_NOT_CACHED = 0x4,
-    PAGING_FLAG_USER_SPACE = 0x8,
+    PAGING_FLAG_READONLY           = 0x2,
+    PAGING_FLAG_NOT_CACHED         = 0x4,
+    PAGING_FLAG_USER_SPACE         = 0x8,
+    PAGING_FLAG_GLOBAL_PAGE        = 0x10,
 } MapPageFlag;
 
 typedef struct Page {
@@ -28,7 +29,6 @@ typedef struct Page {
 } Page;
 
 
-extern Page* rootTable;
 
 /*
     Sets up backup page tables in case we run out of them when mapping pages.

@@ -24,13 +24,8 @@ EXEC_Core cores[CORE_LIMIT];
 
 bool scheduling_enabled;
 
-void test_thread1();
-void test_thread2();
-
 void EXEC_terminate_self_end();
 void thread_bootstrap(FN_ThreadEntry entry);
-
-
 
 u64 EXEC_timer_handler(InterruptFrame* frame) {
     int coreIndex = CPU_get_core_index();
@@ -144,6 +139,7 @@ bool EXEC_create_kernel_thread(void* entry, int pinnedCoreIndex) {
     frame->rflags = 0x200; // interrupt flag
     frame->rdi = (u64)entry;
     frame->rip = (u64)thread_bootstrap;
+    frame->cr3 = (u64)g_kernelPageTable;
 
 exit:
     UNLOCK_INT(&core->thread_lock);
@@ -196,7 +192,10 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex) {
         goto exit;
     }
     void* virt_stack = (void*)(u64)0xF0000000;
-    PMEM_map_memory(virt_stack, phys_stack, stack_size, PMEM_FLAG_USER_SPACE);
+    PMEM_map_memory(g_kernelPageTable, virt_stack, phys_stack, stack_size, PMEM_FLAG_USER_SPACE);
+    memset(virt_stack, 0x9A, stack_size);
+    PMEM_map_memory(object.pageTable, virt_stack, phys_stack, stack_size, PMEM_FLAG_USER_SPACE);
+
     found_thread->stack_size = stack_size;
     found_thread->stack = virt_stack;
 
@@ -214,6 +213,7 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex) {
     frame->rsp = rsp;
     frame->rflags = 0x202; // interrupt flag, disable IOPL
     frame->rip = (u64)object.entry_point;
+    frame->cr3 = (u64)object.pageTable;
 
 exit:
     // @TODO Cleanup allocated stuff.
@@ -225,22 +225,4 @@ void thread_bootstrap(FN_ThreadEntry entry) {
     entry();
     EXEC_terminate_self();
 }
-
-
-void test_thread1() {
-    while(1) {
-        printf("Cat\n");
-        CPU_sleep(100000000);
-    }
-}
-
-void test_thread2() {
-    while(1) {
-        printf("Dog\n");
-        CPU_sleep(100000000);
-    }
-}
-
-
-
 

@@ -14,6 +14,9 @@ typedef struct {
     u32             stack_size;
     bool            used;
     bool            userSpace;
+
+    u16             pcid;
+
 } EXEC_Thread;
 
 #define THREAD_LIMIT 32
@@ -24,6 +27,7 @@ typedef struct {
     //   They are hardcoded in assembly.
     void* syscall_stack;
     void* user_stack; // saved user stack on syscall
+    u32   syscall_stack_size;
 
     // Free to modify, not used by assembly
     EXEC_Thread threads[THREAD_LIMIT];

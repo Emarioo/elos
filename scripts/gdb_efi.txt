@@ -10,6 +10,7 @@ b catch_bad_status
 b kernel_bug
 b exception_handler
 
-hb *0xc0000009
-b syscall_handler
 c
+#b syscall_handler
+# hb *0xc0000009
+# b init_paging

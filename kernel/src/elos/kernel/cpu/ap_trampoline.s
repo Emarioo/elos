@@ -57,7 +57,7 @@ _8060:
 
     # Load root page table
     # (same as the Bootstrap Processor for now)
-    mov eax, [rootTable]
+    mov eax, [g_kernelPageTable]
     mov cr3, eax
 
     # Enable long mode in EFER

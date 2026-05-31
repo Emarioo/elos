@@ -32,6 +32,8 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3) {
     );
     // @TODO Validate parameters! Accessible address by user process. Valid sizes and lengths?
 
+    PageTable* userPageTable = (void*)(read_cr3() & ~0xFFFLU);
+
     // @TODO For the user processes we need to swap out their pages so they can't
     //   access each others ELF image or HEAP or frame buffers.
 
@@ -76,8 +78,9 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3) {
 
             // @TODO Check capability and heap limit
 
-            void* address = PMEM_alloc_phys(size, PMEM_FLAG_IDENTITY_MAPPED|PMEM_FLAG_USER_SPACE);
+            void* address = PMEM_alloc_phys(size, PMEM_FLAG_USER_SPACE);
             if (address) {
+                PMEM_map_memory(userPageTable, address, address, size, PMEM_FLAG_USER_SPACE);
                 memset(address, 0x9A, size);
                 *newAddress = address;
                 returnValue = ELOS_OK;
@@ -124,7 +127,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3) {
 
             void* phys_address = PMEM_alloc_phys(size, PMEM_FLAG_USER_SPACE);
             if (phys_address) {
-                bool mapped = PMEM_map_memory(virtAddress, phys_address, size, PMEM_FLAG_USER_SPACE);
+                bool mapped = PMEM_map_memory(userPageTable, virtAddress, phys_address, size, PMEM_FLAG_USER_SPACE);
                 if (mapped) {
                     memset(virtAddress, 0x9A, size);
                     returnValue = ELOS_OK;
@@ -138,7 +141,9 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3) {
         case _SYS_DEFAULT_MONITOR: {
             ELOS_FrameBuffer*  frameBuffer = (void*)arg0;
 
-            // @TODO Check capability and heap limit
+            // @TODO Check capability
+
+            write_cr3((u64)g_kernelPageTable);
 
             MonitorDevice devices[1];
             int count = ARRAY_LENGTH(devices);
@@ -152,7 +157,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3) {
                 if (!yes) {
                     returnValue = ELOS_GENERIC_ERROR;
                 } else {
-                    bool mapped = PMEM_map_memory(mon_frameBuffer.phys_address, mon_frameBuffer.phys_address, mon_frameBuffer.size, PMEM_FLAG_USER_SPACE|PMEM_FLAG_NOT_CACHED);
+                    bool mapped = PMEM_map_memory(userPageTable, mon_frameBuffer.phys_address, mon_frameBuffer.phys_address, mon_frameBuffer.size, PMEM_FLAG_USER_SPACE|PMEM_FLAG_NOT_CACHED);
                     if (!mapped) {
                         returnValue = ELOS_GENERIC_ERROR;
                     } else {
@@ -165,6 +170,26 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3) {
                     }
                 }
             }
+
+            write_cr3((u64)userPageTable); // @TODO Add PCID
+        } break;
+        case _SYS_TICKS_PER_SECOND: {
+            u64* tps = (void*)arg0;
+
+            // @TODO Check capability
+
+            *tps = CPU_tsc_per_sec();
+
+            returnValue = ELOS_OK;
+        } break;
+        case _SYS_SLEEP_NS: {
+            u64* tps = (void*)arg0;
+
+            // @TODO Check capability
+
+            // @TODO Implement sleep.
+
+            returnValue = ELOS_OK;
         } break;
     }
 

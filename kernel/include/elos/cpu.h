@@ -16,10 +16,12 @@
 // task state takes up two slots
 
 typedef struct {
-    // @TODO Save cr3
-    // @TODO Save float
-    // @TODO GS,FS segments
+    // @TODO GS,FS base
+    u64 fs;
+    u64 gs;
+    u64 cr3;
 
+    // @TODO Save float, more?
     u64 xmm[16];
 
     u64 r15;
@@ -60,6 +62,7 @@ void CPU_sleep(u64 nanoseconds);
 int CPU_get_core_index();
 int CPU_get_core_count();
 
+u64 CPU_tsc_per_sec();
 
 void CPU_start_core(u32 apic_id);
 

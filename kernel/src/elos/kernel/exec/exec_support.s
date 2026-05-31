@@ -6,7 +6,8 @@
 
 .extern g_lapic_base
 
-
+.set MSR_FS_BASE, 0xC0000100
+.set MSR_GS_BASE, 0xC0000101
 
 .set APIC_EOI, 0x0B0
 
@@ -54,6 +55,24 @@ timer_isr:
     movsd [rsp + 14*8], xmm14
     movsd [rsp + 15*8], xmm15
 
+    mov rax, cr3
+    push rax
+    
+    mov ecx, MSR_GS_BASE
+    rdmsr
+    shl rdx, 32
+    or rax, rdx
+    push rax
+    
+    mov ecx, MSR_FS_BASE
+    rdmsr
+    shl rdx, 32
+    or rax, rdx
+    push rax
+    
+    mov rax, g_kernelPageTable
+    mov cr3, rax
+
     mov rdi, rsp
 
     call EXEC_timer_handler
@@ -65,6 +84,23 @@ timer_isr:
     mov rbx, g_lapic_base
     mov DWORD PTR [rbx + APIC_EOI], 0
     
+    pop rax
+    mov rdx, rax
+    shr rdx, 32
+    mov eax, eax
+    mov ecx, MSR_FS_BASE
+    wrmsr
+    
+    pop rax
+    mov rdx, rax
+    shr rdx, 32
+    mov eax, eax
+    mov ecx, MSR_GS_BASE
+    wrmsr
+
+    pop rax
+    mov cr3, rax
+
     movsd xmm0,  [rsp]
     movsd xmm1,  [rsp +  1*8]
     movsd xmm2,  [rsp +  2*8]

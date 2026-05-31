@@ -12,8 +12,13 @@ typedef enum PMEM_Flags {
     PMEM_FLAG_IDENTITY_MAPPED = 0x1,
     PMEM_FLAG_NOT_CACHED      = 0x2,
     PMEM_FLAG_READ_ONLY       = 0x4,
-    PMEM_FLAG_USER_SPACE      = 0x8,
+    PMEM_FLAG_EXECUTABLE      = 0x8,
+    PMEM_FLAG_USER_SPACE      = 0x10,
 } PMEM_Flags;
+
+typedef void PageTable;
+
+extern PageTable* g_kernelPageTable;
 
 void PMEM_init(BootAPI* boot_api);
 
@@ -33,12 +38,14 @@ void* PMEM_allocate(u64 bytes, void* ptr);
 */
 void* PMEM_alloc_phys(u64 size, PMEM_Flags flags);
 
+PageTable* PMEM_allocPageTable();
+
 // @TODO Cacheable, prefetachable, write through flags.
-bool PMEM_map_memory(void* virtual_address, void* physical_address, u64 size, PMEM_Flags flags);
+bool PMEM_map_memory(PageTable* table, void* virtual_address, void* physical_address, u64 size, PMEM_Flags flags);
 
-bool PMEM_unmap_memory(void* virtual_address, u64 size);
+bool PMEM_unmap_memory(PageTable* table, void* virtual_address, u64 size);
 
-void* PMEM_virt_to_phys(void* virtual_address);
+void* PMEM_virt_to_phys(PageTable* table, void* virtual_address);
 
 /*
     TODO: Allocates contiguous pages with some optional flags

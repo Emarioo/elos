@@ -2,6 +2,8 @@
 
 #include "elos/common/types.h"
 
+#include "elos/physical_memory.h"
+
 typedef struct ElfObject ElfObject;
 
 struct ElfObject {
@@ -9,6 +11,8 @@ struct ElfObject {
     void* phys_image_base;
     u64   image_size;
     void* entry_point;
+
+    PageTable* pageTable;
 
     // void* text;
     // u64   text_size;

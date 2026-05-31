@@ -4,6 +4,7 @@ bin
 int
 logs
 out
+*.dis
 *.log
 
 /*.out
@@ -18,6 +19,8 @@ out
 /*.bin
 /*.img
 /*.iso
+
+__pycache__
 
 scripts/disk_fs/*.elf
 

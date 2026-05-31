@@ -12,6 +12,9 @@ The following tools/binaries exist:
 import os, sys, platform, shutil, shlex, glob, math, threading, multiprocessing, dataclasses, subprocess
 from dataclasses import dataclass
 
+import apps.compositor
+import apps.terminal
+
 
 ########################
 #      CONSTANTS
@@ -125,7 +128,10 @@ def main():
         # TODO: DON'T HARDCODE PATHS
         OVMF_FD = "extern/ovmf/OVMF.fd"
 
-        cmd("gcc -o scripts/disk_fs/user_test.elf kernel/src/user/user_test.c kernel/src/elos/common/string.c -pie -fpic -nostdlib -nostartfiles -I kernel/src -I kernel/include -Wno-builtin-declaration-mismatch")
+        import apps.compositor.build
+        import apps.terminal.build
+        apps.compositor.build.main("scripts/disk_fs/compositor.elf")
+        apps.terminal.build.main("scripts/disk_fs/term.elf")
 
         DISK_IMG = "int/disk.img"
         # if not os.path.exists(DISK_IMG):

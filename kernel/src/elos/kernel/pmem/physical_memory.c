@@ -42,6 +42,8 @@ PhysicalMemoryRegion g_free_regions[MAX_REGIONS];
 PhysicalMemoryRegion g_used_regions[MAX_REGIONS];
 
 
+PageTable* g_kernelPageTable;
+
 void PMEM_init(BootAPI* boot_api) {
     typedef struct Range {
         u64 address;
@@ -275,7 +277,7 @@ void* PMEM_allocate(u64 size, void* ptr) {
             g_num_free_regions = found_free_index + 1;
         }
 
-        bool yes = PMEM_unmap_memory((void*)old_virtual_address, used_alloc->pageCount * PAGE_SIZE);
+        bool yes = PMEM_unmap_memory(g_kernelPageTable, (void*)old_virtual_address, used_alloc->pageCount * PAGE_SIZE);
         if (!yes) {
             kernel_bug();
             // Bug in kernel if this doesn't work
@@ -348,7 +350,7 @@ void* PMEM_allocate(u64 size, void* ptr) {
         void* const new_ptr    = (void*)(used_alloc->virtualStart);
         const u64 aligned_size = ((size + PAGE_SIZE-1) / PAGE_SIZE) * PAGE_SIZE;
 
-        bool yes = PMEM_map_memory(new_ptr, new_ptr, requested_pages * PAGE_SIZE, PMEM_FLAG_NONE);
+        bool yes = PMEM_map_memory(g_kernelPageTable, new_ptr, new_ptr, requested_pages * PAGE_SIZE, PMEM_FLAG_NONE);
         if (!yes) {
             kernel_bug();
             returnValue = NULL;
@@ -365,6 +367,13 @@ cleanup:
     UNLOCK_INT(&allocate_spinlock);
     // printf(" return 0x%x\n", returnValue);
     return returnValue;
+}
+
+
+PageTable* PMEM_allocPageTable() {
+    void* ptr = PMEM_alloc_phys(PAGE_SIZE, PMEM_FLAG_IDENTITY_MAPPED);
+    memset(ptr, 0, PAGE_SIZE);
+    return ptr;
 }
 
 
@@ -525,7 +534,7 @@ void* PMEM_alloc_phys(u64 size, PMEM_Flags flags) {
     void* new_ptr = (void*)(used_alloc->physicalStart);
 
     if (flags & PMEM_FLAG_IDENTITY_MAPPED) {
-        bool yes = PMEM_map_memory(new_ptr, new_ptr, requested_pages * PAGE_SIZE, flags & ~PMEM_FLAG_IDENTITY_MAPPED);
+        bool yes = PMEM_map_memory(g_kernelPageTable, new_ptr, new_ptr, requested_pages * PAGE_SIZE, flags & ~PMEM_FLAG_IDENTITY_MAPPED);
         if (!yes) {
             printf("pmem: Could not identity physical pages at %x.\n", new_ptr);
             returnValue = NULL;
@@ -540,7 +549,7 @@ cleanup:
     return returnValue;
 }
 
-bool PMEM_map_memory(void* virtual_address, void* physical_address, u64 size, PMEM_Flags flags) {
+bool PMEM_map_memory(PageTable* table, void* virtual_address, void* physical_address, u64 size, PMEM_Flags flags) {
     int pflags = 0;
     if (flags & PMEM_FLAG_NOT_CACHED) {
         pflags |= PAGING_FLAG_NOT_CACHED;
@@ -551,13 +560,13 @@ bool PMEM_map_memory(void* virtual_address, void* physical_address, u64 size, PM
     if (flags & PMEM_FLAG_USER_SPACE) {
         pflags |= PAGING_FLAG_USER_SPACE;
     }
-    return map_memory(rootTable, virtual_address, physical_address, size, pflags);
+    return map_memory(table, virtual_address, physical_address, size, pflags);
 }
 
-bool PMEM_unmap_memory(void* virtual_address, u64 size) {
-    return unmap_memory(rootTable, virtual_address, size, 0);
+bool PMEM_unmap_memory(PageTable* table, void* virtual_address, u64 size) {
+    return unmap_memory(table, virtual_address, size, 0);
 }
 
-void* PMEM_virt_to_phys(void* virtual_address) {
-    return retrieve_physical_address(rootTable, virtual_address);
+void* PMEM_virt_to_phys(PageTable* table, void* virtual_address) {
+    return retrieve_physical_address(table, virtual_address);
 }

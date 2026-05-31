@@ -67,6 +67,11 @@ volatile u32* g_lapic_base;
 
 u64 tsc_per_sec;
 
+u64 CPU_tsc_per_sec() {
+    // @TODO Should be per CORE
+    return tsc_per_sec;
+}
+
 static void disable_pit() {
     outb(0x43, 0x30);
     outb(0x40, 0);
@@ -130,7 +135,7 @@ void CPU_init(BootAPI* boot_api) {
     calibrate_tsc();
 
 
-    bool mapped = PMEM_map_memory(TRAMPOLINE_ADDRESS, TRAMPOLINE_ADDRESS, PAGE_SIZE, PMEM_FLAG_NONE);
+    bool mapped = PMEM_map_memory(g_kernelPageTable, TRAMPOLINE_ADDRESS, TRAMPOLINE_ADDRESS, PAGE_SIZE, PMEM_FLAG_NONE);
     if (!mapped) {
         printf("Could not map AP trampoline\n");
         return;
@@ -228,7 +233,10 @@ typedef struct {
 
 
 void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
+    write_cr3((u64)g_kernelPageTable);
+
     int coreIndex = CPU_get_core_index(); // a little dangerous if APIC address caused fault
+    
     if (isr_number == 14) {
         u64 fault_address = read_cr2();
         printf("EXCEPTION #%d (rip=%x err=%x core=%d rsp=0x%x addr=0x%x)\n", isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp, fault_address);
@@ -436,9 +444,9 @@ void init_apic() {
 
     int coreIndex = CPU_get_core_index();
     EXEC_Core* core = &cores[coreIndex];
-    u64 syscall_stack_max = 0x4000;
-    void* syscall_stack = PMEM_alloc(syscall_stack_max);
-    core->syscall_stack = (char*)syscall_stack + syscall_stack_max;
+    core->syscall_stack_size = 0x4000;
+    void* syscall_stack = PMEM_alloc_phys(core->syscall_stack_size, PMEM_FLAG_IDENTITY_MAPPED);
+    core->syscall_stack = (char*)syscall_stack + core->syscall_stack_size;
     
     wrmsr(MSR_KERNEL_GS_BASE, (u64)core);
 
