@@ -71,10 +71,15 @@ _8060:
     or eax, 0x80000000 # PG bit (paging)
     mov cr0, eax
 
-    # @TODO I think each processor needs it's own Task State Segment
-    #   with their own ring0 stack and therefore their own GDT.
+    # Get Local APIC ID
+    mov eax, 1
+    cpuid
+    shr ebx, 24
+    mov edi, ebx
 
-    lgdt [_gdt_register] # Prepared by BSP in Kernel C code
+    imul ebx, 10
+
+    lgdt [_gdt_register + ebx] # Prepared by BSP in Kernel C code
     lidt [_idt_register]
 
     // Jump to long mode
@@ -90,16 +95,11 @@ _8100:
     mov ss, ax
  
     # Load Task State Segment
-    mov ax, 0x28
+    mov ax, 0x30
     ltr ax
 
-    # Get Local APIC ID
-    mov eax, 1
-    cpuid
-    shr ebx, 24
-    mov edi, ebx
-
     # Get small temporary stack for this processor
+    mov ebx, edi # ebx = apic id
     lea rsp, [initial_ap_stack_top]
     shl ebx, 12
     sub rsp, rbx

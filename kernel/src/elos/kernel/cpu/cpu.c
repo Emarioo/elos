@@ -205,11 +205,12 @@ typedef struct {
 #pragma pack(pop)
 
 
-GDT_Register _gdt_register;
-IDT_Register _idt_register;
-TSS_Entry    _tss_entry;
+_align(8) GDT_Register _gdt_register[CORE_LIMIT];
+_align(8) IDT_Register _idt_register; // Same for every core
+_align(16) TSS_Entry   _tss_entry[CORE_LIMIT];
 
-static u64 _gdt[(LAST_SEGMENT+16)/8]; // +16 for NULL and the width of the last segment
+static u64 _gdt[CORE_LIMIT][(LAST_SEGMENT+16)/8]; // +16 for NULL and the width of the last segment
+
 
 _align(16)
 static IDT_Entry _idt[256];
@@ -236,7 +237,7 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     write_cr3((u64)g_kernelPageTable);
 
     int coreIndex = CPU_get_core_index(); // a little dangerous if APIC address caused fault
-    
+
     if (isr_number == 14) {
         u64 fault_address = read_cr2();
         printf("EXCEPTION #%d (rip=%x err=%x core=%d rsp=0x%x addr=0x%x)\n", isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp, fault_address);
@@ -311,59 +312,63 @@ void idt_set_descriptor(uint8_t vector, void* isr, uint8_t flags) {
 extern u8 __text_start;
 extern u8 __data_start;
 
-u8 tss_stack_space[0x4000];
+u8 tss_stack_space[CORE_LIMIT][0x1000];
 
 void init_gdt() {
     
     asm ( "cli\n" );
 
-    _tss_entry.rsp0 = (u64)&tss_stack_space + sizeof(tss_stack_space);
+    for (int coreIndex=0;coreIndex<CORE_LIMIT;coreIndex++) {
+        _tss_entry[coreIndex].rsp0 = (u64)&tss_stack_space[coreIndex] + sizeof(tss_stack_space[coreIndex]);
 
-    // Null descriptor.
-    _gdt[0] = 0;
+        // Null descriptor.
+        _gdt[coreIndex][0] = 0;
 
-    #define GDT_PRESENT             0x80
-    #define GDT_CODE_OR_DATA        0x10
-    #define GDT_TSS                 0x00
-    #define GDT_RING0               0x00
-    #define GDT_RING3               0x60
-    #define GDT_EXEC_READ           0xA
-    #define GDT_WRITE_READ          0x2
-    #define GDT_TYPE_TSS_AVAILABLE  0x9
-    #define GDT_32_BIT_PROTECTED    0x4
+        #define GDT_PRESENT             0x80
+        #define GDT_CODE_OR_DATA        0x10
+        #define GDT_TSS                 0x00
+        #define GDT_RING0               0x00
+        #define GDT_RING3               0x60
+        #define GDT_EXEC_READ           0xA
+        #define GDT_WRITE_READ          0x2
+        #define GDT_TYPE_TSS_AVAILABLE  0x9
+        #define GDT_32_BIT_PROTECTED    0x4
 
-    #define GDT_LONG_MODE   0x2
+        #define GDT_LONG_MODE   0x2
+        
+        // Base and LIMIT are set to zero because they are ignored in 64-bit mode.
+
+        _gdt[coreIndex][KERNEL_CODE_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
+            GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING0|GDT_EXEC_READ, GDT_LONG_MODE);
+        
+        _gdt[coreIndex][KERNEL_DATA_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
+            GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING0|GDT_WRITE_READ, 0);
+        
+        // THIS IS NOT USED but here for completeness? base/limit needs to be set for correctness.
+        _gdt[coreIndex][USER_CODE_COMPATIBILITY_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
+            GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING3|GDT_EXEC_READ, GDT_32_BIT_PROTECTED);
+
+        _gdt[coreIndex][USER_DATA_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
+            GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING3|GDT_WRITE_READ, 0);
+
+        _gdt[coreIndex][USER_CODE_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
+            GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING3|GDT_EXEC_READ, GDT_LONG_MODE);
+
+        _gdt[coreIndex][TASK_STATE_SEGMENT/8] = MAKE_SEGMENT_DESC(&_tss_entry[coreIndex], sizeof(_tss_entry[coreIndex])-1,
+            GDT_PRESENT|GDT_TSS|GDT_TYPE_TSS_AVAILABLE, 0);
+
+        _gdt[coreIndex][TASK_STATE_SEGMENT/8 + 1] = 0; // @TODO _tss_entry exists in low 32-bit addess space so the "higher" part of TSS can just be zero.
+
+        // User data and code segment are in this order because of sysret loading CS = STAR 63:48 +16 and SS = STAR 63:48 +8
+
+        
+        _gdt_register[coreIndex].limit = sizeof(_gdt[coreIndex]) - 1;
+        _gdt_register[coreIndex].base = (u64)&_gdt[coreIndex];
+    }
     
-    // Base and LIMIT are set to zero because they are ignored in 64-bit mode.
+    int currentCoreIndex = CPU_get_core_index();
 
-    _gdt[KERNEL_CODE_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
-        GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING0|GDT_EXEC_READ, GDT_LONG_MODE);
-    
-    _gdt[KERNEL_DATA_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
-        GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING0|GDT_WRITE_READ, 0);
-    
-    // THIS IS NOT USED but here for completeness? base/limit needs to be set for correctness.
-    _gdt[USER_CODE_COMPATIBILITY_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
-        GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING3|GDT_EXEC_READ, GDT_32_BIT_PROTECTED);
-
-    _gdt[USER_DATA_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
-        GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING3|GDT_WRITE_READ, 0);
-
-    _gdt[USER_CODE_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
-        GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING3|GDT_EXEC_READ, GDT_LONG_MODE);
-
-    _gdt[TASK_STATE_SEGMENT/8] = MAKE_SEGMENT_DESC(&_tss_entry, sizeof(_tss_entry),
-        GDT_PRESENT|GDT_TSS|GDT_TYPE_TSS_AVAILABLE, 0);
-
-    _gdt[TASK_STATE_SEGMENT/8 + 1] = 0; // _tss_entry exists in low 32-bit addess space so the "higher" part of TSS can just be zero.
-
-    // User data and code segment are in this order because of sysret loading CS = STAR 63:48 +16 and SS = STAR 63:48 +8
-
-    
-    _gdt_register.limit = sizeof(_gdt) - 1;
-    _gdt_register.base = (u64)&_gdt;
-    
-    asm ( "lgdt %0\n" : : "m" (_gdt_register) );
+    asm ( "lgdt %0\n" : : "m" (_gdt_register[currentCoreIndex]) );
 
     // Load new descriptors.
     // We hardcode these in the inline assembly:
@@ -694,7 +699,13 @@ void CPU_sleep(u64 nanoseconds) {
 }
 
 int CPU_get_core_index() {
-    return g_lapic_base[APIC_APICID/4] >> 24;
+    if (g_lapic_base) {
+        return g_lapic_base[APIC_APICID/4] >> 24;
+    } else {
+        u32 eax, ebx, ecx, edx;
+        cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+        return ebx >> 24;
+    }
 }
 
 int CPU_get_core_count() {

@@ -153,7 +153,7 @@ def main():
             -serial file:kernel.log 
             -s 
             {"-S " if gdb else ""}
-            -smp 1
+            -smp 2
 
             -device ahci,id=ahci
             -drive  file={DISK_IMG},if=none,id=disk0,format=raw
