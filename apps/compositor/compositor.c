@@ -3,6 +3,7 @@
 
 #define ELOS_SYSCALL_IMPL
 #include "elos/syscalls.h"
+#include "elos/common/string.h"
 #include "elos/common/intrinsics.h"
 
 #include <stdarg.h>
@@ -62,19 +63,72 @@ void test_messaging() {
     
     printf("compositor: Created service.\n");
 
+    typedef struct {
+        char magic[4];
+        ELOS_SharedMemoryHandle handle;
+    } CompositorHeader;
+
+    
+    typedef struct {
+        volatile u32 term_counter;
+        volatile u32 comp_counter;
+        volatile u32 both_counter;
+    } SHM;
+
+    SHM* sharedMemories[10] = {0};
+    int sharedMemories_len = 0;
+
     while (1) {
         ELOS_ServiceEndpoint senderEndpoint;
         const u8* data;
         u64 size;
         error = SYS_service_recv(endpoint, &senderEndpoint, &data, &size, 0);
-        if (!data) {
-            sleep(10*1000000);
-            continue;
+        if (data) {
+            if (size >= 5 && !memcmp(data, "hello", 5)) {
+                ELOS_SharedMemoryHandle handle;
+                error = SYS_shared_memory_create(0x1000, &handle); 
+                if (error != ELOS_OK) {
+                    printf("compositor: SYS_shared_memory_create failed, %d\n", error);
+                } else {
+                    SYS_shared_memory_grant(handle, senderEndpoint); // grant not implemented but always succeeds.
+
+                    void* memory;
+                    u64 memory_size;
+                    error = SYS_shared_memory_info(handle, &memory, NULL);
+                    if (error != ELOS_OK) {
+                        printf("compositor: SYS_shared_memory_info failed, %d\n", error);
+                    } else {
+                        memset(memory, 0, sizeof(SHM));
+                        sharedMemories[sharedMemories_len] = memory;
+                        sharedMemories_len++;
+                        
+                        CompositorHeader header = {
+                            .magic = "COMP",
+                            .handle = handle,
+                        };
+                        printf("compositor: Sent shared memory handle\n");
+                        error = SYS_service_send(senderEndpoint, (u8*)&header, sizeof(header));
+                        if (error != ELOS_OK) {
+                            printf("compositor: SYS_service_send failed, %d\n", error);
+                        }
+                    }
+                }
+            }
         }
 
-        printf("compositor: Received %d bytes, '%c%c%c%c'\n", size, data[0], data[1], data[2], data[3]);
+        for (int i=0;i<ARRAY_LENGTH(sharedMemories);i++) {
+            SHM* shm = sharedMemories[i];
+            if (!shm) {
+                continue;
+            }
 
-        sleep(700*1000000);
+            __atomic_fetch_add(&shm->comp_counter, 1, __ATOMIC_SEQ_CST);
+            __atomic_fetch_add(&shm->both_counter, 1, __ATOMIC_SEQ_CST);
+            
+            printf("compositor: [%d] %d %d %d\n", i, shm->term_counter, shm->comp_counter, shm->both_counter);
+        }
+
+        sleep(10*1000000);
     }
 }
 

@@ -31,7 +31,7 @@ typedef enum {
     GLOBAL_CAP_PROCESS         = (1<<4),
     GLOBAL_CAP_NETWORK         = (1<<5),
     GLOBAL_CAP_TIME            = (1<<6),
-    GLOBAL_CAP_SHM             = (1<<7),
+    GLOBAL_CAP_SHARED_MEMORY   = (1<<7),
     GLOBAL_CAP_SERVICE_SERVER  = (1<<8),
     GLOBAL_CAP_SERVICE_CLIENT  = (1<<9),
 } ELOS_GlobalCapability;
@@ -68,9 +68,8 @@ typedef struct {
 } ELOS_FrameBuffer;
 
 typedef void* ELOS_ServiceEndpoint;
-typedef void* ELOS_SHMHandle;
+typedef void* ELOS_SharedMemoryHandle;
 
-#define ELOS_NULL_ENDPOINT (0)
 
 /*
     Returns capabilities of process.
@@ -165,7 +164,7 @@ ELOS_Error SYS_service_connect(const char* name, ELOS_ServiceEndpoint* endpoint,
     @param size Size of buffer to send.
     @return ELOS_IPC_FULL if service channel is full. ELOS_INVALID_PARAM if endpoint or data pointer are invalid.
 */
-ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint senderEndpoint, const u8* data, u64 size);
+ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, const u8* data, u64 size);
 
 
 /*
@@ -187,30 +186,30 @@ ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint*
 /*
     Allocate memory that can be shared with other processes.
 
-    @pre GLOBAL_CAP_SHM capability is required.
+    @pre GLOBAL_CAP_SHARED_MEMORY capability is required.
 */
-ELOS_Error SYS_shm_create(u64 size, ELOS_SHMHandle* handle);
+ELOS_Error SYS_shared_memory_create(u64 size, ELOS_SharedMemoryHandle* handle);
 
 
 /*
     Share memory with another process. Use service functions to acquire the endpoint.
 
-    @pre GLOBAL_CAP_SHM capability is required.
+    @pre GLOBAL_CAP_SHARED_MEMORY capability is required.
 */
-ELOS_Error SYS_shm_grant(ELOS_SHMHandle handle, ELOS_ServiceEndpoint endpoint);
+ELOS_Error SYS_shared_memory_grant(ELOS_SharedMemoryHandle handle, ELOS_ServiceEndpoint endpoint);
 
 
 /*
     Information about the shared memory.
 
-    @pre GLOBAL_CAP_SHM capability is required.
+    @pre GLOBAL_CAP_SHARED_MEMORY capability is required.
 */
-ELOS_Error SYS_shm_info(ELOS_SHMHandle handle, void** buffer, u64* size);
+ELOS_Error SYS_shared_memory_info(ELOS_SharedMemoryHandle handle, void** buffer, u64* size);
 
 
 
 
-
+// @TODO Auto-generate stuff below?
 
 
 typedef enum {
@@ -229,9 +228,9 @@ typedef enum {
     _SYS_SERVICE_CONNECT,
     _SYS_SERVICE_SEND,
     _SYS_SERVICE_RECV,
-    _SYS_SHM_CREATE,
-    _SYS_SHM_GRANT,
-    _SYS_SHM_INFO,
+    _SYS_SHARED_MEMORY_CREATE,
+    _SYS_SHARED_MEMORY_GRANT,
+    _SYS_SHARED_MEMORY_INFO,
 } ELOS_SyscallID;
 
 
@@ -359,9 +358,9 @@ ELOS_Error SYS_service_connect(const char* name, ELOS_ServiceEndpoint* endpoint,
     return rax;
 }
 
-ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint senderEndpoint, const u8* data, u64 size) {
+ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, const u8* data, u64 size) {
     ELOS_Error rax;
-    SYSCALL4(_SYS_SERVICE_SEND, endpoint, senderEndpoint, data, size);
+    SYSCALL3(_SYS_SERVICE_SEND, endpoint, data, size);
     return rax;
 }
 
@@ -371,21 +370,21 @@ ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint*
     return rax;
 }
 
-ELOS_Error SYS_shm_create(u64 size, ELOS_SHMHandle* handle) {
+ELOS_Error SYS_shared_memory_create(u64 size, ELOS_SharedMemoryHandle* handle) {
     ELOS_Error rax;
-    SYSCALL2(_SYS_SHM_CREATE, size, handle);
+    SYSCALL2(_SYS_SHARED_MEMORY_CREATE, size, handle);
     return rax;
 }
 
-ELOS_Error SYS_shm_grant(ELOS_SHMHandle handle, ELOS_ServiceEndpoint endpoint) {
+ELOS_Error SYS_shared_memory_grant(ELOS_SharedMemoryHandle handle, ELOS_ServiceEndpoint endpoint) {
     ELOS_Error rax;
-    SYSCALL2(_SYS_SHM_GRANT, handle, endpoint);
+    SYSCALL2(_SYS_SHARED_MEMORY_GRANT, handle, endpoint);
     return rax;
 }
 
-ELOS_Error SYS_shm_info(ELOS_SHMHandle handle, void** buffer, u64* size)  {
+ELOS_Error SYS_shared_memory_info(ELOS_SharedMemoryHandle handle, void** buffer, u64* size)  {
     ELOS_Error rax;
-    SYSCALL3(_SYS_SHM_INFO, handle, buffer, size);
+    SYSCALL3(_SYS_SHARED_MEMORY_INFO, handle, buffer, size);
     return rax;
 }
 

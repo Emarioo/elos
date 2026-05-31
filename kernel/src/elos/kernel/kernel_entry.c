@@ -212,11 +212,11 @@ void kernel_entry(BootAPI* in_boot_api) {
     EXEC_init();
 
     // Create user terminal process
-    EXEC_create_user_thread("/dev0p0/term.elf", -1);
+    EXEC_create_user_thread("/dev0p0/term.elf", 0);
 
     CPU_sleep(1500000000);
 
-    EXEC_create_user_thread("/dev0p0/compositor.elf", -1);
+    EXEC_create_user_thread("/dev0p0/compositor.elf", 1);
 
 
     kernel_idle();

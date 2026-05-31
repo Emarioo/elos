@@ -8,6 +8,9 @@
 #include "elos/physical_memory.h"
 
 
+#define MARK_ENDPOINT(ADDR) ( (u64)(ADDR) | 1LU )
+#define NORMALIZE_ENDPOINT(ADDR) (void*) ( (u64)(ADDR) & ~1LU )
+#define IS_ENDPOINT_MARKED(ADDR) ( ( (u64)(ADDR) & 1LU ) != 0 )
 
 #define MESSAGE_HEADER_LENGTH sizeof(u16)
 #define MAX_MESSAGE_SIZE ((1 << (8*MESSAGE_HEADER_LENGTH))-1)
@@ -181,7 +184,7 @@ exit:
     return returnValue;
 }
 
-bool SRV_service_send(ServiceEndpoint* endpoint, ServiceEndpoint* senderEndpoint, const u8* data, u64 size) {
+bool SRV_service_send(ServiceEndpoint* _endpoint, const u8* data, u64 size) {
     if (size > MAX_MESSAGE_SIZE || size <= 0)
         return false;
 
@@ -195,8 +198,10 @@ bool SRV_service_send(ServiceEndpoint* endpoint, ServiceEndpoint* senderEndpoint
     //    Very strange of course but we must validated that endpoint actually exists and that it is owned
     //    by the user process making the syscall.
 
+    ServiceEndpoint* endpoint = NORMALIZE_ENDPOINT(_endpoint);
+
     RingBuffer* buffer;
-    if (endpoint->isService) {
+    if (endpoint->isService || IS_ENDPOINT_MARKED(_endpoint)) {
         buffer = &endpoint->toClient;
     } else {
         buffer = &endpoint->toService;
@@ -225,11 +230,21 @@ exit:
     return returnValue;
 }
 
-void dbg() {
-
-}
-
 bool SRV_service_recv(ServiceEndpoint* _endpoint, ServiceEndpoint** senderEndpoint, u8** data, u64* size, u64 timeout_ns) {
+    if (IS_ENDPOINT_MARKED(_endpoint)) {
+        // Not allowed to receive from "senderEndpoints".
+        // senderEndpoints are only meant to be used with SRV_service_send OR SRV_shared_memory_grant.
+        // If you do receive from it then you are receiving as client which makes no sense.
+        
+        // @TODO Current "mark" implementation lets us determine who to send to using the same ServiceEndpoint.
+        //   But we should probably clone the endpoint and flip the isService flag instead.
+        //   However, the idea is that the ring buffers are used for them both.
+        //   I think really what want is a ServiceChannel which stores the ring buffers and two
+        //   ServiceEndpoints which refer to the channel anc contain the 'isService' boolean which
+        //   determines which ring buffer to push/pull to/from when sending and receiving.
+        return false;
+    }
+    
     bool returnValue = false;
     LOCK_INT(&g_service_lock);
 
@@ -276,15 +291,15 @@ bool SRV_service_recv(ServiceEndpoint* _endpoint, ServiceEndpoint** senderEndpoi
                 continue;
             }
 
-            dbg();
-
             u16 payloadSize;
             ringbuf_read(buffer, &payloadSize, sizeof(payloadSize));
             ringbuf_read(buffer, endpoint->phys_recvBuffer, payloadSize);
 
             *data = endpoint->phys_recvBuffer; // should be identity mapped
             *size = payloadSize;
-            *senderEndpoint = endpoint;
+            if (senderEndpoint) {
+                *senderEndpoint = (void*)((u64)endpoint | 1);
+            }
 
             service->clientLinkedList_last = service->clientLinkedList;
             service->clientLinkedList = service->clientLinkedList->nextEndpoint;
@@ -315,7 +330,7 @@ bool SRV_service_recv(ServiceEndpoint* _endpoint, ServiceEndpoint** senderEndpoi
 
         u16 payloadSize;
         ringbuf_read(buffer, &payloadSize, sizeof(payloadSize));
-        ringbuf_read(buffer, data, payloadSize);
+        ringbuf_read(buffer, endpoint->phys_recvBuffer, payloadSize);
 
         *data = endpoint->phys_recvBuffer; // should be identity mapped
         *size = payloadSize;
@@ -327,3 +342,64 @@ exit:
     UNLOCK_INT(&g_service_lock);
     return returnValue;
 }
+
+
+#define MAX_SHARED_MEMORY 128
+
+SharedMemory g_shared_memories[MAX_SHARED_MEMORY];
+u32 g_shared_memories_len;
+
+
+bool SRV_shared_memory_create(u64 size, SharedMemory** handle) {
+    bool returnValue = false;
+    LOCK_INT(&g_service_lock);
+
+    if (g_shared_memories_len >= MAX_SHARED_MEMORY) {
+        goto exit;
+    }
+
+    void* buffer = PMEM_alloc_phys(size, PMEM_FLAG_IDENTITY_MAPPED);
+    if (!buffer) {
+        goto exit;
+    }
+    memset(buffer, 0x9A, size);
+
+    SharedMemory* sharedMemory = &g_shared_memories[g_shared_memories_len];
+    g_shared_memories_len++;
+
+    sharedMemory->buffer = buffer;
+    sharedMemory->buffer_size = size;
+
+    *handle = sharedMemory;
+    returnValue = true;
+
+exit:
+    UNLOCK_INT(&g_service_lock);
+    return returnValue;
+}
+
+
+bool SRV_shared_memory_grant(SharedMemory* handle, ServiceEndpoint* endpoint) {
+    // @TODO For now, anyone with the handle can access it. Very bad. Works for now.
+    return true;
+}
+
+bool SRV_shared_memory_info(SharedMemory* handle, void** buffer, u64* size) {
+    bool returnValue = false;
+    LOCK_INT(&g_service_lock);
+
+    // @TODO Validate handle. Is it null, invalid memory, accessible?
+
+    if (buffer) {
+        *buffer = handle->buffer;
+    }
+    if (size) {
+        *size = handle->buffer_size;
+    }
+    returnValue = true;
+
+exit:
+    UNLOCK_INT(&g_service_lock);
+    return returnValue;
+}
+

@@ -55,6 +55,7 @@ void ap_trampoline(); // defined in assembly
 void init_gdt();
 void init_idt();
 void init_apic();
+void init_syscall();
 void calibrate_tsc();
 
 // MUST BE PAGE ALIGNED. Address is hardcoded in trampoline assembly.
@@ -93,37 +94,7 @@ void CPU_init(BootAPI* boot_api) {
     g_lapic_base = (void*)acpi_lapic_address;
 
     init_apic();
-
-
-    // Setup syscalls
-    // @TODO Check cpuid
-    
-
-    #define MSR_STAR 0xc0000081
-    #define MSR_LSTAR 0xc0000082
-    #define MSR_CSTAR 0xc0000083
-    #define MSR_SFMASK 0xc0000084
-
-    // @TODO data segment must be CS+8 in GDT. syscall expects this.
-    //    Similar restriction for user land CS and SS.
-    //    (add assert for this)
-
-    // We assume that
-    //   userland SS = USER_CODE_COMPATIBILITY_SEGMENT+8
-    //   userland CS = USER_CODE_COMPATIBILITY_SEGMENT+16
-    //   32-bit compatiblity CS = USER_CODE_COMPATIBILITY_SEGMENT
-    u64 star = ((u64)(KERNEL_CODE_SEGMENT) << 32)
-        | ((u64)(USER_CODE_COMPATIBILITY_SEGMENT) << 48);
-    u64 lstar = (u64)syscall_handler;
-    u64 sfmask = 0x200LU; // Clears interrupt enable flag.
-    wrmsr(MSR_STAR,   star);
-    wrmsr(MSR_LSTAR,  lstar);
-    wrmsr(MSR_SFMASK, sfmask);
-
-    #define MSR_IA32_EFER 0xC0000080
-    u64 efer = rdmsr(MSR_IA32_EFER);
-    efer |= 1; // SYSCALL ENABLE (for 64-bit intel)
-    wrmsr(MSR_IA32_EFER, efer);
+    init_syscall();
 
 
 
@@ -431,7 +402,38 @@ void cpuWriteIoApic(void *ioapicaddr, uint32_t reg, uint32_t value)
    ioapic[4] = value;
 }
 
+void init_syscall() {
+    // Setup syscalls
+    // @TODO Check cpuid
+    
 
+    #define MSR_STAR 0xc0000081
+    #define MSR_LSTAR 0xc0000082
+    #define MSR_CSTAR 0xc0000083
+    #define MSR_SFMASK 0xc0000084
+
+    // @TODO data segment must be CS+8 in GDT. syscall expects this.
+    //    Similar restriction for user land CS and SS.
+    //    (add assert for this)
+
+    // We assume that
+    //   userland SS = USER_CODE_COMPATIBILITY_SEGMENT+8
+    //   userland CS = USER_CODE_COMPATIBILITY_SEGMENT+16
+    //   32-bit compatiblity CS = USER_CODE_COMPATIBILITY_SEGMENT
+    u64 star = ((u64)(KERNEL_CODE_SEGMENT) << 32)
+        | ((u64)(USER_CODE_COMPATIBILITY_SEGMENT) << 48);
+    u64 lstar = (u64)syscall_handler;
+    u64 sfmask = 0x200LU; // Clears interrupt enable flag.
+    wrmsr(MSR_STAR,   star);
+    wrmsr(MSR_LSTAR,  lstar);
+    wrmsr(MSR_SFMASK, sfmask);
+
+    #define MSR_IA32_EFER 0xC0000080
+    u64 efer = rdmsr(MSR_IA32_EFER);
+    efer |= 1; // SYSCALL ENABLE (for 64-bit intel)
+    wrmsr(MSR_IA32_EFER, efer);
+
+}
 
 void init_apic() {
     if (!acpi_ioapic_array_len) {
@@ -772,6 +774,7 @@ void ap_entry(int id) {
     //   If there's no other thread to execute.
 
     init_apic();
+    init_syscall();
 
     while (1) pause();
 }

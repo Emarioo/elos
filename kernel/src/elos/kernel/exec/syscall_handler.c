@@ -271,9 +271,8 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         } break;
         case _SYS_SERVICE_SEND: {
             ELOS_ServiceEndpoint endpoint = (void*)arg0;
-            ELOS_ServiceEndpoint senderEndpoint = (void*)arg1;
-            const u8* data = (void*)arg2;
-            u64 size = arg3;
+            const u8* data = (void*)arg1;
+            u64 size = arg2;
 
             // @TODO Check capability
             
@@ -287,7 +286,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 break;
             }
 
-            bool result = SRV_service_send((ServiceEndpoint*)endpoint, (ServiceEndpoint*)senderEndpoint, phys_data, size);
+            bool result = SRV_service_send((ServiceEndpoint*)endpoint, phys_data, size);
             
             write_cr3((u64)userPageTable);
 
@@ -320,7 +319,9 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             write_cr3((u64)userPageTable);
 
-            *senderEndpoint = (ELOS_ServiceEndpoint)tmp_senderEndpoint;
+            if (senderEndpoint) {
+                *senderEndpoint = (ELOS_ServiceEndpoint)tmp_senderEndpoint;
+            }
             *data = tmp_data;
             *size = tmp_size;
 
@@ -330,27 +331,81 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 returnValue = ELOS_OK;
             }
         } break;
-        /*
+        case _SYS_SHARED_MEMORY_CREATE: {
+            u64 size = arg0;
+            ELOS_SharedMemoryHandle* handle = (void*)arg1;
 
-ELOS_Error SYS_shm_create(u64 size, ELOS_SHMHandle* handle) {
-    ELOS_Error rax;
-    SYSCALL2(_SYS_SHM_CREATE, size, handle);
-    return rax;
-}
+            // @TODO Check capability
+            
+            write_cr3((u64)g_kernelPageTable);
 
-ELOS_Error SYS_shm_grant(ELOS_SHMHandle handle, ELOS_ServiceEndpoint endpoint) {
-    ELOS_Error rax;
-    SYSCALL2(_SYS_SHM_GRANT, handle, endpoint);
-    return rax;
-}
+            SharedMemory* tmp_handle;
 
-ELOS_Error SYS_shm_info(ELOS_SHMHandle handle, void** buffer, u64* size)  {
-    ELOS_Error rax;
-    SYSCALL3(_SYS_SHM_INFO, handle, buffer, size);
-    return rax;
-}
+            bool result = SRV_shared_memory_create(size, &tmp_handle);
 
-        */
+            write_cr3((u64)userPageTable);
+
+            if (!result) {
+                returnValue = ELOS_GENERIC_ERROR;
+            } else {
+                *handle = (void*)tmp_handle;
+                returnValue = ELOS_OK;
+            }
+        } break;
+        case _SYS_SHARED_MEMORY_GRANT: {
+            ELOS_SharedMemoryHandle handle = (void*)arg0;
+            ELOS_ServiceEndpoint endpoint = (void*)arg1;
+
+            // @TODO Check capability
+            
+            write_cr3((u64)g_kernelPageTable);
+
+            bool result = SRV_shared_memory_grant((SharedMemory*)handle, (ServiceEndpoint*)endpoint);
+
+            write_cr3((u64)userPageTable);
+
+            if (!result) {
+                returnValue = ELOS_GENERIC_ERROR;
+            } else {
+                returnValue = ELOS_OK;
+            }
+        } break;
+        case _SYS_SHARED_MEMORY_INFO: {
+            ELOS_SharedMemoryHandle handle = (void*)arg0;
+            void** buffer = (void**)arg1;
+            u64* size = (void*)arg2;
+
+            // @TODO Check capability
+            
+            write_cr3((u64)g_kernelPageTable);
+
+            void* tmp_buffer;
+            u64 tmp_size;
+            bool result = SRV_shared_memory_info((SharedMemory*)handle, &tmp_buffer, &tmp_size);
+
+            if (result) {
+                bool mapped = PMEM_map_memory(userPageTable, tmp_buffer, tmp_buffer, tmp_size, PMEM_FLAG_USER_SPACE);
+                if (!mapped) {
+                    returnValue = ELOS_GENERIC_ERROR;
+                    write_cr3((u64)userPageTable);
+                    break;
+                }
+            }
+
+            write_cr3((u64)userPageTable);
+
+            if (!result) {
+                returnValue = ELOS_GENERIC_ERROR;
+            } else {
+                if (buffer) {
+                    *buffer = tmp_buffer;
+                }
+                if (size) {
+                    *size = tmp_size;
+                }
+                returnValue = ELOS_OK;
+            }
+        } break;
         default: {
             returnValue = ELOS_INVALID_SYSCALL;
         } break;

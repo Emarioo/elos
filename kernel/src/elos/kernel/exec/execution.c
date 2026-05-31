@@ -126,7 +126,7 @@ bool EXEC_create_kernel_thread(void* entry, int pinnedCoreIndex) {
     found_thread->entry = entry;
 
     u64 rsp = (u64)found_thread->stack + found_thread->stack_size;
-    rsp -= 0x100; // get some extra room
+    rsp -= 0x8; // So that we at _start when we push rbp have 16-byte aligned stack.
 
     InterruptFrame* frame = &found_thread->frame;
     memset(frame, 0, sizeof(*frame));
@@ -201,7 +201,7 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex) {
     found_thread->entry = object.entry_point;
 
     u64 rsp = (u64)found_thread->stack + found_thread->stack_size;
-    rsp -= 0x100; // get some extra room
+    rsp -= 0x8; // So that we at _start when we push rbp have 16-byte aligned stack.
 
     InterruptFrame* frame = &found_thread->frame;
     memset(frame, 0, sizeof(*frame));

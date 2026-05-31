@@ -110,25 +110,61 @@ void test_messaging() {
 
     printf("terminal: Established compositor endpoint.\n");
 
-    // while (1) pause();
+    char message[256];
+    int len = snprintf(message, sizeof(message), "hello");
 
-    int counter = 0;
+    error = SYS_service_send(endpoint, message, len + 1);
+    if (error != ELOS_OK) {
+        printf("terminal: Could not send 'hello'\n");
+        while (1) pause();
+    }
+
+    const u8* data;
+    u64 data_size;
     while (1) {
-        counter++;
-
-        ELOS_ServiceEndpoint senderEndpoint;
-        char buffer[256];
-        int len = snprintf(buffer, sizeof(buffer), "M%d", counter),
-        error = SYS_service_send(endpoint, ELOS_NULL_ENDPOINT, buffer, len + 1);
-        if (error != ELOS_OK) {
-            printf("terminal: Could not send\n");
-            sleep(1200*1000000);
+        error = SYS_service_recv(endpoint, NULL, &data, &data_size, 0);
+        if (error != ELOS_OK || !data) {
+            printf("terminal: no recv, %d, %x %d\n", error, data, data_size);
+            pause();
+            sleep(100*1000000);
             continue;
         }
+        break;
+    }
 
-        printf("terminal: Sent number %d\n", counter);
+    typedef struct {
+        char magic[4];
+        ELOS_SharedMemoryHandle handle;
+    } CompositorHeader;
 
-        sleep(100*1000000);
+    CompositorHeader* header = (void*)data;
+    
+    void* memory;
+    u64   memory_size;
+    error = SYS_shared_memory_info(header->handle, &memory, &memory_size);
+    if (error != ELOS_OK) {
+        printf("terminal: SYS_shared_memory_info error, %d\n", error);
+        while (1) pause();
+    }
+
+    printf("terminal: Received shared memory: %c%c%c%c, %x\n",
+        header->magic[0], header->magic[1], header->magic[2], header->magic[3], header->handle);
+
+    typedef struct {
+        volatile u32 term_counter;
+        volatile u32 comp_counter;
+        volatile u32 both_counter;
+    } SHM;
+
+    SHM* shm = memory;
+
+    while (1) {
+        __atomic_fetch_add(&shm->term_counter, 1, __ATOMIC_SEQ_CST);
+        __atomic_fetch_add(&shm->both_counter, 1, __ATOMIC_SEQ_CST);
+        
+        printf("terminal: %d %d %d\n", shm->term_counter, shm->comp_counter, shm->both_counter);
+
+        sleep(10*1000000);
     }
 }
 
