@@ -47,11 +47,30 @@ void draw_rect(int x, int y, int w, int h, u32 rgba) {
     }
 }
 
+
 #define COLOR 0xFF861394
+
+u64 tsc_per_sec;
+
+void sleep(u64 ns) {
+    u64 start = rdtsc();
+    while (1) {
+        u64 now = rdtsc();
+        if (now - start > (tsc_per_sec*ns)/1000000000 )
+            break;
+        pause();
+    }
+}
 
 void _start() {
 
-    printf("Start terminal\n");
+    SYS_ticks_per_second(&tsc_per_sec);
+
+    printf("Starting terminal\n");
+    while (1) {
+        printf("Running terminal\n");
+        sleep(500*1000000);
+    }
 
     ELOS_Error error = SYS_default_monitor(&g_frame_buffer);
     if (error != ELOS_OK) {

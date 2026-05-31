@@ -27,46 +27,46 @@ bool scheduling_enabled;
 void EXEC_terminate_self_end();
 void thread_bootstrap(FN_ThreadEntry entry);
 
-u64 EXEC_timer_handler(InterruptFrame* frame) {
+void EXEC_timer_handler(InterruptFrame* frame) {
     int coreIndex = CPU_get_core_index();
 
     if (!scheduling_enabled)
-        return (u64)frame;
+        return;
 
-    u64 returnValue;
     EXEC_Core* core = &cores[coreIndex];
 
 
     LOCK(&core->thread_lock);
 
     int currentThread_index = core->active_thread;
-    EXEC_Thread* currentThread = &core->threads[core->active_thread];
+    EXEC_Thread* currentThread = &core->threads[currentThread_index];
     EXEC_Thread* nextThread = NULL;
 
-    if (frame->rip == (u64)EXEC_terminate_self_end) {
+    if (currentThread->used && frame->rip == (u64)EXEC_terminate_self_end) {
         currentThread->used = false;
     }
 
     while (1) {
         core->active_thread = (core->active_thread + 1) % THREAD_LIMIT;
-        if (core->threads[core->active_thread].used || currentThread_index == core->active_thread) {
+        if (currentThread_index == core->active_thread && !currentThread->used) {
+            // Did not find any. Use idle thread.
+            nextThread = &core->idleThread;
+            break;
+        } else if (core->threads[core->active_thread].used) {
             nextThread = &core->threads[core->active_thread];
             break;
         }
     }
-
-    if (currentThread == nextThread || nextThread == NULL) {
-        // do nothing
-        returnValue = (u64)frame;
-        goto exit;
+    if (currentThread == nextThread) {
+        // There's only one thread.
+    } else {
+        memcpy(&currentThread->frame, frame, sizeof(*frame));
+        memcpy(frame, &nextThread->frame, sizeof(*frame));
     }
-
-    currentThread->frame = frame;
-    returnValue = (u64)nextThread->frame;
 
 exit:
     UNLOCK(&core->thread_lock);
-    return returnValue;
+    return;
 }
 
 void EXEC_init() {
@@ -78,9 +78,6 @@ void EXEC_init() {
     EXEC_Thread* this_thread = &core->threads[0];
     this_thread->used = true;
     core->active_thread = 0;
-
-    // EXEC_create_kernel_thread(test_thread1);
-    // EXEC_create_kernel_thread(test_thread2);
 
     printf("Enable scheduling\n");
     scheduling_enabled = true;
@@ -131,8 +128,8 @@ bool EXEC_create_kernel_thread(void* entry, int pinnedCoreIndex) {
     u64 rsp = (u64)found_thread->stack + found_thread->stack_size;
     rsp -= 0x100; // get some extra room
 
-    InterruptFrame* frame = (InterruptFrame*)(rsp - sizeof(InterruptFrame));
-    found_thread->frame = frame;
+    InterruptFrame* frame = &found_thread->frame;
+    memset(frame, 0, sizeof(*frame));
     frame->cs = KERNEL_CODE_SEGMENT;
     frame->ss = KERNEL_DATA_SEGMENT;
     frame->rsp = rsp;
@@ -206,8 +203,8 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex) {
     u64 rsp = (u64)found_thread->stack + found_thread->stack_size;
     rsp -= 0x100; // get some extra room
 
-    InterruptFrame* frame = (InterruptFrame*)(rsp - sizeof(InterruptFrame));
-    found_thread->frame = frame;
+    InterruptFrame* frame = &found_thread->frame;
+    memset(frame, 0, sizeof(*frame));
     frame->cs = USER_CODE_SEGMENT | 3;
     frame->ss = USER_DATA_SEGMENT | 3;
     frame->rsp = rsp;

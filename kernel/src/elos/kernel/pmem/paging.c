@@ -59,6 +59,13 @@ void init_paging(BootAPI* boot_api) {
 
     // We assume EFI identically mapped physical and virtual address of the kernel.
 
+    // @TODO Implement PCID (process context ID) and global pages for kernel.
+    //   This optimizes TLB flushing when writing cr3. Or rather we don't flush TLB
+    //   but when we do a virt to phys translation and the PCID of the cached address differs
+    //   from current PCID in cr3 then we flush it as needed.
+    //   Marking kernel pages global means they don't get flushed when PCID differs since we
+    //   want them to be the same for every page table in every process. (no need to flush)
+
     g_kernelPageTable = get_fixed_table();
     Page* rootTable = g_kernelPageTable;
 

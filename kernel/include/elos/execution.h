@@ -8,7 +8,7 @@
 typedef void(*FN_ThreadEntry)();
 
 typedef struct {
-    InterruptFrame* frame;
+    InterruptFrame  frame;
     void*           stack;
     FN_ThreadEntry  entry;
     u32             stack_size;
@@ -31,6 +31,7 @@ typedef struct {
 
     // Free to modify, not used by assembly
     EXEC_Thread threads[THREAD_LIMIT];
+    EXEC_Thread idleThread; // kernel idle thread
     int active_thread;
     volatile u32 thread_lock;
 } EXEC_Core;
@@ -52,7 +53,7 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex);
 
 void EXEC_terminate_self();
 
-u64 EXEC_timer_handler(InterruptFrame* frame);
+void EXEC_timer_handler(InterruptFrame* frame);
 
 u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3);
 

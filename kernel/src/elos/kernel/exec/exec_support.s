@@ -77,8 +77,7 @@ timer_isr:
 
     call EXEC_timer_handler
 
-    # Switch to different thread, the stack of that thread has all registers pushed
-    mov rsp, rax
+    # The called function will memcpy the new process's registers into the stack (rdi) we gave it.
     
     # Clear EOI (end of interrupt), so next timer interrupt can arrive (and other interrupts like keyboard)
     mov rbx, g_lapic_base
