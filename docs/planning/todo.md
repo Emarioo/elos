@@ -19,8 +19,15 @@ The categories are:
 Tasks related to kernel and operating system
 
 ## @current
-- [ ] Scheduler. context switch, enable multiple processors, load executable.
+- [ ] Text editor.
+- [ ] Terminal.
+- [ ] PRISM Compositor, moving and resizing windows, double buffering, transparent windows, input passthrough. Keyboard and mouse input.
+- [ ] Kernel keyboard syscalls.
+- [ ] Kernel mouse syscalls. (maybe generic input syscalls for keyboard, controller, mouse?)
+- [ ] Kernel audio syscalls.
+- [ ] Audio server.
 - [ ] Driver for file system, disk device.
+- [ ] DOOM port.
 
 ## @urgent
 - [ ] Exception handler that prints useful info. rax, rdx, RIP, RSP, RBP. This is currently not correct. It needs to be correct for page faults and general protection.

@@ -12,8 +12,6 @@ The following tools/binaries exist:
 import os, sys, platform, shutil, shlex, glob, math, threading, multiprocessing, dataclasses, subprocess
 from dataclasses import dataclass
 
-import apps.compositor
-import apps.terminal
 
 
 ########################
@@ -118,8 +116,17 @@ def main():
     #     build_image("bin/elos.img")
         # cmd("dd if=bin/elos.img of=bin/elos_padded.img bs=1M count=64 conv=sync")
 
+
     if img:
         package_elos("releases", iso)
+
+        if run:
+            import apps.prism.build
+            import apps.terminal.build
+            apps.prism.build.main("scripts/disk_fs/prism.elf")
+            cmd("objdump -S scripts/disk_fs/prism.elf > prism.dis")
+            apps.terminal.build.main("scripts/disk_fs/term.elf")
+            cmd("objdump -S scripts/disk_fs/term.elf > term.dis")
 
     if netboot:
         cmd(f"{netboot_server_bin}")
@@ -127,11 +134,6 @@ def main():
     elif run:
         # TODO: DON'T HARDCODE PATHS
         OVMF_FD = "extern/ovmf/OVMF.fd"
-
-        import apps.compositor.build
-        import apps.terminal.build
-        apps.compositor.build.main("scripts/disk_fs/compositor.elf")
-        apps.terminal.build.main("scripts/disk_fs/term.elf")
 
         DISK_IMG = "int/disk.img"
         # if not os.path.exists(DISK_IMG):

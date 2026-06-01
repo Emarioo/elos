@@ -67,8 +67,13 @@ typedef struct {
     u32* pixels;
 } ELOS_FrameBuffer;
 
+// @TODO Can endpoint handles be reused? Services want a way to map an endpoint to an internal struct.
+//   If endpoint is reused then If they can then how does service get an application ID that is unique so
+//   others can't d
 typedef void* ELOS_ServiceEndpoint;
 typedef void* ELOS_SharedMemoryHandle;
+
+#define ELOS_NULL_HANDLE (NULL)
 
 
 /*
@@ -164,7 +169,7 @@ ELOS_Error SYS_service_connect(const char* name, ELOS_ServiceEndpoint* endpoint,
     @param size Size of buffer to send.
     @return ELOS_IPC_FULL if service channel is full. ELOS_INVALID_PARAM if endpoint or data pointer are invalid.
 */
-ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, const u8* data, u64 size);
+ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, const void* data, u64 size);
 
 
 /*
@@ -180,7 +185,7 @@ ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, const u8* data, u64 s
         -1 to block until message is received.
     @return ELOS_INVALID_PARAM if handle or data pointer are invalid.
 */
-ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint* senderEndpoint, const u8** data, u64* size, u64 timeout_ns);
+ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint* senderEndpoint, const void** data, u64* size, u64 timeout_ns);
 
 
 /*
@@ -358,13 +363,13 @@ ELOS_Error SYS_service_connect(const char* name, ELOS_ServiceEndpoint* endpoint,
     return rax;
 }
 
-ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, const u8* data, u64 size) {
+ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, const void* data, u64 size) {
     ELOS_Error rax;
     SYSCALL3(_SYS_SERVICE_SEND, endpoint, data, size);
     return rax;
 }
 
-ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint* senderEndpoint, const u8** data, u64* size, u64 timeout_ns) {
+ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint* senderEndpoint, const void** data, u64* size, u64 timeout_ns) {
     ELOS_Error rax;
     SYSCALL5(_SYS_SERVICE_RECV, endpoint, senderEndpoint, data, size, timeout_ns);
     return rax;

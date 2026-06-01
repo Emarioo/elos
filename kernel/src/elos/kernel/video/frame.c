@@ -119,8 +119,6 @@ static Font g_tempFont = { .format = FONT_FORMAT_NONE, .glyphWidth = 8, .glyphHe
 // }
 
 void draw_rect(int x, int y, int w, int h, u32 rgba) {
-    // EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE* const mode = kernel__core_data->graphics_output->Mode;
-
     if (x < 0) {
         w += x;
         x = 0;

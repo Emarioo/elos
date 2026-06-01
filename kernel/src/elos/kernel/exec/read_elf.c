@@ -141,8 +141,12 @@ bool parse_elf(ParseContext* ctx) {
         goto exit;
     }
 
-    void* virt_image_base = (void*)(u64)0xC0000000;
+    static int elf_count = 0;
+    // We give each ELF a different offset so we have a better idea
+    // which ELF a page fault address belongs too.
+    void* virt_image_base = (void*)(u64)0xC0000000 + elf_count * 0x100000;
     void* phys_image_base = PMEM_alloc_phys(image_size, PMEM_FLAG_NONE);
+    elf_count++;
     
 
     PageTable* pageTable = PMEM_allocPageTable();

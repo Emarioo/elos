@@ -37,6 +37,14 @@ struct ServiceEndpoint {
     ServiceEndpoint* nextEndpoint;
 };
 
+/*
+    @TODO If the service crashes and restarts then we want applications to reconnect.
+      Audio server crashes and all applications has to restart to get the new ServiceEndpoint...
+      NOOO! that sucks. When restating and creating service again we reuse old endpoint?
+      What if a malicious program is able to reuse and steal the endpoint?
+      For audio maybe that's fine but you may have more important processes.
+*/
+
 bool SRV_service_create(const char* name, ServiceEndpoint** endpoint, u64 queueSize);
 
 bool SRV_service_connect(const char* name, ServiceEndpoint** endpoint, u64 queueSize);
