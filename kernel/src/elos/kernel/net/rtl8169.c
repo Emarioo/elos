@@ -49,17 +49,22 @@ bool rtl8169_init() {
     return true;
 }
 
-
+// @IMPORTANT Buffer sizes can't be increased without reading the specification.
+//   I believe max size is 0x1FF8 2^13-8
 #define rx_buffer_len 2048
 #define rx_descriptors_len 128
 #define tx_buffer_len 2048
 #define tx_descriptors_len 128
 
 
-Descriptor* rx_descriptors;
+// Bit 0,1,2,13 should be zero (since max size is 2**13-8 = 8184)
+#define RX_BUFFER_SIZE_MASK 0x1ff8
+#define TX_BUFFER_SIZE_MASK 0x3FFF
+
+volatile Descriptor* rx_descriptors;
 u8* rx_packet_buffer;
 
-Descriptor* tx_descriptors;
+volatile Descriptor* tx_descriptors;
 u8* tx_packet_buffer;
 
 bool prepare_buffers() {
@@ -88,8 +93,8 @@ bool prepare_buffers() {
 
     // printf("Mapping out addresses, rawaddr=%x\n", _raw_buffer);
 
-    memset(rx_descriptors, 0, sizeof(Descriptor) * rx_descriptors_len);
-    memset(tx_descriptors, 0, sizeof(Descriptor) * tx_descriptors_len);
+    memset((void*)rx_descriptors, 0, sizeof(Descriptor) * rx_descriptors_len);
+    memset((void*)tx_descriptors, 0, sizeof(Descriptor) * tx_descriptors_len);
 
     // printf("Prepared buffers\n");
 
@@ -135,10 +140,11 @@ static bool reset_nic() {
         rx_descriptors[i].high_buf = packet_buffer >> 32;
         rx_descriptors[i].vlan = 0;
         // The bitwise and for buffer length is problematic if rx_buffer_len is 0x2000 (8 KB)
-        rx_descriptors[i].command = DESCRIPTOR_COMMAND_OWN | ((rx_buffer_len-1) & 0x1FF8);
+        u32 cmd = DESCRIPTOR_COMMAND_OWN | ((rx_buffer_len-1) & RX_BUFFER_SIZE_MASK);
         if (i == rx_descriptors_len-1) {
-            rx_descriptors[i].command |= DESCRIPTOR_COMMAND_EOR;
+            cmd |= DESCRIPTOR_COMMAND_EOR;
         }
+        rx_descriptors[i].command = cmd;
     }
 
     // Fill in descriptors as we transmit. We set EOR at the very least.
@@ -202,11 +208,21 @@ void rtl8169_receive_packet(void** out_buffer, int* out_size) {
     while (1) {
         // This descriptor has been filled
         
-        bool last_segment = rx_descriptors[index].command & DESCRIPTOR_COMMAND_LS;
-        u16 len = rx_descriptors[index].command & 0x3FFF;
+        u32 rx_cmd = rx_descriptors[index].command;
+        bool last_segment = rx_cmd & DESCRIPTOR_COMMAND_LS;
+        u16 len = rx_cmd & RX_BUFFER_SIZE_MASK;
         void* data = (void*)((u64)rx_descriptors[index].low_buf | ((u64)rx_descriptors[index].high_buf << 32));
         
         // printf("GOT SOMETHING! cmd=%x len=%d ptr=%x\n", rx_descriptors[index].command, len, data);
+
+        
+        // Good for debugging. Fragmented packets have not been tested.
+        // if (!(rx_cmd & DESCRIPTOR_COMMAND_FS)) {
+        //     printf("RX descriptor without FS\n");
+        // }
+        // if (!(rx_cmd & DESCRIPTOR_COMMAND_LS)) {
+        //     printf("Packet spans descriptors\n");
+        // }
 
 
         // Handle multiple-descriptor packets
@@ -229,7 +245,11 @@ void rtl8169_receive_packet(void** out_buffer, int* out_size) {
         }
     
         // Set OWN bit (To give ownership back to the controller)
-        rx_descriptors[index].command |= DESCRIPTOR_COMMAND_OWN;
+        u32 cmd = DESCRIPTOR_COMMAND_OWN | ((rx_buffer_len-1) & RX_BUFFER_SIZE_MASK);
+        if (index == rx_descriptors_len-1) {
+            cmd |= DESCRIPTOR_COMMAND_EOR;
+        }
+        rx_descriptors[index].command = cmd;
 
         index = (index + 1) % rx_descriptors_len;
 
@@ -261,7 +281,7 @@ int rtl8169_send_packet(void* data, int size) {
     tx_descriptors[next_tx_descriptor].high_buf = (u64)packet_buffer >> 32;
     tx_descriptors[next_tx_descriptor].vlan = 0;
 
-    u32 command = DESCRIPTOR_COMMAND_OWN | DESCRIPTOR_COMMAND_FS | DESCRIPTOR_COMMAND_LS | (size & 0x3FFF);
+    u32 command = DESCRIPTOR_COMMAND_OWN | DESCRIPTOR_COMMAND_FS | DESCRIPTOR_COMMAND_LS | (size & TX_BUFFER_SIZE_MASK);
     if (next_tx_descriptor == tx_descriptors_len-1) {
         command |= DESCRIPTOR_COMMAND_EOR;
     }

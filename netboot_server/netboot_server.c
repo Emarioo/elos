@@ -37,8 +37,67 @@
     #define close_socket(s) close(s)
 
     #define socket_error() errno
+
 #endif
 
+#ifdef _WIN32
+    #include <windows.h>
+
+    typedef struct Mutex {
+        CRITICAL_SECTION handle;
+    } Mutex;
+
+void mutex_init(Mutex *mutex)
+{
+    InitializeCriticalSection(&mutex->handle);
+}
+
+void mutex_destroy(Mutex *mutex)
+{
+    DeleteCriticalSection(&mutex->handle);
+}
+
+void mutex_lock(Mutex *mutex)
+{
+    EnterCriticalSection(&mutex->handle);
+}
+
+void mutex_unlock(Mutex *mutex)
+{
+    LeaveCriticalSection(&mutex->handle);
+}
+
+
+#else
+    #include <pthread.h>
+
+    typedef struct Mutex {
+        pthread_mutex_t handle;
+    } Mutex;
+
+    void mutex_init(Mutex *mutex)
+{
+    pthread_mutex_init(&mutex->handle, NULL);
+}
+
+void mutex_destroy(Mutex *mutex)
+{
+    pthread_mutex_destroy(&mutex->handle);
+}
+
+void mutex_lock(Mutex *mutex)
+{
+    pthread_mutex_lock(&mutex->handle);
+}
+
+void mutex_unlock(Mutex *mutex)
+{
+    pthread_mutex_unlock(&mutex->handle);
+}
+
+#endif
+
+Mutex g_mutex;
 
 const char* base_directory = "releases/elos-0.0.1-x86_64/fs";
 
@@ -115,6 +174,8 @@ const char* ipv4_str(char address[4], char* buffer) {
 int main(int argc, char** argv) {
     int res;
 
+    mutex_init(&g_mutex);
+
 #ifdef _WIN32
     res = WSAStartup(MAKEWORD(2,2), &wsaData);
     if (res != 0) {
@@ -163,10 +224,6 @@ int main(int argc, char** argv) {
 Session sessions[MAX_SESSIONS];
 
 #define SESSION_IS_ACTIVE(SES) (now - SES->lastAccessTime < SESSION_IDLE_TIME)
-
-// An ethernet frame can have about 1500 bytes without being fragmented.
-// We use 1400 to make room for Ethernet, IPv4, UDP, and NetBoot headers.
-#define PAYLOAD_LIMIT 1400
 
 
 uint64_t access_time_now() {
@@ -259,18 +316,14 @@ void work() {
             NetBoot_Request_File* req = (NetBoot_Request_File*)header;
             const char* path = req->filePath;
 
+            mutex_lock(&g_mutex);
+
             Session* old_session = find_session(*(uint32_t*)&client.sin_addr, client.sin_port);
             if (old_session) {
-                bool active = false;
-                for (int ti=0;ti<MAX_TRANSFER_INFOS;ti++) {
-                    TransferInfo* transferInfo = &old_session->transferInfos[ti];
-                    if (transferInfo->active) {
-                        active = true;
-                        break;
-                    }
-                }
-                if (active) {
+                uint64_t now = access_time_now();
+                if (SESSION_IS_ACTIVE(old_session)) {
                     printf("(ignored extra request for active session)\n");
+                    mutex_unlock(&g_mutex);
                     continue;
                 }
             }
@@ -282,6 +335,7 @@ void work() {
             if (!file) {
                 printf("Cannot request %s, does not exist.\n", fullpath);
                 // @TODO Tell the boot client. For now they'll figure it out because of no response.
+                mutex_unlock(&g_mutex);
                 continue;
             }
 
@@ -306,7 +360,12 @@ void work() {
 
             refresh_transfers(session);
 
+            mutex_unlock(&g_mutex);
+
         } else if (header->type == NETBOOT_SEND_FILE_ACK) {
+            
+            mutex_lock(&g_mutex);
+
             Session* session = find_session(*(uint32_t*)&client.sin_addr, client.sin_port);
 
             NetBoot_Send_File_Ack* ack = (NetBoot_Send_File_Ack*)header;
@@ -353,6 +412,8 @@ void work() {
                     debug("  Transfer[%d] off=%d size=%d\n", i, (int)info->offset, (int)info->size);
                 }
             }
+            
+            mutex_unlock(&g_mutex);
         }
     }
 }
@@ -361,6 +422,9 @@ void thread_loss_detection(void* arg) {
     while (1) {
         uint64_t now = access_time_now();
         
+        
+        mutex_lock(&g_mutex);
+
         for (int si=0;si<MAX_SESSIONS;si++) {
             Session* session = &sessions[si];
             
@@ -389,9 +453,11 @@ void thread_loss_detection(void* arg) {
                 }
             }
         }
+        mutex_unlock(&g_mutex);
+
         // printf("Refresh %lf\n", (double)access_time_now()/(double)TIME_RESOLUTION);
         #ifdef _WIN32
-            Sleep(45);
+            Sleep(100);
         #else
             usleep(50*1000);
         #endif
@@ -412,8 +478,8 @@ void refresh_transfers(Session* session) {
         memset(info, 0, sizeof(*info));
         info->sent_time = access_time_now();
         info->offset = session->file_offset;
-        if (session->file_size > PAYLOAD_LIMIT) {
-            info->size = PAYLOAD_LIMIT;
+        if (session->file_size > NETBOOT_CHUNK_SIZE) {
+            info->size = NETBOOT_CHUNK_SIZE;
         } else {
             info->size = session->file_size;
         }
@@ -424,9 +490,9 @@ void refresh_transfers(Session* session) {
         // printf("Completion %d (%d)\n", session->file_size, session->file_offset);
 
         session->lastAccessTime = access_time_now();
+        info->active = true;
         send_file_packet(session, info, g_send_buffer);
 
-        info->active = true;
     }
 }
 

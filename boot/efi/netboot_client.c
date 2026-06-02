@@ -416,19 +416,104 @@ uint64_t now_us() {
     return (1000*(rdtsc() - base_tsc)) / tsc_per_ms;
 }
 
+// Room for 10.9375 megabytes. ((1024*8 * 1400)/1024/1024)
+#define BITMAP_SIZE 1024
+
+u64 g_bitmap[BITMAP_SIZE/8];
+u32 g_finishedChunk;
+u32 g_totalChunks;
+
+void bitmap_reset(u32 totalChunks) {
+    memset(g_bitmap, 0, sizeof(g_bitmap));
+    g_finishedChunk = 0;
+    bitmap_set_totalChunks(totalChunks);
+}
+void bitmap_set_totalChunks(u32 totalChunks) {
+    u32 maxChunks = BITMAP_SIZE*8;
+    if (totalChunks > maxChunks) {
+        printf("netboot: bitmap can store %d chunks, but file needs %d (%d MB)\n", maxChunks, totalChunks, (totalChunks * NETBOOT_CHUNK_SIZE) / 0x100000);
+        while (1) pause();
+    }
+    g_totalChunks = totalChunks;
+}
+void bitmap_set(u32 chunk) {
+    int quad = chunk / 64;
+    int bit = chunk % 64;
+    g_bitmap[quad] |= (u64)1 << bit;
+}
+bool bitmap_finished() {
+    while (g_finishedChunk < g_totalChunks) {
+        u32 chunk = g_finishedChunk;
+        int quad = chunk / 64;
+        int bit = chunk % 64;
+        if (!(g_bitmap[quad] & ((u64)1 << bit))) {
+            return false;
+        }
+        g_finishedChunk++;
+    }
+    return true;
+}
+
+void bitmap_dump(void)
+{
+    printf("Bitmap (%u chunks, finished=%u)\n",
+        g_totalChunks,
+        g_finishedChunk);
+
+    for (u32 chunk = 0; chunk < g_totalChunks; chunk++)
+    {
+        bool set =
+            g_bitmap[chunk / 64] &
+            ((u64)1 << (chunk % 64));
+
+        printf("%c",set ? '1' : '0');
+
+        if ((chunk % 8) == 7)
+            printf(" ");
+
+        if ((chunk % 64) == 63)
+            printf("\n");
+    }
+
+    printf("\n");
+}
+
+void bitmap_dump_missing(void)
+{
+    int missing = 0;
+
+    printf("Missing chunks:\n");
+
+    for (u32 chunk = 0; chunk < g_totalChunks; chunk++)
+    {
+        bool set =
+            g_bitmap[chunk / 64] &
+            ((u64)1 << (chunk % 64));
+
+        if (!set)
+        {
+            printf("%u ", chunk);
+            missing++;
+        }
+    }
+
+    printf("\nMissing count = %d\n", missing);
+}
+
 
 // offset and size are optional
 int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void* buffer) {
     printf("Requesting %s\n", path);
 
-    request_file(path, offset, size);
 
-    int received_bytes = 0;
+    bitmap_reset((size + NETBOOT_CHUNK_SIZE-1) / NETBOOT_CHUNK_SIZE);
+
+    request_file(path, offset, size);
 
     uint64_t start_us = now_us();
     uint64_t timeoutStart_us = start_us;
 
-    uint64_t timeoutValue = 1000 * 1000;
+    uint64_t timeoutValue = 1000 * 1000; // You want something higher on QEMU.
     // int limit = limit_cap;
     while (1) {
         int buffer_size = sizeof(g_recv_buffer);
@@ -449,8 +534,6 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
             // printf("limit %d recvbytes=%d\n", limit, received_bytes);
             continue;
         }
-
-        // printf("KABOOM\n");
         
         EtherFrame* frame = (EtherFrame*)g_recv_buffer;
 
@@ -466,22 +549,18 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
             // printf("Not UDP %d\n", ipv4->protocol);
             continue;
         }
-        // printf("SADDASCA\n");
         UDP_Header* udp = (UDP_Header*)((char*)g_recv_buffer + sizeof(EtherFrame) + sizeof(IPV4_Header));
         udp->destinationPort = bswap16(udp->destinationPort);
         udp->sourcePort = bswap16(udp->sourcePort);
         udp->length = bswap16(udp->length);
         udp->checksum = bswap16(udp->checksum);
 
-        // printf("CA\n");
         // printf("UDP src=%d dst=%d len=%d chk=%d\n", udp->sourcePort, udp->destinationPort, udp->length, udp->checksum);
 
         if (udp->destinationPort != SRC_PORT) {
             // printf("Wrong port, %d\n", udp->destinationPort);
             continue;
         }
-        
-        // printf("SRC\n");
         
         NetBoot_Header* net = (NetBoot_Header*)((char*)udp + sizeof(UDP_Header));
         if (memcmp(net->magic, NETBOOT_MAGIC, 4) || net->version != 1) {
@@ -507,27 +586,30 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
         // printf("CHILL\n");
         memcpy((char*)buffer + buffer_offset, sendf->payload, sendf->size);
 
-        received_bytes += sendf->size;
-
-
         // debug("Recv file size, recbytes=%d off=%d recvsize=%d total=%d foff=%d\n", received_bytes, buffer_offset, sendf->size, sendf->totalFileSize, sendf->offset);
         timeoutStart_us = now_us();
 
         send_file_ack(frame->source, ipv4->sourceAddress, udp->sourcePort, sendf->offset, sendf->size);
+        
+        // We get file size from data payload message.
+        // So we update it.
+        bitmap_set_totalChunks((sendf->totalFileSize + NETBOOT_CHUNK_SIZE-1) / NETBOOT_CHUNK_SIZE);
+        bitmap_set(sendf->offset / NETBOOT_CHUNK_SIZE);
 
         // Our last ACK may have dropped and not arrived at server. Server will
         // keep resending packets. Which we won't answer too.
         // Server will timeout the session eventually.
 
-        if (size == received_bytes || received_bytes == sendf->totalFileSize - offset) {
+        if (bitmap_finished()) {
             printf("Finished %s\n", path);
-            return received_bytes;
-        } else if (received_bytes > size) {
-            printf("Recevied too many bytes, %d > %d\n", received_bytes, size);
-            break;
+            return size;
         }
     }
 
+    bitmap_dump_missing();
+
+    // bitmap_dump();
+    
     printf("No response on NETBOOT file request? (or incomplete response)\n");
 
     return 0;

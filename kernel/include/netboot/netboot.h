@@ -43,6 +43,11 @@ typedef uint8_t NetBoot_Type;
 #define NETBOOT_MAGIC "NBOO"
 #define NETBOOT_DEFAULT_PORT 2493
 
+// An ethernet frame can have about 1500 bytes without being fragmented.
+// We use 1400 to make room for Ethernet, IPv4, UDP, and NetBoot headers.
+#define NETBOOT_CHUNK_SIZE 1400
+
+
 typedef struct NetBoot_Header {
     char         magic[4];
     uint16_t     version;
