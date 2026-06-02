@@ -48,7 +48,7 @@ bool ahci_identify(HBA_PORT *port, void* buffer);
 DiskDevice_impl* reserve_device(ScanInfo* scanInfo) {
     DiskDevice_impl* device = NULL;
     for (int i=0;i<MAX_DISK_DEVICES;i++) {
-        if (!impl_diskDevices[i].active) {
+        if (impl_diskDevices[i].type == DISK_TYPE_NONE) {
             device = &impl_diskDevices[i];
             break;
         }
@@ -147,12 +147,11 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
                     stopSearching = true;
                     break;
                 }
-                dev->active = true;
-                dev->configSpace = *config;
-                dev->type = DEVICE_TYPE_SATA;
-                dev->abar = abar;
-                dev->portNo = i;
-                dev->port = &abar->ports[i];
+                dev->sata.configSpace = *config;
+                dev->type = DISK_TYPE_SATA;
+                dev->sata.abar = abar;
+                dev->sata.portNo = i;
+                dev->sata.port = &abar->ports[i];
                 diskDevices[diskDevices_len] = dev;
                 diskDevices_len++;
                 // debug("SATA drive found at port %d\n", i);
@@ -180,9 +179,9 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
 
     for (int i = 0; i < diskDevices_len; i++) {
         DiskDevice_impl* dev = diskDevices[i];
-        bool res = port_rebase(dev->port);
+        bool res = port_rebase(dev->sata.port);
         if (!res) {
-            dev->active = false;
+            dev->type = DISK_TYPE_NONE;
             diskDevices[i] = diskDevices[diskDevices_len - 1];
             diskDevices_len--;
         }
@@ -204,10 +203,10 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
         // If we do at the very least we should notice strange stuff
         // when calling this function. A static variable of PMEM_alloc_phys
         // may overwrite some other memory which will be much harder to detect.
-        bool res = ahci_identify(dev->port, phys_buffer);
+        bool res = ahci_identify(dev->sata.port, phys_buffer);
         if (!res) {
             // Device is in wierd state or we can't talk to it with our implementation.
-            dev->active = false;
+            dev->type = DISK_TYPE_NONE;
             diskDevices[i] = diskDevices[diskDevices_len - 1];
             diskDevices_len--;
             continue;
@@ -267,7 +266,7 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
 
         if (scanInfo->count >= scanInfo->maxCount) {
             // @TODO Free and cleanup PORT.
-            dev->active = false;
+            dev->type = DISK_TYPE_NONE;
             continue;
         }
         scanInfo->devices[scanInfo->count] = (DiskDevice)dev;
@@ -503,7 +502,7 @@ bool ahci_identify(HBA_PORT *port, void* buffer) {
 }
 
 bool ahci_read(DiskDevice_impl* device, u64 byteOffset, u64 byteSize, void* buffer) {
-    HBA_PORT *port = device->port;
+    HBA_PORT *port = device->sata.port;
     int sectorSize = device->diskInfo.blockSize;
 
     port->is = (uint32_t) -1;		// Clear pending interrupt bits
@@ -604,7 +603,7 @@ bool ahci_read(DiskDevice_impl* device, u64 byteOffset, u64 byteSize, void* buff
 
 
 bool ahci_write(DiskDevice_impl* device, u64 byteOffset, u64 byteSize, void* buffer) {
-    HBA_PORT *port = device->port;
+    HBA_PORT *port = device->sata.port;
     int sectorSize = device->diskInfo.blockSize;
 
     port->is = (uint32_t) -1;		// Clear pending interrupt bits

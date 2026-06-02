@@ -40,7 +40,7 @@
 #endif
 
 
-const char* base_directory = "releases/elos-0.1.0-x86_64/fs";
+const char* base_directory = "releases/elos-0.0.1-x86_64/fs";
 
 int PORT = NETBOOT_DEFAULT_PORT;
 
@@ -55,9 +55,9 @@ char g_thread_send_buffer[0x10000];
 // I will try on real hardware.
 #define MAX_TRANSFER_INFOS 8
 #define MAX_SESSIONS 10
-#define SESSION_IDLE_TIME (5 * TIME_RESOLUTION)
-#define RESEND_IDLE_TIME (TIME_RESOLUTION / 3) // if server is in australia and client in sweden then you will need to increase this value
-#define MAX_RESEND_ATTEMPTS 5
+#define SESSION_IDLE_TIME (10 * TIME_RESOLUTION)
+#define RESEND_IDLE_TIME (TIME_RESOLUTION / 2) // if server is in australia and client in sweden then you will need to increase this value
+#define MAX_RESEND_ATTEMPTS 10
 
 // #define debug(...) printf(__VA_ARGS__)
 #define debug(...)
@@ -176,7 +176,7 @@ uint64_t access_time_now() {
         LARGE_INTEGER perf;
         QueryPerformanceFrequency(&freq);
         QueryPerformanceCounter(&perf);
-        return perf.QuadPart * TIME_RESOLUTION / freq.QuadPart;
+        return (perf.QuadPart * TIME_RESOLUTION) / freq.QuadPart;
     #else
         struct timespec tp;
         clock_gettime(CLOCK_REALTIME, &tp);
@@ -259,6 +259,22 @@ void work() {
             NetBoot_Request_File* req = (NetBoot_Request_File*)header;
             const char* path = req->filePath;
 
+            Session* old_session = find_session(*(uint32_t*)&client.sin_addr, client.sin_port);
+            if (old_session) {
+                bool active = false;
+                for (int ti=0;ti<MAX_TRANSFER_INFOS;ti++) {
+                    TransferInfo* transferInfo = &old_session->transferInfos[ti];
+                    if (transferInfo->active) {
+                        active = true;
+                        break;
+                    }
+                }
+                if (active) {
+                    printf("(ignored extra request for active session)\n");
+                    continue;
+                }
+            }
+
             char fullpath[256];
             snprintf(fullpath, sizeof(fullpath), "%s/%s", base_directory, path);
             
@@ -266,7 +282,7 @@ void work() {
             if (!file) {
                 printf("Cannot request %s, does not exist.\n", fullpath);
                 // @TODO Tell the boot client. For now they'll figure it out because of no response.
-                break;
+                continue;
             }
 
             fseek(file, 0, SEEK_END);
@@ -305,7 +321,7 @@ void work() {
                 }
             }
             if (completed_any) {
-                debug("ACK off=%d size=%d\n", ack->offset, ack->size);
+                debug("ACK off=%d size=%d\n", (int)ack->offset, (int)ack->size);
 
                 if (session->file_size == 0) {
                     
@@ -331,10 +347,10 @@ void work() {
                     refresh_transfers(session);
                 }
             } else {
-                printf("warning: ACK off=%d size=%d did not complete any Transfer (duplicates?).\n", (int)ack->offset, ack->size);
+                printf("warning: ACK off=%d size=%d did not complete any Transfer (duplicates?).\n", (int)ack->offset, (int)ack->size);
                 for (int i=0;i<MAX_TRANSFER_INFOS;i++) {
                     TransferInfo* info = &session->transferInfos[i];
-                    debug("  Transfer[%d] off=%d size=%d\n", i, (int)info->offset, info->size);
+                    debug("  Transfer[%d] off=%d size=%d\n", i, (int)info->offset, (int)info->size);
                 }
             }
         }
@@ -356,7 +372,7 @@ void thread_loss_detection(void* arg) {
             for (int ti=0;ti<MAX_TRANSFER_INFOS;ti++) {
                 TransferInfo* info = &session->transferInfos[ti];
 
-                debug("Inf[%d] act=%d off=%d size=%d tim=%d\n", ti, info->active, info->offset, info->size, now-info->sent_time);
+                // debug("Inf[%d] act=%d off=%d size=%d tim=%d\n", ti, info->active, (int)info->offset, (int)info->size, now-info->sent_time);
                 if (info->active && now - info->sent_time > RESEND_IDLE_TIME) {
                     if (info->attempts > MAX_RESEND_ATTEMPTS) {
                         // Block/lock this transfer info.
@@ -432,7 +448,7 @@ void send_file_packet(Session* session, TransferInfo* info, void* send_buffer) {
     
     int packet_size = sizeof(NetBoot_Send_File) + sendf->size;
 
-    debug("Send off=%d size=%d\n", sendf->offset, sendf->size);
+    debug("Send off=%d size=%d\n", (int)sendf->offset, (int)sendf->size);
 
     size_t sent_bytes = sendto(listenSocket, send_buffer, packet_size,
         0, (struct sockaddr*)&session->client, sizeof(session->client));

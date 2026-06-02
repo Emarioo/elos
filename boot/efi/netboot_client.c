@@ -426,9 +426,9 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
     int received_bytes = 0;
 
     uint64_t start_us = now_us();
-    uint64_t timeoutStart_us = now_us();
+    uint64_t timeoutStart_us = start_us;
 
-    uint64_t timeoutValue = 1000 * 1000; // 800 ms
+    uint64_t timeoutValue = 1000 * 1000;
     // int limit = limit_cap;
     while (1) {
         int buffer_size = sizeof(g_recv_buffer);

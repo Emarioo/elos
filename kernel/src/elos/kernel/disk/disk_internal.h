@@ -9,10 +9,11 @@ typedef volatile struct tagHBA_MEM HBA_MEM;
 typedef volatile struct tagHBA_PORT HBA_PORT;
 
 typedef enum {
-    DEVICE_TYPE_NONE,
-    DEVICE_TYPE_SATA,
-    DEVICE_TYPE_NVME,
-} DeviceType;
+    DISK_TYPE_NONE = 0,
+    DISK_TYPE_RAM,
+    DISK_TYPE_SATA,
+    DISK_TYPE_NVME,
+} DiskDeviceType;
 
 typedef struct {
     DiskDevice* devices;
@@ -21,15 +22,27 @@ typedef struct {
 } ScanInfo;
 
 typedef struct {
-    bool active;
-
-    PCI_ConfigSpace configSpace;
-    DeviceType type;
+    DiskDeviceType type;
     DiskInfo diskInfo;
 
-    HBA_MEM*  abar;
-    HBA_PORT* port;
-    int       portNo;
+    union {
+        struct {
+            void* data;
+            u64   size;
+        } ram;
+        struct {
+            PCI_ConfigSpace configSpace;
+            HBA_MEM*  abar;
+            HBA_PORT* port;
+            int       portNo;
+        } sata;
+        struct {
+            PCI_ConfigSpace configSpace;
+            HBA_MEM*  abar;
+            HBA_PORT* port;
+            int       portNo;
+        } nvme;
+    };
 
 } DiskDevice_impl;
 

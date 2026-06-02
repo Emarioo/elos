@@ -14,8 +14,6 @@ def main(OUTPUT = "scripts/disk_fs/prism.elf"):
         f"{ELOS_ROOT}/kernel/src/elos/common/string.c",
     ]
 
-    print(os.getcwd())
-
     SRC_FILES = " ".join(SRC_FILES)
     FLAGS  = "-g -pie -fpic -nostdlib -nostartfiles"
     FLAGS += " -Wno-builtin-declaration-mismatch"

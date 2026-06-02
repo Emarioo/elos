@@ -12,7 +12,9 @@ typedef struct {
     //
     // Other stuff
     //
-    void* rsdt; // or xsdt
+    void*    rsdt; // or xsdt
+    void*    initrd;
+    uint64_t initrd_size;
 
     //
     //  Accessible Memory Regions

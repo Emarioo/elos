@@ -74,11 +74,18 @@ void init_paging(BootAPI* boot_api) {
     map_memory(rootTable, (void*)dynamicTable_base, (void*)dynamicTable_base, dynamicTable_size, PAGING_FLAG_USE_RESERVED_TABLE);
     map_memory(rootTable, __kernel_start, __kernel_start, (u64)__kernel_end - (u64)__kernel_start, PAGING_FLAG_USE_RESERVED_TABLE);
     map_memory(rootTable, __stack_start, __stack_start, (u64)__stack_end - (u64)__stack_start, PAGING_FLAG_USE_RESERVED_TABLE);
-    map_memory(rootTable, boot_api->frame_buffer_base, boot_api->frame_buffer_base, boot_api->frame_buffer_size, PAGING_FLAG_USE_RESERVED_TABLE | PAGING_FLAG_NOT_CACHED);
 
     write_cr3((u64)rootTable); // Will fully flush TLB
 
     memset((void*)dynamicTable_base, 0, dynamicTable_size);
+
+    // These might be large so we don't use fixed/reserved page tables.
+    if (boot_api->frame_buffer_base) {
+        map_memory(rootTable, boot_api->frame_buffer_base, boot_api->frame_buffer_base, boot_api->frame_buffer_size, PAGING_FLAG_NOT_CACHED);
+    }
+    if (boot_api->initrd) {
+        map_memory(rootTable, boot_api->initrd, boot_api->initrd, boot_api->initrd_size, 0);
+    }
 }
 
 bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 size, MapPageFlag flags) {

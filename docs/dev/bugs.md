@@ -1,4 +1,10 @@
 
+Suspected bugs:
+- does laptop not have features i assume it has? i need to check cpuid properly.
+- netboot server gets warning: ACK duplicates?
+
+
+
 Keep the following in mind:
 - Any code may be interupted at any time.
 - Interupting while a lock is held could cause deadlocks if the interrupt routine wants the deadlock.

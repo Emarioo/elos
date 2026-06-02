@@ -99,8 +99,8 @@ void CPU_init(BootAPI* boot_api) {
 
 
     // Enable IRQ1 for keyboard interrupts for core 0 (apic id = 0)
-    cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x12, 33 | (1 << 15)); // 1<<15 does level trigger instead of edge, seems to work better?
-    cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x13, 0);
+    // cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x12, 33 | (1 << 15)); // 1<<15 does level trigger instead of edge, seems to work better?
+    // cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x13, 0);
 
     // @TODO Calibration per core
     calibrate_tsc();
@@ -117,14 +117,14 @@ void CPU_init(BootAPI* boot_api) {
 
     // Starting cores requires some sleep and precise timings.
     // We must calibrate TSC first.
-    for (int i=0;i<acpi_lapic_ids_len;i++) {
-        u32 apic_id = acpi_lapic_ids[i];
-        if (apic_id == lapic_id)
-            continue; // don't try to start current core.
+    // for (int i=0;i<acpi_lapic_ids_len;i++) {
+    //     u32 apic_id = acpi_lapic_ids[i];
+    //     if (apic_id == lapic_id)
+    //         continue; // don't start yourself
 
-        // printf("APIC id: %d\n", apic_id);
-        CPU_start_core(apic_id);
-    }
+    //     // printf("APIC id: %d\n", apic_id);
+    //     CPU_start_core(apic_id);
+    // }
 }
 
 

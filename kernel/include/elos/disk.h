@@ -2,6 +2,8 @@
 
 #include "elos/common/types.h"
 
+#include "elos/boot_api.h"
+
 //###########################
 //      TYPES
 //###########################
@@ -20,6 +22,7 @@ typedef struct DiskInfo {
 //       FUNCTIONS
 //###########################
 
+void DISK_init(BootAPI* boot_api);
 
 void DISK_scan_devices(DiskDevice* devices, int* count);
 

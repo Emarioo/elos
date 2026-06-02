@@ -120,13 +120,6 @@ def main():
     if img:
         package_elos("releases", iso)
 
-        if run:
-            import apps.prism.build
-            import apps.terminal.build
-            apps.prism.build.main("scripts/disk_fs/prism.elf")
-            cmd("objdump -S scripts/disk_fs/prism.elf > prism.dis")
-            apps.terminal.build.main("scripts/disk_fs/term.elf")
-            cmd("objdump -S scripts/disk_fs/term.elf > term.dis")
 
     if netboot:
         cmd(f"{netboot_server_bin}")
@@ -136,12 +129,12 @@ def main():
         OVMF_FD = "extern/ovmf/OVMF.fd"
 
         DISK_IMG = "int/disk.img"
-        # if not os.path.exists(DISK_IMG):
+        # # if not os.path.exists(DISK_IMG):
             
-        DEPS_SPEC: list[tuple[str,str]] = [
-            ("scripts/disk_fs/*", ""),
-        ]
-        make_gpt(DISK_IMG, DEPS_SPEC)
+        # DEPS_SPEC: list[tuple[str,str]] = [
+        #     ("scripts/disk_fs/*", ""),
+        # ]
+        # make_gpt(DISK_IMG, DEPS_SPEC)
 
             # cmd(f"qemu-img create -f raw {DISK_IMG} 64M")
             # cmd(f"gcc scripts/fwrite.c -g -o int/fwrite && int/fwrite {DISK_IMG}")
@@ -158,8 +151,9 @@ def main():
             -smp 2
 
             -device ahci,id=ahci
-            -drive  file={DISK_IMG},if=none,id=disk0,format=raw
-            -device ide-hd,drive=disk0,bus=ahci.0
+
+            # -drive  file={DISK_IMG},if=none,id=disk1,format=raw
+            # -device ide-hd,drive=disk1,bus=ahci.1
             # -nographic
         '''
         # @NOTE Not sure what these flags do but seems useful/important
@@ -169,8 +163,8 @@ def main():
 
         if not iso:
             qemu_flags += f'''
-                -drive format=raw,file=bin/elos.img,if=ide,media=disk,cache=writeback
-                # -drive if=none,id=disk0,format=raw,file=bin/elos.img
+                -drive file=bin/elos.img,if=none,id=disk0,format=raw
+                -device ide-hd,drive=disk0,bus=ahci.0
             '''
         else:
             # If you want to use ISO
@@ -194,7 +188,7 @@ def main():
 
 def package_elos(release_dir, build_iso = False):
     name    = "elos"
-    version = "0.1.0"
+    version = "0.0.1"
     arch    = "x86_64"
 
     temp_folder_name = f"{name}-{version}-{arch}"
@@ -203,6 +197,7 @@ def package_elos(release_dir, build_iso = False):
     os.makedirs(temp_folder_path, exist_ok=True)
 
     os.makedirs(temp_folder_path+"/fs", exist_ok=True)
+    os.makedirs(temp_folder_path+"/initrd", exist_ok=True)
 
     os.makedirs(temp_folder_path+"/fs/EFI/BOOT", exist_ok=True)
 
@@ -211,19 +206,34 @@ def package_elos(release_dir, build_iso = False):
     kernel_elf_path = f"{temp_folder_path}/kernel.elf"
     bootx64_path    = f"{temp_folder_path}/fs/EFI/BOOT/BOOTX64.EFI"
     kernel_path     = f"{temp_folder_path}/fs/KERNEL.IMG"
+    initrd_path     = f"{temp_folder_path}/fs/INITRD.IMG"
+    prism_path      = f"{temp_folder_path}/initrd/prism.elf"
+    term_path       = f"{temp_folder_path}/initrd/term.elf"
 
-    INT_DIR=f"{ROOT}/int"
+    INT_DIR         = f"{ROOT}/int"
+    fat_path        = f"{INT_DIR}/fat.img"
 
     cmd(f"make -f {ROOT}/boot/Makefile INT_DIR={INT_DIR}/boot BOOT_EFI={bootx64_path}")
     
     cmd(f"make -f {ROOT}/kernel/Makefile INT_DIR={INT_DIR}/kernel KERNEL_IMAGE={kernel_path} KERNEL_ELF={kernel_elf_path}")
 
-    fat_path = f"{INT_DIR}/fat.img"
+    import apps.prism.build
+    import apps.terminal.build
+    apps.prism.build.main(prism_path)
+    cmd(f"objdump -S {prism_path} > prism.dis")
+    apps.terminal.build.main(term_path)
+    cmd(f"objdump -S {term_path} > term.dis")
 
+    DEPS_SPEC: list[tuple[str,str]] = [
+        (prism_path, "PRISM.ELF"),
+        (term_path, "TERM.ELF"),
+    ]
+    make_gpt(initrd_path, DEPS_SPEC)
     
     DEPS_SPEC: list[tuple[str,str]] = [
         (bootx64_path, "EFI/BOOT/BOOTX64.EFI"),
         (kernel_path, "KERNEL.IMG"),
+        (initrd_path, "INITRD.IMG"),
         # ("res/Lat2-Terminus16.psf", "RES/STDFONT.PSF"),  # baked into kernel image, not needed here
         ("boot/template.cfg", "TEMPLATE.CFG"),
     ]

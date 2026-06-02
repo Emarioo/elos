@@ -276,6 +276,71 @@ EFI_STATUS load_kernel_from_file(void* address) {
         catch_bad_status();
         return Status;
     }
+
+    // @TODO CLose handles.
+    
+    // printf("First word: %x\n", *(int*)address);
+    // printf("Kernel size: %d KB\n", file_info->FileSize/1024);
+
+    return EFI_SUCCESS;
+}
+
+
+EFI_STATUS load_initrd() {
+    printf("Loading initrd from disk\n");
+
+    EFI_STATUS Status;
+    EFI_FILE_PROTOCOL* volume;
+    Status = simple_file_system->OpenVolume(simple_file_system, &volume);
+    if (EFI_ERROR(Status)) {
+        printf("OpenVolume %d\n", Status);
+        catch_bad_status();
+        return Status;
+    }
+
+    const char* file_path = "\\INITRD.IMG";
+    u16* wpath = tmp_path_wstring(file_path);
+
+    EFI_FILE_PROTOCOL* handle;
+    Status = volume->Open(volume, &handle, wpath, EFI_FILE_MODE_READ, 0);
+    if (EFI_ERROR(Status)) {
+        printf("Open %d\n", Status);
+        catch_bad_status();
+        return Status;
+    }
+
+    char temp_buffer[sizeof(EFI_FILE_INFO) + 256];
+    EFI_FILE_INFO* file_info = (EFI_FILE_INFO*)temp_buffer;
+    UINTN buffer_size = sizeof(EFI_FILE_INFO) + 256;
+
+    Status = handle->GetInfo(handle, &gEfiFileInfoGuid, &buffer_size, file_info);
+    if (EFI_ERROR(Status)) {
+        printf("GetInfo %d\n", Status);
+        catch_bad_status();
+        return Status;
+    }
+
+    UINTN file_size = file_info->FileSize;
+
+    EFI_PHYSICAL_ADDRESS initrd_data;
+    Status = ST->BootServices->AllocatePages(AllocateAnyPages, EfiLoaderData, (file_size + EFI_PAGE_SIZE-1)/EFI_PAGE_SIZE, &initrd_data); 
+    if (EFI_ERROR(Status)) {
+        printf("initrd AllocatePages err=%d size=%d MB\n", Status, file_size/0x100000);
+        catch_bad_status();
+        return Status;
+    }
+
+    Status = handle->Read(handle, &file_size, (void*)initrd_data);
+    if (EFI_ERROR(Status)) {
+        printf("Read %d\n", Status);
+        catch_bad_status();
+        return Status;
+    }
+
+    // @TODO CLose handles.
+
+    g_boot_api.initrd      = (void*)initrd_data;
+    g_boot_api.initrd_size = file_size;
     
     // printf("First word: %x\n", *(int*)address);
     // printf("Kernel size: %d KB\n", file_info->FileSize/1024);
@@ -457,6 +522,8 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     }
     kernel_entry = kernel_address; // linker script for kernel (sections.ld) defines _start at beginning of kernel image.
 
+    load_initrd();
+
     boot_init_frame_buffer();
 
     EFI_PHYSICAL_ADDRESS stack = (u64)__STACK_START;
@@ -472,6 +539,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
         return Status;
     }
 
+    // FREEZE();
 
     printf("UEFI - Exit boot services\n");
 

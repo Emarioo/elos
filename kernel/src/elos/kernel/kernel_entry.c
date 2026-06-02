@@ -110,6 +110,7 @@ void kernel_entry(BootAPI* in_boot_api) {
     // Timer interrupt, parse ACPI tables for IOAPIC, APIC, HPET
     CPU_init(boot_api);
 
+    DISK_init(boot_api);
 
     DiskDevice diskDevices[8];
     int diskDevices_len = ARRAY_LENGTH(diskDevices);
@@ -216,10 +217,10 @@ void kernel_entry(BootAPI* in_boot_api) {
 
     // CPU_sleep(1500000000);
 
-    EXEC_create_user_thread("/dev0p0/prism.elf", 1);
-
+    EXEC_create_user_thread("/dev0p0/prism.elf", 0);
 
     kernel_idle();
+
 
 
     while (1) {
