@@ -82,7 +82,7 @@ for i in range(256):
         mov rdi, {i}  # isr number
         mov rsi, rsp  # pass pointer to stack frame
 
-        call interrupt_handler
+        call keyboard_handler
 
         {pop_volatile}
 

@@ -19,7 +19,7 @@ typedef struct {
     int   stride;
     u64   size;
     void* buffer;
-    ELOS_SharedMemoryHandle sharedMemoryHandle;
+    ELOS_SharedMemory sharedMemoryHandle;
 
     ELOS_ServiceEndpoint ownerEndpoint; // @TODO This assumes endpoints can't be reused.
 } Surface;
@@ -76,6 +76,8 @@ void prism_loop() {
             continue;
         }
 
+        // printf("prism: %d %d %d %d\n", message->type, message->moveSurface.surfaceID, message->moveSurface.x, message->moveSurface.y);
+
         switch (message->type) {
             case PRISM_CREATE_SURFACE: {
                 Surface* surface = create_surface(message->createSurface.width, message->createSurface.height);
@@ -123,11 +125,20 @@ void prism_loop() {
                 destroy_surface(message->destroySurface.surfaceID);
             } break;
             case PRISM_PRESENT_SURFACE: {
-                Surface* surface = get_surface(message->destroySurface.surfaceID);
+                Surface* surface = get_surface(message->presentSurface.surfaceID);
                 if (!surface || surface->ownerEndpoint != senderEndpoint) {
                     break;
                 }
                 present_surface(surface->surfaceId);
+            } break;
+            case PRISM_MOVE_SURFACE: {
+                Surface* surface = get_surface(message->moveSurface.surfaceID);
+                if (!surface || surface->ownerEndpoint != senderEndpoint) {
+                    printf("prism: Bad surface %d\n", message->moveSurface.surfaceID);
+                    break;
+                }
+                surface->x = message->moveSurface.x;
+                surface->y = message->moveSurface.y;
             } break;
         }
     }
@@ -146,7 +157,7 @@ Surface* create_surface(int width, int height) {
     ELOS_Error error;
 
     u64 size = width * height * sizeof(u32);
-    ELOS_SharedMemoryHandle handle;
+    ELOS_SharedMemory handle;
     error = SYS_shared_memory_create(size, &handle);
     if (error != ELOS_OK) {
         return NULL;
@@ -201,7 +212,6 @@ Surface* get_surface(int surfaceID) {
     return surface;
 }
 
-
 void present_surface(int surfaceID) {
     Surface* surface = get_surface(surfaceID);
     if (!surface) {
@@ -210,12 +220,6 @@ void present_surface(int surfaceID) {
 
     // @TODO Implement levels for each surface. The order which to draw them.
     // @TODO Implement double buffering to prevent tearing. 
-
-    // surface->x = 450;
-    // surface->y = 150;
-    
-    surface->x = 0;
-    surface->y = 0;
 
     
     u32* src = surface->buffer;
@@ -249,10 +253,10 @@ void present_surface(int surfaceID) {
     // @TODO We may want to write to an internal buffer which we then write to the frame buffer in one fell swoop.
 
     for (int iy = y; iy < y + h; iy++) {
-        void* begin = &dst[iy * dst_stride];
+        void* begin = &dst[x + iy * dst_stride];
         void* from = &src[(iy-y) * src_stride];
         int size = 4 * w;
-        memcpy_fast(begin, from, size);
+        memcpy(begin, from, size);
         
         // for (int ix = x; ix < x + w; ix++) {
         //     // printf("%d %d\n", ix, iy);

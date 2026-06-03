@@ -14,6 +14,7 @@
 #include "elos/kernel/config.h"
 
 #include "elos/execution.h"
+#include "elos/kernel/driver/acpi.h" // acpi_lapic_address
 
 #include "elos/frame_buffer.h"
 
@@ -162,6 +163,9 @@ bool parse_elf(ParseContext* ctx) {
         u8* stack_start = (u8*)core->syscall_stack - core->syscall_stack_size;
         PMEM_map_memory(pageTable, stack_start, stack_start, core->syscall_stack_size, PMEM_FLAG_NONE);
     }
+
+    
+    PMEM_map_memory(pageTable, (void*)acpi_lapic_address, (void*)acpi_lapic_address, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
 
     
     // Map whole image into kernel page tables so we can copy memory from ELF there.

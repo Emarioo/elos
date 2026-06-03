@@ -38,6 +38,13 @@ void prism_destroySurface(PrismSurface* surface);
 */
 void prism_surfaceInfo(PrismSurface* surface, PrismSurfaceInfo* info);
 
+
+/*
+    Move surface.
+*/
+void prism_moveSurface(PrismSurface* surface, int x, int y);
+
+
 /*
     Tell Prism server to render the updated surface.
 */

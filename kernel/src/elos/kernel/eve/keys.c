@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include "elos/kernel/kbd/keys.h"
+#include "elos/kernel/eve/keys.h"
 
 const char* key_name(int keycode) {
     switch (keycode) {

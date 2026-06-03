@@ -1,6 +1,6 @@
 #pragma once
 
-#include "elos/kernel/kbd/keys.h"
+#include "elos/kernel/eve/keys.h"
 
 int ps2_init();
 

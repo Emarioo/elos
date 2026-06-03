@@ -1,10 +1,12 @@
 
 #include "elos/keyboard.h"
 
-#include "elos/kernel/kbd/ps2.h"
-#include "elos/kernel/kbd/keys.h"
+#include "elos/kernel/eve/ps2.h"
+#include "elos/kernel/eve/keys.h"
 
 #include "elos/kernel_console.h"
+
+#include "elos/user_event.h"
 
 
 #define printf(...) KCON_printf(__VA_ARGS__)
@@ -84,6 +86,21 @@ void KBD_push_key_event(int scancode, int pressed) {
 
     keyEvents[keyEvents_head] = keyEvent;
     keyEvents_head = (keyEvents_head + 1) % MAX_KEY_EVENTS;
+
+    ELOS_UserEvent event = {
+        .type = ELOS_USER_EVENT_KEY,
+        .id = 0,
+        .key = {
+            .kind = keyEvent.keycode,
+            .character = chr,
+            .scancode = scancode,
+            .value = pressed != 0,
+            .mods = keyboard_mods,
+        },
+    };
+
+    EVE_push_event(&event);
+
 }
 
 bool KBD_poll_key_event(KeyEvent* keyEvent) {

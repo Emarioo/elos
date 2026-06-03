@@ -18,6 +18,8 @@ typedef enum {
     PRISM_DESTROY_SURFACE,
 
     PRISM_PRESENT_SURFACE,
+
+    PRISM_MOVE_SURFACE, // @TODO Response?
 } PrismMessageType;
 
 typedef struct {
@@ -30,7 +32,7 @@ typedef struct {
         struct {
             int surfaceID;
             int stride;
-            ELOS_SharedMemoryHandle sharedMemoryHandle;
+            ELOS_SharedMemory sharedMemoryHandle;
         } createSurfaceResponse;
         struct {
             int surfaceID;
@@ -38,5 +40,9 @@ typedef struct {
         struct {
             int surfaceID;
         } presentSurface;
+        struct {
+            int surfaceID;
+            int x, y;
+        } moveSurface;
     };
 } PrismMessage;

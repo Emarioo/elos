@@ -1,11 +1,11 @@
-#include "elos/kernel/kbd/ps2.h"
+#include "elos/kernel/eve/ps2.h"
 
 #include "elos/common/intrinsics.h"
 #include "elos/kernel_console.h"
 #include "elos/cpu.h"
 #include "elos/common/types.h"
 #include "elos/common/string.h"
-#include "elos/kernel/kbd/keys.h"
+#include "elos/kernel/eve/keys.h"
 
 
 

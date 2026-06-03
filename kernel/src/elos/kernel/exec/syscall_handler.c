@@ -15,6 +15,7 @@
 #include "elos/physical_memory.h"
 #include "elos/monitor.h"
 #include "elos/service.h"
+#include "elos/user_event.h"
 
 #include "elos/cpu.h"
 
@@ -334,7 +335,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         } break;
         case _SYS_SHARED_MEMORY_CREATE: {
             u64 size = arg0;
-            ELOS_SharedMemoryHandle* handle = (void*)arg1;
+            ELOS_SharedMemory* handle = (void*)arg1;
 
             // @TODO Check capability
             
@@ -354,7 +355,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             }
         } break;
         case _SYS_SHARED_MEMORY_GRANT: {
-            ELOS_SharedMemoryHandle handle = (void*)arg0;
+            ELOS_SharedMemory handle = (void*)arg0;
             ELOS_ServiceEndpoint endpoint = (void*)arg1;
 
             // @TODO Check capability
@@ -372,7 +373,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             }
         } break;
         case _SYS_SHARED_MEMORY_INFO: {
-            ELOS_SharedMemoryHandle handle = (void*)arg0;
+            ELOS_SharedMemory handle = (void*)arg0;
             void** buffer = (void**)arg1;
             u64* size = (void*)arg2;
 
@@ -403,6 +404,39 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 }
                 if (size) {
                     *size = tmp_size;
+                }
+                returnValue = ELOS_OK;
+            }
+        } break;
+        case _SYS_REQUEST_USER_EVENT_BUFFER: {
+            u64 size = arg0;
+            ELOS_UserEventBuffer** buffer = (void*)arg1;
+
+            // @TODO Check capability
+            
+            write_cr3((u64)g_kernelPageTable);
+
+            u64 wholeBufferSize = sizeof(ELOS_UserEventBuffer)
+                + (size + sizeof(ELOS_UserEvent)-1) / sizeof(ELOS_UserEvent);
+            ELOS_UserEventBuffer* tmp_buffer;
+            bool result = EVE_request_user_event_buffer(size, &tmp_buffer);
+
+            if (result) {
+                bool mapped = PMEM_map_memory(userPageTable, tmp_buffer, tmp_buffer, wholeBufferSize, PMEM_FLAG_USER_SPACE);
+                if (!mapped) {
+                    returnValue = ELOS_GENERIC_ERROR;
+                    write_cr3((u64)userPageTable);
+                    break;
+                }
+            }
+
+            write_cr3((u64)userPageTable);
+
+            if (!result) {
+                returnValue = ELOS_GENERIC_ERROR;
+            } else {
+                if (buffer) {
+                    *buffer = (void*)tmp_buffer;
                 }
                 returnValue = ELOS_OK;
             }

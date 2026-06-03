@@ -29,7 +29,7 @@ struct PrismSurface {
     
     u64   size;
     void* buffer;
-    ELOS_SharedMemoryHandle sharedMemoryHandle;
+    ELOS_SharedMemory sharedMemoryHandle;
 
     PrismInstance* instance;
 };
@@ -145,7 +145,6 @@ PrismSurface* prism_createSurface(PrismInstance* instance, int width, int height
 void prism_destroySurface(PrismSurface* surface) {
     ELOS_Error error;
 
-    // @TODO Implement DESTRUCTION!
     PrismMessage message = {
         .type = PRISM_DESTROY_SURFACE,
         .destroySurface = {
@@ -159,6 +158,24 @@ void prism_destroySurface(PrismSurface* surface) {
     // In which case all resources got destroyed.
 }
 
+
+void prism_moveSurface(PrismSurface* surface, int x, int y) {
+    ELOS_Error error;
+
+    PrismMessage message = {
+        .type = PRISM_MOVE_SURFACE,
+        .moveSurface = {
+            .surfaceID = surface->surfaceID,
+            .x = x,
+            .y = y,
+        },
+    };
+
+    error = SYS_service_send(surface->instance->endpoint, &message, sizeof(message));
+    if (error != ELOS_OK) {
+        // What do we do?
+    }
+}
 
 void prism_surfaceInfo(PrismSurface* surface, PrismSurfaceInfo* info) {
     *info = (PrismSurfaceInfo) { };

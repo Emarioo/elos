@@ -46,6 +46,20 @@ PrismSurfaceInfo g_surfaceInfo;
 
 u64 ticks_per_second;
 
+ELOS_UserEventBuffer* userEvents;
+
+bool get_event(ELOS_UserEvent* event) {
+    // @TODO Not thread or context switch safe.
+    u64 tail = userEvents->tail % userEvents->maxEvents;
+    u64 head = userEvents->head % userEvents->maxEvents;
+    if (tail == head) {
+        return false;
+    }
+    *event = userEvents->events[tail];
+    userEvents->tail++;
+    return true;
+}
+
 void _start() {
 
     SYS_ticks_per_second(&ticks_per_second);
@@ -56,13 +70,23 @@ void _start() {
         exit(1);
     }
 
-    g_surface = prism_createSurface(g_instance, 1920, 1080);
+    g_surface = prism_createSurface(g_instance, 800, 600);
     if (!g_surface) {
         printf("terminal: Could not create surface\n");
         exit(1);
     }
 
     prism_surfaceInfo(g_surface, &g_surfaceInfo);
+
+    prism_moveSurface(g_surface, 200, 200);
+
+    ELOS_Error error;
+    error = SYS_request_user_event_buffer(10000, &userEvents);
+    if (error != ELOS_OK) {
+        printf("terminal: Could not create user event buffer\n");
+        exit(1);
+    }
+
 
     terminal_loop();
 }
@@ -80,6 +104,11 @@ void terminal_loop() {
     int vely = 1;
 
     while (1) {
+        ELOS_UserEvent event;
+        bool has = get_event(&event);
+        if (has) {
+            printf("type=%d id=%d chr=%c pressed=%d\n", event.type, event.id, event.key.character, event.key.value);
+        }
 
         draw_rect(x, y, size, size, BLACK);
         draw_rect(x+padding, y+padding, size-2*padding, size-2*padding, RED);
@@ -96,7 +125,8 @@ void terminal_loop() {
 
         prism_presentSurface(g_surface);
 
-        sleep((1000/144)*1000000);
+        // sleep((1000/144)*1000000);
+        sleep((1000/60)*1000000);
     }
 
 }

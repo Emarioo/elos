@@ -11,8 +11,8 @@
 
 #include "elos/physical_memory.h"
 
-#include "elos/kernel/kbd/ps2.h"
-#include "elos/kernel/kbd/keys.h"
+#include "elos/kernel/eve/ps2.h"
+#include "elos/kernel/eve/keys.h"
 
 
 
@@ -99,8 +99,8 @@ void CPU_init(BootAPI* boot_api) {
 
 
     // Enable IRQ1 for keyboard interrupts for core 0 (apic id = 0)
-    // cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x12, 33 | (1 << 15)); // 1<<15 does level trigger instead of edge, seems to work better?
-    // cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x13, 0);
+    cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x12, 33 | (1 << 15)); // 1<<15 does level trigger instead of edge, seems to work better?
+    cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x13, 0);
 
     // @TODO Calibration per core
     calibrate_tsc();
@@ -232,7 +232,7 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     while (1) asm ( "cli\nhlt\n" );
 }
 
-void interrupt_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
+void keyboard_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     // printf("Interrupt #%d\n", isr_number);
 
     while (1) {

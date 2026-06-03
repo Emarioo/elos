@@ -280,13 +280,15 @@ size_t strnlen(const char* ptr, size_t maxlen) {
     }
     return index;
 }
-void memcpy(void* dst, const void* src, int size) {
-    if (dst == src)
-        return;
-    for (int i=0;i<size;i++) {
-        ((char*)dst)[i] = ((char*)src)[i];
-    }
-}
+
+// void memcpy(void* dst, const void* src, int size) {
+//     if (dst == src)
+//         return;
+//     for (int i=0;i<size;i++) {
+//         ((char*)dst)[i] = ((char*)src)[i];
+//     }
+// }
+
 void memmove(void* dst, const void* src, int size) {
     if (dst == src)
         return;

@@ -24,16 +24,17 @@ typedef enum {
 } ELOS_Error;
 
 typedef enum {
-    GLOBAL_CAP_HEAP            = (1<<0),
-    GLOBAL_CAP_FILE            = (1<<1),
-    GLOBAL_CAP_MONITOR         = (1<<2),
-    GLOBAL_CAP_THREAD          = (1<<3),
-    GLOBAL_CAP_PROCESS         = (1<<4),
-    GLOBAL_CAP_NETWORK         = (1<<5),
-    GLOBAL_CAP_TIME            = (1<<6),
-    GLOBAL_CAP_SHARED_MEMORY   = (1<<7),
-    GLOBAL_CAP_SERVICE_SERVER  = (1<<8),
-    GLOBAL_CAP_SERVICE_CLIENT  = (1<<9),
+    ELOS_CAP_HEAP            = (1<<0),
+    ELOS_CAP_FILE            = (1<<1),
+    ELOS_CAP_MONITOR         = (1<<2),
+    ELOS_CAP_THREAD          = (1<<3),
+    ELOS_CAP_PROCESS         = (1<<4),
+    ELOS_CAP_NETWORK         = (1<<5),
+    ELOS_CAP_TIME            = (1<<6),
+    ELOS_CAP_SHARED_MEMORY   = (1<<7),
+    ELOS_CAP_SERVICE_SERVER  = (1<<8),
+    ELOS_CAP_SERVICE_CLIENT  = (1<<9),
+    ELOS_CAP_USER_EVENT      = (1<<10),
 } ELOS_GlobalCapability;
 
 
@@ -71,7 +72,44 @@ typedef struct {
 //   If endpoint is reused then If they can then how does service get an application ID that is unique so
 //   others can't d
 typedef void* ELOS_ServiceEndpoint;
-typedef void* ELOS_SharedMemoryHandle;
+typedef void* ELOS_SharedMemory;
+typedef void* ELOS_UserEventBufferHandle;
+
+typedef u32 ELOS_DeviceID;
+
+typedef enum {
+    ELOS_USER_EVENT_CONNECTED, // mouse,keyboard,controllers
+    ELOS_USER_EVENT_DISCONNECTED,
+    ELOS_USER_EVENT_KEY, // includes normal mouse and controller buttons?
+    ELOS_USER_EVENT_MOUSE_MOVE,
+    ELOS_USER_EVENT_MOUSE_SCROLL, // contains X and Y component (if X is available)
+    ELOS_USER_EVENT_CONTROLLER_LEFT_JOYSTICK,
+} ELOS_UserEventType;
+
+typedef struct {
+    ELOS_UserEventType type;
+    ELOS_DeviceID id;
+    union {
+        // struct {
+        // } connected;
+        // struct {
+        // } disconnected;
+        struct {
+            u32 kind;
+            u32 scancode;
+            u32 character;
+            u32 value; // zero = released, non-zero = how much it is pressed
+            u32 mods;
+        } key;
+    };
+} ELOS_UserEvent;
+
+typedef struct {
+    const    u64 maxEvents;
+    volatile u64 head; // @TODO reserve, commit head/tail?
+    volatile u64 tail;
+    ELOS_UserEvent events[];
+} ELOS_UserEventBuffer;
 
 #define ELOS_NULL_HANDLE (NULL)
 
@@ -106,7 +144,7 @@ void SYS_debug_log(const char* text, u32 length);
 /*
     Allocates memory from the heap.
 
-    @pre GLOBAL_CAP_HEAP capability is required.
+    @pre ELOS_CAP_HEAP capability is required.
 */
 ELOS_Error SYS_heap_allocate(void** newAddress, u64 size);
 ELOS_Error SYS_heap_free(void* oldAddress);
@@ -117,7 +155,7 @@ ELOS_Error SYS_heap_map(void* virtAddress, u64 size);
 /*
     Retrieves a frame buffer to the default monitor.
 
-    @pre GLOBAL_CAP_MONITOR capability is required.
+    @pre ELOS_CAP_MONITOR capability is required.
 
     @param frameBuffer Filled with information.
 */
@@ -128,7 +166,7 @@ ELOS_Error SYS_default_monitor(ELOS_FrameBuffer* frameBuffer);
     Tick refers to Real Time Clock or Time Stamp Counter.
     Use with rdtsc to measure elapsed seconds.
 
-    @pre GLOBAL_CAP_TIME capability is required.
+    @pre ELOS_CAP_TIME capability is required.
 
     @param tps Filled with information.
 */
@@ -147,13 +185,18 @@ void SYS_sleep_ns(u64 nanoseconds);
 
 
 /*
-    @pre GLOBAL_CAP_SERVICE_SERVER capability is required.
+    Creates a service for receiving messages from applications that connect.
+
+    @pre ELOS_CAP_SERVICE_SERVER capability is required.
 */
 ELOS_Error SYS_service_create(const char* name, ELOS_ServiceEndpoint* endpoint, u64 queueSize);
 
 
 /*
-    @pre GLOBAL_CAP_SERVICE_CLIENT capability is required.
+    Creates a connection to a service. It allows you to send and receive messages
+    between processes.
+
+    @pre ELOS_CAP_SERVICE_CLIENT capability is required.
 */
 ELOS_Error SYS_service_connect(const char* name, ELOS_ServiceEndpoint* endpoint, u64 queueSize);
 
@@ -161,7 +204,7 @@ ELOS_Error SYS_service_connect(const char* name, ELOS_ServiceEndpoint* endpoint,
 /*
     Sends messages to the service channel.
 
-    @pre GLOBAL_CAP_SERVICE_SERVER or GLOBAL_CAP_SERVICE_CLIENT capability is required.
+    @pre ELOS_CAP_SERVICE_SERVER or ELOS_CAP_SERVICE_CLIENT capability is required.
 
     @param endpoint The endpoint to send from.
     @param senderEndpoint Only relevant if endpoint is a servie and not the connection to the service.
@@ -175,7 +218,7 @@ ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, const void* data, u64
 /*
     Receive messages from the service channel.
 
-    @pre GLOBAL_CAP_SERVICE capability is required.
+    @pre ELOS_CAP_SERVICE capability is required.
 
     @param endpoint Endpoint to receive to.
     @param senderHandle Endpoint to receive from.
@@ -191,26 +234,35 @@ ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint*
 /*
     Allocate memory that can be shared with other processes.
 
-    @pre GLOBAL_CAP_SHARED_MEMORY capability is required.
+    @pre ELOS_CAP_SHARED_MEMORY capability is required.
 */
-ELOS_Error SYS_shared_memory_create(u64 size, ELOS_SharedMemoryHandle* handle);
+ELOS_Error SYS_shared_memory_create(u64 size, ELOS_SharedMemory* handle);
 
 
 /*
     Share memory with another process. Use service functions to acquire the endpoint.
 
-    @pre GLOBAL_CAP_SHARED_MEMORY capability is required.
+    @pre ELOS_CAP_SHARED_MEMORY capability is required.
 */
-ELOS_Error SYS_shared_memory_grant(ELOS_SharedMemoryHandle handle, ELOS_ServiceEndpoint endpoint);
+ELOS_Error SYS_shared_memory_grant(ELOS_SharedMemory handle, ELOS_ServiceEndpoint endpoint);
 
 
 /*
     Information about the shared memory.
+    Address is aligned by 4096 bytes (a page).
 
-    @pre GLOBAL_CAP_SHARED_MEMORY capability is required.
+    @pre ELOS_CAP_SHARED_MEMORY capability is required.
 */
-ELOS_Error SYS_shared_memory_info(ELOS_SharedMemoryHandle handle, void** buffer, u64* size);
+ELOS_Error SYS_shared_memory_info(ELOS_SharedMemory handle, void** buffer, u64* size);
 
+
+/*
+    Requests a ring buffer for user events. The OS fills this buffer and
+    old events are overridden.
+
+    @pre ELOS_CAP_USER_EVENT capability is required.
+*/
+ELOS_Error SYS_request_user_event_buffer(u64 size, ELOS_UserEventBuffer** buffer);
 
 
 
@@ -236,6 +288,7 @@ typedef enum {
     _SYS_SHARED_MEMORY_CREATE,
     _SYS_SHARED_MEMORY_GRANT,
     _SYS_SHARED_MEMORY_INFO,
+    _SYS_REQUEST_USER_EVENT_BUFFER,
 } ELOS_SyscallID;
 
 
@@ -277,7 +330,7 @@ typedef enum {
     )
 
 #define SYSCALL4(ID, ARG0, ARG1, ARG2, ARG3)                       \
-    register u64 r10 asm ("r10") = (u64)(ARG3);                           \
+    register u64 r10 asm ("r10") = (u64)(ARG3);                    \
     asm volatile (                                                 \
         "syscall"                                                  \
         : "=a" (rax)                                               \
@@ -286,14 +339,15 @@ typedef enum {
     )
 
 #define SYSCALL5(ID, ARG0, ARG1, ARG2, ARG3, ARG4)                            \
-    register u64 r10 asm ("r10") = (u64)(ARG3);                                      \
-    register u64 r8 asm ("r8") = (u64)(ARG4);                                        \
+    register u64 r10 asm ("r10") = (u64)(ARG3);                               \
+    register u64 r8 asm ("r8") = (u64)(ARG4);                                 \
     asm volatile (                                                            \
         "syscall"                                                             \
         : "=a" (rax)                                                          \
         : "a" (ID), "D" (ARG0), "S" (ARG1), "d" (ARG2), "r" (r10), "r" (r8)   \
         : "rcx", "r11", "memory"                                              \
     )
+
 
 void SYS_capabilites(ELOS_Capabilities* capabilities)  {
     ELOS_Error rax;
@@ -375,29 +429,30 @@ ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint*
     return rax;
 }
 
-ELOS_Error SYS_shared_memory_create(u64 size, ELOS_SharedMemoryHandle* handle) {
+ELOS_Error SYS_shared_memory_create(u64 size, ELOS_SharedMemory* handle) {
     ELOS_Error rax;
     SYSCALL2(_SYS_SHARED_MEMORY_CREATE, size, handle);
     return rax;
 }
 
-ELOS_Error SYS_shared_memory_grant(ELOS_SharedMemoryHandle handle, ELOS_ServiceEndpoint endpoint) {
+ELOS_Error SYS_shared_memory_grant(ELOS_SharedMemory handle, ELOS_ServiceEndpoint endpoint) {
     ELOS_Error rax;
     SYSCALL2(_SYS_SHARED_MEMORY_GRANT, handle, endpoint);
     return rax;
 }
 
-ELOS_Error SYS_shared_memory_info(ELOS_SharedMemoryHandle handle, void** buffer, u64* size)  {
+ELOS_Error SYS_shared_memory_info(ELOS_SharedMemory handle, void** buffer, u64* size) {
     ELOS_Error rax;
     SYSCALL3(_SYS_SHARED_MEMORY_INFO, handle, buffer, size);
     return rax;
 }
 
-
-
+ELOS_Error SYS_request_user_event_buffer(u64 size, ELOS_UserEventBuffer** buffer) {
+    ELOS_Error rax;
+    SYSCALL2(_SYS_REQUEST_USER_EVENT_BUFFER, size, buffer);
+    return rax;
+}
 
 
 
 #endif // ELOS_SYSCALL_IMPL
-
-
