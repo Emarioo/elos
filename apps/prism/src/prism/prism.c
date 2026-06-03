@@ -6,6 +6,7 @@
 #include "elos/syscalls.h"
 #include "elos/common/intrinsics.h"
 
+#include "elos/common/string.h"
 
 
 
@@ -210,8 +211,11 @@ void present_surface(int surfaceID) {
     // @TODO Implement levels for each surface. The order which to draw them.
     // @TODO Implement double buffering to prevent tearing. 
 
-    surface->x = 450;
-    surface->y = 150;
+    // surface->x = 450;
+    // surface->y = 150;
+    
+    surface->x = 0;
+    surface->y = 0;
 
     
     u32* src = surface->buffer;
@@ -242,11 +246,18 @@ void present_surface(int surfaceID) {
 
     // printf("x=%d y=%d w=%d h=%d dst_stride=%d src_stride=%d dst=%x src=%x\n", x, y, w, h, dst_stride, src_stride, dst, src);
 
+    // @TODO We may want to write to an internal buffer which we then write to the frame buffer in one fell swoop.
+
     for (int iy = y; iy < y + h; iy++) {
-        for (int ix = x; ix < x + w; ix++) {
-            // printf("%d %d\n", ix, iy);
-            dst[ix + iy * dst_stride] = src[(ix-x) + (iy-y) * src_stride];
-        }
+        void* begin = &dst[iy * dst_stride];
+        void* from = &src[(iy-y) * src_stride];
+        int size = 4 * w;
+        memcpy_fast(begin, from, size);
+        
+        // for (int ix = x; ix < x + w; ix++) {
+        //     // printf("%d %d\n", ix, iy);
+        //     dst[ix + iy * dst_stride] = src[(ix-x) + (iy-y) * src_stride];
+        // }
     }
 
 }

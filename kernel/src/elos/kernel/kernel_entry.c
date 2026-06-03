@@ -101,7 +101,7 @@ void kernel_entry(BootAPI* in_boot_api) {
     int monCount = ARRAY_LENGTH(monDevices);
     MON_scan_devices(monDevices, &monCount);
 
-    CPU_enable_sse();
+    CPU_enable_extensions();
 
     // Initialize simple keyboard
     KBD_init(boot_api);

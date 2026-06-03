@@ -50,7 +50,7 @@ typedef struct {
 
 void CPU_init(BootAPI* boot_api);
 
-void CPU_enable_sse();
+void CPU_enable_extensions();
 
 void CPU_enable_interrupt();
 void CPU_disable_interrupt();

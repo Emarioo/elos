@@ -12,6 +12,7 @@ def main(OUTPUT = "scripts/disk_fs/prism.elf"):
         f"{PROG_ROOT}/src/prism/prism.c",
         f"{APPS_ROOT}/std/stdio.c",
         f"{ELOS_ROOT}/kernel/src/elos/common/string.c",
+        f"{ELOS_ROOT}/kernel/src/elos/common/string_fast.s",
     ]
 
     SRC_FILES = " ".join(SRC_FILES)

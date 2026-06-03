@@ -56,7 +56,7 @@ void _start() {
         exit(1);
     }
 
-    g_surface = prism_createSurface(g_instance, 800, 600);
+    g_surface = prism_createSurface(g_instance, 1920, 1080);
     if (!g_surface) {
         printf("terminal: Could not create surface\n");
         exit(1);
@@ -72,8 +72,8 @@ void _start() {
 void terminal_loop() {
 
 
-    int x = 20;
-    int y = 20;
+    int x = 10;
+    int y = 10;
     int size = 20;
     int padding = 2;
     int velx = 1;
@@ -96,7 +96,7 @@ void terminal_loop() {
 
         prism_presentSurface(g_surface);
 
-        sleep(16*1000000);
+        sleep((1000/144)*1000000);
     }
 
 }

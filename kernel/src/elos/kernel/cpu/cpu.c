@@ -775,7 +775,7 @@ _align(4096) u32 initial_ap_stack_top;
 
 // ap = Application Processor, BSP = Bootstrap processor?
 void ap_entry(int id) {
-    CPU_enable_sse();
+    CPU_enable_extensions();
     
     int lapic_id = g_lapic_base[APIC_APICID/4] >> 24;
     printf("AP #%d started (edi=%d)\n", lapic_id, id);
@@ -796,11 +796,23 @@ void ap_entry(int id) {
 
 
 
-void CPU_enable_sse() {
+void CPU_enable_extensions() {
+    // Move to assembly and kernel_start and AP trampoline?
+
+    // @TODO Implement optional AVX support (nice for memcopies).
+    //   Need to properly save it when context switching.
+    //   I can't get avx to work in QEMU. Maybe some Windows -> WSL -> KVM -> QEMU issues (understandable).
+
     u32 eax, ebx, ecx, edx;
     cpuid(7, 0, &eax, &ebx, &ecx, &edx);
     bool has_fsgsbase = ebx & (1 << 0);
     // printf("Has fs %d, %d\n", has_fsgsbase, ebx);
+
+    // cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+    // if ((ecx & (1 << 27)) == 0) {
+    //     printf("NO AVX support!\n");
+    //     while (1) pause();
+    // }
 
     asm (
         "mov %cr0, %rax\n"
@@ -816,4 +828,13 @@ void CPU_enable_sse() {
         // "or $(1 << 18), %rax\n" // OSXSAVE
         "mov %rax, %cr4\n"
     );
+
+    // Enable AVX support.
+    // Used by memcpy_fast.
+    // asm (
+    //     "mov $1, %ecx\n"
+    //     "xgetbv\n"
+    //     "or $0x6, %eax\n" // Set XCR0.SSE, XCR0.AVX
+    //     "xsetbv\n"
+    // );
 }
