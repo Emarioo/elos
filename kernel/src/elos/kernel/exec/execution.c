@@ -58,10 +58,24 @@ void EXEC_timer_handler(InterruptFrame* frame) {
         }
     }
     if (currentThread == nextThread) {
+        // printf("Single thread\n");
         // There's only one thread.
     } else {
         memcpy(&currentThread->frame, frame, sizeof(*frame));
         memcpy(frame, &nextThread->frame, sizeof(*frame));
+
+        // My laptop clears the privilege level on ss
+        // so we make sure it's appropriately set.
+        // It has not happened for cs but it might.
+        if ((frame->ss & 0xF8) == USER_DATA_SEGMENT) {
+            frame->ss |= 3;
+        }
+        if ((frame->cs & 0xF8) == USER_CODE_SEGMENT) {
+            frame->cs |= 3;
+        }
+        // printf("Switch\n");
+        // printf(" ss=%x, from %x\n", frame->ss, currentThread->frame.ss);
+        // printf(" cs=%x, from %x\n", frame->cs, currentThread->frame.cs);
     }
 
 exit:

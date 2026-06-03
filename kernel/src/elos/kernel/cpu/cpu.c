@@ -117,14 +117,14 @@ void CPU_init(BootAPI* boot_api) {
 
     // Starting cores requires some sleep and precise timings.
     // We must calibrate TSC first.
-    // for (int i=0;i<acpi_lapic_ids_len;i++) {
-    //     u32 apic_id = acpi_lapic_ids[i];
-    //     if (apic_id == lapic_id)
-    //         continue; // don't start yourself
+    for (int i=0;i<acpi_lapic_ids_len;i++) {
+        u32 apic_id = acpi_lapic_ids[i];
+        if (apic_id == lapic_id)
+            continue; // don't start yourself
 
-    //     // printf("APIC id: %d\n", apic_id);
-    //     CPU_start_core(apic_id);
-    // }
+        // printf("APIC id: %d\n", apic_id);
+        CPU_start_core(apic_id);
+    }
 }
 
 
@@ -200,7 +200,13 @@ typedef struct {
 } PageFaultFrame;
 
 
-
+typedef struct {
+    u64 rip;
+    u64 cs;
+    u64 rflags;
+    u64 rsp;
+    u64 ss;
+} IretFrame;
 
 
 
@@ -211,9 +217,17 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
 
     if (isr_number == 14) {
         u64 fault_address = read_cr2();
-        printf("EXCEPTION #%d (rip=%x err=%x core=%d rsp=0x%x addr=0x%x)\n", isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp, fault_address);
+        printf("EXCEPTION #%d (rip=0x%x err=0x%x core=%d rsp=0x%x addr=0x%x)\n", isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp, fault_address);
     } else {
-        printf("EXCEPTION #%d (rip=%x err=%x core=%d rsp=0x%x)\n", isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp);
+        printf("EXCEPTION #%d (rip=0x%x err=0x%x core=%d rsp=0x%x)\n", isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp);
+
+        IretFrame* iretFrame = (void*)((char*)frame + 8 + sizeof(PageFaultFrame));
+        printf(" rip=%x\n", iretFrame->rip);
+        printf(" cs=%x\n", iretFrame->cs);
+        printf(" rflags=%x\n", iretFrame->rflags);
+        printf(" rsp=%x\n", iretFrame->rsp);
+        printf(" ss=%x\n", iretFrame->ss);
+
     }
     while (1) asm ( "cli\nhlt\n" );
 }
@@ -659,9 +673,10 @@ void calibrate_tsc() {
     cpuWriteIoApic(ioapic_address, 0x11 + 2 * calculated_irq_number, 0);
 
     u64 diff = hpet_rdtsc_value - start;
-    printf("HPET measured: %d K cycles/ms\n", diff/1000);
-
     tsc_per_sec = diff*10; // We measured 100 milliseconds, multiply by 10 and we get a full second
+
+    printf("HPET measured: %d MHz\n", tsc_per_sec/1000000);
+
 }
 void hpet_isr() {
     hpet_rdtsc_value = rdtsc();

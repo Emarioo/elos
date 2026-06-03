@@ -423,11 +423,6 @@ u64 g_bitmap[BITMAP_SIZE/8];
 u32 g_finishedChunk;
 u32 g_totalChunks;
 
-void bitmap_reset(u32 totalChunks) {
-    memset(g_bitmap, 0, sizeof(g_bitmap));
-    g_finishedChunk = 0;
-    bitmap_set_totalChunks(totalChunks);
-}
 void bitmap_set_totalChunks(u32 totalChunks) {
     u32 maxChunks = BITMAP_SIZE*8;
     if (totalChunks > maxChunks) {
@@ -435,6 +430,11 @@ void bitmap_set_totalChunks(u32 totalChunks) {
         while (1) pause();
     }
     g_totalChunks = totalChunks;
+}
+void bitmap_reset(u32 totalChunks) {
+    memset(g_bitmap, 0, sizeof(g_bitmap));
+    g_finishedChunk = 0;
+    bitmap_set_totalChunks(totalChunks);
 }
 void bitmap_set(u32 chunk) {
     int quad = chunk / 64;
@@ -602,11 +602,11 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
 
         if (bitmap_finished()) {
             printf("Finished %s\n", path);
-            return size;
+            return sendf->totalFileSize;
         }
     }
 
-    bitmap_dump_missing();
+    // bitmap_dump_missing();
 
     // bitmap_dump();
     

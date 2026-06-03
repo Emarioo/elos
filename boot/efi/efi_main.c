@@ -285,8 +285,64 @@ EFI_STATUS load_kernel_from_file(void* address) {
     return EFI_SUCCESS;
 }
 
+EFI_STATUS load_initrd_from_file();
 
 EFI_STATUS load_initrd() {
+    EFI_STATUS status;
+    
+    // @TODO Don't hardcode size. Or maybe that's fine?
+    //    Text section is maxmium 1 MB in linker script.
+    //    Data and bss cover the rest.
+    int initrd_file_size = 8*0x100000; // 4 MB
+    const int PAGE_SIZE = 4096;
+    int pages = (initrd_file_size + PAGE_SIZE-1) / PAGE_SIZE;
+
+    void* address = NULL;
+    
+    status = ST->BootServices->AllocatePages(AllocateAnyPages, EfiLoaderData, pages, (EFI_PHYSICAL_ADDRESS*)&address);
+    if (EFI_ERROR(status)) {
+        printf("Could not allocate pages at %x\n", address);
+        catch_bad_status();
+        return status;
+    }
+    
+    if (!can_load_kernel_from_network) {
+        goto local_kernel;
+    }
+    
+    netboot_config.static_ip = kernel_config.static_ip;
+    netboot_config.server_ips = kernel_config.netboot_ips;
+    netboot_config.server_ips_len = kernel_config.netboot_ips_len;
+    netboot_config.port = kernel_config.netboot_port;
+    
+
+    bool res;
+
+    res = NETBOOT_init(&netboot_impl, &netboot_config);
+    if (!res) {
+        goto local_kernel;
+    }
+
+    int file_size = NETBOOT_request_file("/INITRD.IMG", 0, initrd_file_size, address);
+    if (!file_size) {
+        goto local_kernel;
+    }
+    
+    g_boot_api.initrd      = (void*)address;
+    g_boot_api.initrd_size = file_size;
+
+    return EFI_SUCCESS;
+
+local_kernel:
+    status = load_initrd_from_file();
+    if (EFI_ERROR(status)) {
+        return status;
+    }
+
+    return EFI_SUCCESS;
+}
+
+EFI_STATUS load_initrd_from_file() {
     printf("Loading initrd from disk\n");
 
     EFI_STATUS Status;

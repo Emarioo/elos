@@ -89,6 +89,7 @@ void init_paging(BootAPI* boot_api) {
 }
 
 bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 size, MapPageFlag flags) {
+    // u64 user_bit = PAGE_BIT_USER;
     u64 user_bit = 0;
     u64 write_bit = PAGE_BIT_WRITE;
     u64 cache_bit = 0;

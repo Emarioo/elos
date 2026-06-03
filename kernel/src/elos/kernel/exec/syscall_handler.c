@@ -162,7 +162,8 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 if (!yes) {
                     returnValue = ELOS_GENERIC_ERROR;
                 } else {
-                    bool mapped = PMEM_map_memory(userPageTable, mon_frameBuffer.phys_address, mon_frameBuffer.phys_address, mon_frameBuffer.size, PMEM_FLAG_USER_SPACE|PMEM_FLAG_NOT_CACHED);
+                    // @TODO Make it writethrough? Fully cached might be a bad idea?
+                    bool mapped = PMEM_map_memory(userPageTable, mon_frameBuffer.phys_address, mon_frameBuffer.phys_address, mon_frameBuffer.size, PMEM_FLAG_USER_SPACE);
                     if (!mapped) {
                         returnValue = ELOS_GENERIC_ERROR;
                     } else {

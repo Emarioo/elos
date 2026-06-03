@@ -132,9 +132,11 @@ timer_isr:
     pop rcx
     pop rbx
 
-    mov rax, [rsp + 6 * 8] # extract SS from interrupt frame
+    // mov rax, [rsp + 6 * 8] # extract SS from interrupt frame
+    mov ax, 0x0
     mov ds, ax
     mov es, ax
+    // mov ax, 0
     mov fs, ax
     mov gs, ax
 
