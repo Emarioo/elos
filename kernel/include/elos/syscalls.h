@@ -265,6 +265,9 @@ ELOS_Error SYS_shared_memory_info(ELOS_SharedMemory handle, void** buffer, u64* 
 ELOS_Error SYS_request_user_event_buffer(u64 size, ELOS_UserEventBuffer** buffer);
 
 
+// @TODO SYS_utc_epoch_time(u64* nanoseconds)
+//   Network Time Protocol and DNS to sync the time.
+
 
 // @TODO Auto-generate stuff below?
 

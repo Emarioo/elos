@@ -22,11 +22,11 @@ Tasks related to kernel and operating system
 - [ ] Text editor.
 - [ ] Terminal.
 - [ ] PRISM Compositor, moving and resizing windows, double buffering, transparent windows, input passthrough. Keyboard and mouse input.
-- [ ] Kernel keyboard syscalls.
+- [ ] Driver for file system, disk device.
+- [ ] Give interrupt routines some structure. Functions enable/disable/set them. Add redirection entries etc.
 - [ ] Kernel mouse syscalls. (maybe generic input syscalls for keyboard, controller, mouse?)
 - [ ] Kernel audio syscalls.
 - [ ] Audio server.
-- [ ] Driver for file system, disk device.
 - [ ] DOOM port.
 
 ## @urgent

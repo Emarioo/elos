@@ -92,16 +92,21 @@ def main():
         if os.path.exists("releases"):
             shutil.rmtree("releases")
         return 0
+    
+    os.makedirs("bin", exist_ok=True)
 
     netboot_server = "int/netboot_server_windows/netboot.exe" if platform.system() == "Windows" else "int/netboot_server_linux/netboot"
     netboot_server_bin = f"bin/{os.path.basename(netboot_server)}"
-    cmd(f"make -f {ROOT}/netboot_server/Makefile")
-    if os.path.exists(netboot_server):
-        os.makedirs("bin", exist_ok=True)
-        try:
-            shutil.copy(netboot_server, netboot_server_bin)
-        except:
-            pass
+    
+    def sync0():
+        cmd(f"make -f {ROOT}/netboot_server/Makefile")
+        if os.path.exists(netboot_server):
+            try:
+                shutil.copy(netboot_server, netboot_server_bin)
+            except:
+                pass
+            
+    net_thread = cmd_async(sync0)
 
     if vbox:
         print("VBOX NO WORK")
@@ -122,6 +127,7 @@ def main():
 
 
     if netboot:
+        wait_pool([net_thread])
         cmd(f"{netboot_server_bin}")
 
     elif run:
@@ -214,16 +220,32 @@ def package_elos(release_dir, build_iso = False):
     INT_DIR         = f"{ROOT}/int"
     fat_path        = f"{INT_DIR}/fat.img"
 
-    cmd(f"make -f {ROOT}/boot/Makefile INT_DIR={INT_DIR}/boot BOOT_EFI={bootx64_path}")
-    
-    cmd(f"make -f {ROOT}/kernel/Makefile INT_DIR={INT_DIR}/kernel KERNEL_IMAGE={kernel_path} KERNEL_ELF={kernel_elf_path}")
 
-    import apps.prism.build
-    import apps.terminal.build
-    apps.prism.build.main(prism_path)
-    cmd(f"objdump -S {prism_path} > prism.dis")
-    apps.terminal.build.main(term_path)
-    cmd(f"objdump -S {term_path} > term.dis")
+    threads = []
+
+    def sync0():
+        cmd(f"make -f {ROOT}/boot/Makefile INT_DIR={INT_DIR}/boot BOOT_EFI={bootx64_path}")
+    
+    def sync1():
+        cmd(f"make -f {ROOT}/kernel/Makefile INT_DIR={INT_DIR}/kernel KERNEL_IMAGE={kernel_path} KERNEL_ELF={kernel_elf_path}")
+    
+    def sync2():
+        import apps.prism.build
+        apps.prism.build.main(prism_path)
+        cmd(f"objdump -S {prism_path} > prism.dis")
+        
+    def sync3():
+        import apps.terminal.build
+        apps.terminal.build.main(term_path)
+        cmd(f"objdump -S {term_path} > term.dis")
+    
+    threads.append(cmd_async(sync0))
+    threads.append(cmd_async(sync1))
+    threads.append(cmd_async(sync2))
+    threads.append(cmd_async(sync3))
+
+    wait_pool(threads)
+
 
     DEPS_SPEC: list[tuple[str,str]] = [
         (prism_path, "PRISM.ELF"),
@@ -241,14 +263,20 @@ def package_elos(release_dir, build_iso = False):
 
     fat_size, ISO_DIR = make_fat(fat_path, DEPS_SPEC)
 
-    cmd(f"cp {fat_path} {ISO_DIR}/fat.img")
+    
+        
+    if build_iso:
+        def sync1():
+            cmd(f"cp {fat_path} {ISO_DIR}/fat.img")
+            cmd(f"xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o {iso_path} {ISO_DIR}")
+            if os.path.exists(iso_path):
+                cmd(f"cp {iso_path} bin/elos.iso")
+        threads.append(cmd_async(sync1))
+
     #                       GPT header info      fat    some extra rom
     gpt_size_estimation = 2 * (2*512 + 128*128) + fat_size + (40 + 400) * 512
     cmd(f"mkgpt -o {img_path} --image-size {gpt_size_estimation/512} --part {fat_path} --type system")
 
-    # subprocess.Popen(
-    if build_iso:
-        cmd(f"xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o {iso_path} {ISO_DIR}")
     # cmd(f"xorriso -as mkisofs -R -f -no-emul-boot -o {iso_path} {ISO_DIR}")
 
     # Copy ISO into folder
@@ -257,9 +285,10 @@ def package_elos(release_dir, build_iso = False):
 
     # Zip folder
 
-    cmd(f"cd {os.path.dirname(temp_folder_path)} && tar -czf {temp_folder_name}.tar.gz {temp_folder_name}")
+    def sync3():
+        cmd(f"cd {os.path.dirname(temp_folder_path)} && tar -czf {temp_folder_name}.tar.gz {temp_folder_name}")
 
-    os.makedirs("bin", exist_ok=True)
+    cmd_async(sync3)
 
     # Copy latest images to bin for quick access (we could make symlinks)
     if os.path.exists(img_path):
@@ -269,8 +298,8 @@ def package_elos(release_dir, build_iso = False):
     if os.path.exists(kernel_elf_path):
         cmd(f"cp {kernel_elf_path} bin/kernel.elf")
         cmd(f"objdump -Sr bin/kernel.elf > bin/kernel.dis")
-    if os.path.exists(iso_path):
-        cmd(f"cp {iso_path} bin/elos.iso")
+
+    wait_pool(threads)
 
     print(f"Successfully built \033[32m{temp_folder_path}\033[0m")
 
@@ -372,6 +401,16 @@ def install_deps():
     else:
         print(f"Platform {platform.system()} not supported by 'build.py install'")
         print(f"You'll have to install dependencies manually ):")
+
+def cmd_async(func):
+    thr = threading.Thread(target = func)
+    thr.start()
+    return thr
+
+def wait_pool(threads):
+    for t in threads:
+        t.join()
+    threads.clear()
 
 def cmd(c):
     if platform.system() == "Windows":

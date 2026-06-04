@@ -15,6 +15,7 @@ typedef struct {
     void*    rsdt; // or xsdt
     void*    initrd;
     uint64_t initrd_size;
+    uint64_t utc_time_ns; // since_unix_epoch
 
     //
     //  Accessible Memory Regions

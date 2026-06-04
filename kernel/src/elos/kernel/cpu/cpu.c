@@ -201,6 +201,17 @@ typedef struct {
 
 
 typedef struct {
+    uint64_t r11, r10, r9, r8;
+    uint64_t rdi, rsi, rdx, rcx, rax;
+
+    uint64_t rip;
+    uint64_t cs;
+    uint64_t rflags;
+    uint64_t rsp;
+    uint64_t ss;
+} KeyboardInterruptFrame;
+
+typedef struct {
     u64 rip;
     u64 cs;
     u64 rflags;
@@ -232,7 +243,7 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     while (1) asm ( "cli\nhlt\n" );
 }
 
-void keyboard_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
+void keyboard_handler(int isr_number, KeyboardInterruptFrame* frame, u64 extra) {
     // printf("Interrupt #%d\n", isr_number);
 
     while (1) {
@@ -251,6 +262,11 @@ void keyboard_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
 
         // printf("scancode %d, %c\n", scancode, chr);
     }
+    
+    // SS privilege gets cleared on my laptop.
+    // May have set up something bad in descriptors.
+    // But this ensures we get the right wrong.
+    frame->ss |= frame->cs & 3;
 
     if (g_lapic_base)
         g_lapic_base[APIC_EOI/4] = 0; // clear EOI
