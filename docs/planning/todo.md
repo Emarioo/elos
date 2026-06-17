@@ -19,7 +19,7 @@ The categories are:
 Tasks related to kernel and operating system
 
 ## @current
-- [ ] Text editor.
+- [ ] Text editor. Try to port https://github.com/martanne/vis?
 - [ ] Terminal.
 - [ ] PRISM Compositor, moving and resizing windows, double buffering, transparent windows, input passthrough. Keyboard and mouse input.
 - [ ] Driver for file system, disk device.

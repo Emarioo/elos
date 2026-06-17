@@ -15,11 +15,8 @@
 
 
 typedef enum {
-    VFS_FLAG_NONE,
-    VFS_FLAG_READ,
-    VFS_FLAG_WRITE,
-    VFS_FLAG_READ_WRITE,
-    VFS_FLAG_CREATE, // create if missing
+    VFS_FLAG_READ_ONLY = 0x1,
+    VFS_FLAG_CREATE = 0x2, // create if missing
 } VFS_OpenFlags;
 
 typedef struct {
@@ -53,12 +50,14 @@ bool VFS_mkdir(const char* path);
     The content of the mount is not deleted.
 */
 bool VFS_remove(const char* path);
+bool VFS_rename(const char* old_path, const char* new_path);
+bool VFS_copy(const char* old_path, const char* new_path);
 
+// @TODO symlinks
 
 VFS_Handle VFS_open(const char* path, VFS_OpenFlags flags);
 void VFS_close(VFS_Handle handle);
 void VFS_info(VFS_Handle handle, VFS_HandleInfo* info);
-
 
 /*
     Only for files

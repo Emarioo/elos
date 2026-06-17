@@ -8,8 +8,9 @@
 
 */
 
-#ifndef _ELOS_SYSCALL_INCLUDE
-#define _ELOS_SYSCALL_INCLUDE
+#ifndef ELOS_SYSCALL_INCLUDE
+// Enabled furher down where we define keys
+// #define ELOS_SYSCALL_INCLUDE
 
 // consider using stdint.h instead
 #include "elos/common/types.h"
@@ -35,6 +36,7 @@ typedef enum {
     ELOS_CAP_SERVICE_SERVER  = (1<<8),
     ELOS_CAP_SERVICE_CLIENT  = (1<<9),
     ELOS_CAP_USER_EVENT      = (1<<10),
+    ELOS_CAP_ASYNC           = (1<<11),
 } ELOS_GlobalCapability;
 
 
@@ -74,6 +76,7 @@ typedef struct {
 typedef void* ELOS_ServiceEndpoint;
 typedef void* ELOS_SharedMemory;
 typedef void* ELOS_UserEventBufferHandle;
+typedef void* ELOS_File;
 
 typedef u32 ELOS_DeviceID;
 
@@ -95,7 +98,7 @@ typedef struct {
         // struct {
         // } disconnected;
         struct {
-            u32 kind;
+            u32 keycode;
             u32 scancode;
             u32 character;
             u32 value; // zero = released, non-zero = how much it is pressed
@@ -265,6 +268,158 @@ ELOS_Error SYS_shared_memory_info(ELOS_SharedMemory handle, void** buffer, u64* 
 ELOS_Error SYS_request_user_event_buffer(u64 size, ELOS_UserEventBuffer** buffer);
 
 
+
+
+// ELOS_Error SYS_file_open(const char* path, ELOS_File* file);
+// ELOS_Error SYS_file_close(ELOS_File file);
+// ELOS_Error SYS_file_read(ELOS_File file, u64 offset, void* data, u64* size);
+// ELOS_Error SYS_file_write(ELOS_File file, u64 offset, const void* data, u64* size);
+// ELOS_Error SYS_file_info(ELOS_File file, u64* size);
+
+// ELOS_Error SYS_file_remove(const char* path);
+// ELOS_Error SYS_file_rename(const char* old_path, const char* new_path);
+// ELOS_Error SYS_file_mkdir(const char* path);
+
+
+/*
+    Asynchonrous operations
+
+    @TODO What to support:
+        File operations
+        Network operations
+        Timer wait, events, signaling?
+
+
+*/
+
+typedef enum {
+    ELOS_ASYNC_KERNEL_POLLING = 0x1,
+} ELOS_AsyncCreateFlag;
+
+enum _ELOS_AsyncOperation {
+    ELOS_ASYNC_FILE_OPEN = 1,
+    ELOS_ASYNC_FILE_CLOSE,
+    ELOS_ASYNC_FILE_READ,
+    ELOS_ASYNC_FILE_WRITE,
+    ELOS_ASYNC_FILE_INFO,
+    ELOS_ASYNC_FILE_REMOVE,
+    ELOS_ASYNC_FILE_RENAME,
+    ELOS_ASYNC_FILE_COPY,
+    ELOS_ASYNC_FILE_MKDIR,
+    ELOS_ASYNC_FILE_READDIR,
+};
+typedef u16 ELOS_AsyncOperation;
+
+typedef enum {
+    ELOS_FILE_OPEN_FLAG_READ_ONLY = 0x1, // Allows multiple readers on same file.
+    ELOS_FILE_OPEN_FLAG_CREATE = 0x2, // Create file if missing
+} ELOS_FileOpenFlag;
+
+
+typedef struct {
+    ELOS_AsyncOperation operation;
+    u16 flags;
+    u32 reserved;
+    u64 userData;
+
+    union {
+        struct {
+            const char* path;
+            ELOS_FileOpenFlag flags;
+        } open;
+        struct {
+            ELOS_File file;
+        } close;
+        struct {
+            ELOS_File file;
+            u64       offset;
+            u64       size;
+            void*     buffer;
+        } read;
+        struct {
+            ELOS_File file;
+            u64       offset;
+            u64       size;
+            void*     buffer;
+        } write;
+        struct {
+            ELOS_File file;
+            u64       entryIndex;
+            u64*      entryCount;
+            void*     buffer;
+        } readdir;
+    };
+} ELOS_AsyncRequest;
+
+typedef struct {
+    ELOS_AsyncOperation operation;
+    u16        flags;
+    ELOS_Error error;
+    u64        userData;
+    union {
+        struct {
+            ELOS_File file;
+        } open;
+        struct {
+            u64 readBytes;
+        } read;
+        struct {
+            u64 writtenBytes;
+        } write;
+    };
+} ELOS_AsyncCompletion;
+
+typedef struct {
+    volatile u64 head;
+    volatile u64 tail;
+    const    u64 ringMask;
+             u32 reserved;
+    volatile ELOS_AsyncRequest entries[];
+} ELOS_AsyncRequestRing;
+
+typedef struct {
+    volatile u64 head;
+    volatile u64 tail;
+    const    u32 ringMask;
+             u32 reserved;
+    volatile ELOS_AsyncCompletion entries[];
+} ELOS_AsyncCompletionRing;
+
+
+/*
+    Creates two rings for asynronous operations.
+
+    @pre ELOS_CAP_ASYNC capability is required.
+*/
+ELOS_Error SYS_create_async_rings(u32 maxEntries, ELOS_AsyncCreateFlag flags, ELOS_AsyncRequestRing** requestRing, ELOS_AsyncCompletionRing** completionRing);
+
+
+/*
+    Destroys two rings. Operations in progress are aborted.
+
+    @pre ELOS_CAP_ASYNC capability is required.
+*/
+ELOS_Error SYS_destroy_async_rings(ELOS_AsyncRequestRing* requestRing, ELOS_AsyncCompletionRing* completionRing);
+
+
+/*
+    Submits entries in the ring for processing by the kernel. Not necessary if
+    ring was created with ELOS_ASYNC_KERNEL_POLLING.
+
+    @pre ELOS_CAP_ASYNC capability is required.
+*/
+ELOS_Error SYS_submit_async_ring(ELOS_AsyncRequestRing* requestRing);
+
+
+/*
+    Waits for kernel to complete an operation.
+
+    @pre ELOS_CAP_ASYNC capability is required.
+*/
+ELOS_Error SYS_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, u64 timeout_ns);
+
+
+
 // @TODO SYS_utc_epoch_time(u64* nanoseconds)
 //   Network Time Protocol and DNS to sync the time.
 
@@ -292,10 +447,14 @@ typedef enum {
     _SYS_SHARED_MEMORY_GRANT,
     _SYS_SHARED_MEMORY_INFO,
     _SYS_REQUEST_USER_EVENT_BUFFER,
+    _SYS_CREATE_ASYNC_RING,
+    _SYS_DESTROY_ASYNC_RING,
+    _SYS_SUBMIT_ASYNC_RING,
+    _SYS_WAIT_ASYNC_RING,
 } ELOS_SyscallID;
 
 
-#endif // _ELOS_SYSCALL_INCLUDE
+#endif // ELOS_SYSCALL_INCLUDE
 
 #ifdef ELOS_SYSCALL_IMPL
 
@@ -403,9 +562,41 @@ ELOS_Error SYS_ticks_per_second(u64* tps) {
     return rax;
 }
 
+
 void SYS_sleep_ns(u64 nanoseconds) {
-    ELOS_Error rax;
-    SYSCALL1(_SYS_SLEEP_NS, nanoseconds);
+    static u64 tps;
+    if (tps == 0) {
+        ELOS_Error error = SYS_ticks_per_second(&tps);
+        if (error != ELOS_OK) {
+            tps = 2900000000;
+        }
+    }
+    // ELOS_Error rax;
+    // SYSCALL1(_SYS_SLEEP_NS, nanoseconds);
+    
+    // CPU burning implementation for now
+    u64 start;
+    asm(
+        "rdtsc\n"
+        "shl $32, %%rdx\n"
+        "or %%rdx, %%rax\n"
+        : "=a" (start)
+        :
+    );
+    while (1) {
+        u64 now;
+        asm(
+            "rdtsc\n"
+            "shl $32, %%rdx\n"
+            "or %%rdx, %%rax\n"
+            : "=a" (now)
+            :
+        );
+        u64 now_ns = (1000000000 * (now - start)) / tps;
+        if (now_ns > nanoseconds) {
+            return;
+        }
+    }
 }
 
 ELOS_Error SYS_service_create(const char* name, ELOS_ServiceEndpoint* endpoint, u64 queueSize) {
@@ -456,6 +647,167 @@ ELOS_Error SYS_request_user_event_buffer(u64 size, ELOS_UserEventBuffer** buffer
     return rax;
 }
 
+ELOS_Error SYS_create_async_rings(u32 maxEntries, ELOS_AsyncCreateFlag flags, ELOS_AsyncRequestRing** requestRing, ELOS_AsyncCompletionRing** completionRing) {
+    ELOS_Error rax;
+    SYSCALL4(_SYS_CREATE_ASYNC_RING, maxEntries, flags, requestRing, completionRing);
+    return rax;
+}
+
+ELOS_Error SYS_destroy_async_rings(ELOS_AsyncRequestRing* requestRing, ELOS_AsyncCompletionRing* completionRing) {
+    ELOS_Error rax;
+    SYSCALL2(_SYS_DESTROY_ASYNC_RING, requestRing, completionRing);
+    return rax;
+}
+
+ELOS_Error SYS_submit_async_ring(ELOS_AsyncRequestRing* requestRing) {
+    ELOS_Error rax;
+    SYSCALL1(_SYS_SUBMIT_ASYNC_RING, requestRing);
+    return rax;
+}
+
+ELOS_Error SYS_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, u64 timeout_ns) {
+    ELOS_Error rax;
+    SYSCALL2(_SYS_WAIT_ASYNC_RING, completionRing, timeout_ns);
+    return rax;
+}
+
+
 
 
 #endif // ELOS_SYSCALL_IMPL
+
+
+
+#ifndef ELOS_SYSCALL_INCLUDE
+#define ELOS_SYSCALL_INCLUDE
+
+enum ELOS_Keycode {
+    ELOS_KEY_NONE, // empty/invalid key
+    ELOS_KEY_ESCAPE,
+    ELOS_KEY_LSHIFT,
+    ELOS_KEY_RSHIFT,
+    ELOS_KEY_LCTRL,
+    ELOS_KEY_RCTRL,
+    ELOS_KEY_LALT,
+    ELOS_KEY_RALT,
+    ELOS_KEY_BACKSPACE,
+    ELOS_KEY_TAB,
+    ELOS_KEY_ENTER,
+    ELOS_KEY_FN,
+    ELOS_KEY_HOME,
+    ELOS_KEY_INSERT,
+    ELOS_KEY_DELETE,
+    ELOS_KEY_END,
+    ELOS_KEY_PAGE_DOWN,
+    ELOS_KEY_PAGE_UP,
+    ELOS_KEY_NUM_LOCK,
+    ELOS_KEY_SUPER,
+    ELOS_KEY_CAPSLOCK,
+
+    ELOS_KEY_SPACE,
+    ELOS_KEY_EXCLAMATION_MARK,
+    ELOS_KEY_DQUOTE,
+    ELOS_KEY_HASHTAG,
+    ELOS_KEY_DOLLAR,
+    ELOS_KEY_PERCENT,
+    ELOS_KEY_AMPERSAND,
+    ELOS_KEY_SQUOTE,
+    ELOS_KEY_LPAREN,
+    ELOS_KEY_RPAREN,
+    ELOS_KEY_ASTERISK,
+    ELOS_KEY_PLUS,
+    ELOS_KEY_COMMA,
+    ELOS_KEY_MINUS,
+    ELOS_KEY_PERIOD,
+    ELOS_KEY_SLASH,
+
+    ELOS_KEY_0,
+    ELOS_KEY_1,
+    ELOS_KEY_2,
+    ELOS_KEY_3,
+    ELOS_KEY_4,
+    ELOS_KEY_5,
+    ELOS_KEY_6,
+    ELOS_KEY_7,
+    ELOS_KEY_8,
+    ELOS_KEY_9,
+
+    ELOS_KEY_COLON,
+    ELOS_KEY_SEMICOLON,
+    ELOS_KEY_LESSER,
+    ELOS_KEY_EQUAL,
+    ELOS_KEY_GREATER,
+    ELOS_KEY_QUESTION_MARK,
+    ELOS_KEY_AT_SIGN,
+
+
+    ELOS_KEY_A,
+    ELOS_KEY_B,
+    ELOS_KEY_C,
+    ELOS_KEY_D,
+    ELOS_KEY_E,
+    ELOS_KEY_F,
+    ELOS_KEY_G,
+    ELOS_KEY_H,
+    ELOS_KEY_I,
+    ELOS_KEY_J,
+    ELOS_KEY_K,
+    ELOS_KEY_L,
+    ELOS_KEY_M,
+    ELOS_KEY_N,
+    ELOS_KEY_O,
+    ELOS_KEY_P,
+    ELOS_KEY_Q,
+    ELOS_KEY_R,
+    ELOS_KEY_S,
+    ELOS_KEY_T,
+    ELOS_KEY_U,
+    ELOS_KEY_V,
+    ELOS_KEY_W,
+    ELOS_KEY_X,
+    ELOS_KEY_Y,
+    ELOS_KEY_Z,
+
+    ELOS_KEY_LBRACKET,
+    ELOS_KEY_BACKSLASH,
+    ELOS_KEY_RBRACKET,
+    ELOS_KEY_CARET,
+    ELOS_KEY_UNDERSCORE,
+    ELOS_KEY_BACKTICK,
+
+    ELOS_KEY_LBRACE,
+    ELOS_KEY_VERTICAL_BAR,
+    ELOS_KEY_RBRACE,
+    ELOS_KEY_TILDE,
+
+    ELOS_KEY_LEFT_ARROW,
+    ELOS_KEY_RIGHT_ARROW,
+    ELOS_KEY_UP_ARROW,
+    ELOS_KEY_DOWN_ARROW,
+
+    ELOS_KEY_F1,
+    ELOS_KEY_F2,
+    ELOS_KEY_F3,
+    ELOS_KEY_F4,
+    ELOS_KEY_F5,
+    ELOS_KEY_F6,
+    ELOS_KEY_F7,
+    ELOS_KEY_F8,
+    ELOS_KEY_F9,
+    ELOS_KEY_F10,
+    ELOS_KEY_F11,
+    ELOS_KEY_F12,
+    ELOS_KEY_F13,
+    ELOS_KEY_F14,
+    ELOS_KEY_F15,
+
+    ELOS_KEY_MAX,
+
+    ELOS_KEY_MOD_SHIFT    = 0x1,
+    ELOS_KEY_MOD_ALT      = 0x2,
+    ELOS_KEY_MOD_CAPSLOCK = 0x4,
+    ELOS_KEY_MOD_CTRL     = 0x8,
+};
+
+
+#endif // ELOS_SYSCALL_INCLUDE

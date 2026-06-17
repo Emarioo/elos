@@ -361,7 +361,7 @@ int strncmp(const char* dst, const char* src, size_t len) {
 }
 
 void memset(void* dst, int val, size_t size) {
-    for(int i=0;i<(int)size;i++) {
+    for(size_t i = 0; i < size; i++) {
         *((char*)dst + i) = val;
     }
 }

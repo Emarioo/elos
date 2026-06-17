@@ -13,6 +13,7 @@
 #include "elos/disk.h"
 #include "elos/execution.h"
 #include "elos/vfs.h"
+#include "elos/async.h"
 
 #include "elos/common/intrinsics.h"
 #include "elos/common/string.h"
@@ -232,6 +233,8 @@ void kernel_entry(BootAPI* in_boot_api) {
         //         NET_free_packet(net_device, &packet);
         //     }
         // }
+
+        ASYNC_handler();
 
         pause();
     }

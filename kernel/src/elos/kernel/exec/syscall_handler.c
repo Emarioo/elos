@@ -16,6 +16,7 @@
 #include "elos/monitor.h"
 #include "elos/service.h"
 #include "elos/user_event.h"
+#include "elos/async.h"
 
 #include "elos/cpu.h"
 
@@ -440,6 +441,118 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 }
                 returnValue = ELOS_OK;
             }
+        } break;
+        case _SYS_CREATE_ASYNC_RING: {
+            u32 maxEntries = arg0;
+            ELOS_AsyncCreateFlag flags = arg1;
+            ELOS_AsyncRequestRing** requestRing = (void*)arg2;
+            ELOS_AsyncCompletionRing** completionRing = (void*)arg3;
+
+            // @TODO Check capability
+            
+            write_cr3((u64)g_kernelPageTable);
+
+            ELOS_AsyncRequestRing* tmp_requestRing = NULL;
+            ELOS_AsyncCompletionRing* tmp_completionRing = NULL;
+            int result = ASYNC_create_async_rings(maxEntries, flags, &tmp_requestRing, &tmp_completionRing);
+
+            u32 actualMaxEntries = ringMaskFromEntryCount(maxEntries) + 1;
+            u64 requestRingSize = sizeof(ELOS_AsyncRequestRing) + actualMaxEntries * sizeof(ELOS_AsyncRequest);
+            u64 completionRingSize = sizeof(ELOS_AsyncCompletionRing) + actualMaxEntries * sizeof(ELOS_AsyncCompletion);
+
+            if (result) {
+                bool mapped = PMEM_map_memory(userPageTable, tmp_requestRing, tmp_requestRing, requestRingSize, PMEM_FLAG_USER_SPACE);
+                if (!mapped) {
+                    // @TODO Leaking created ring!
+                    returnValue = ELOS_GENERIC_ERROR;
+                    write_cr3((u64)userPageTable);
+                    break;
+                }
+                mapped = PMEM_map_memory(userPageTable, tmp_completionRing, tmp_completionRing, completionRingSize, PMEM_FLAG_USER_SPACE);
+                if (!mapped) {
+                    // @TODO Leaking created ring!
+                    returnValue = ELOS_GENERIC_ERROR;
+                    write_cr3((u64)userPageTable);
+                    break;
+                }
+            }
+
+            write_cr3((u64)userPageTable);
+
+            if (result == ASYNC_OK) {
+                *requestRing    = tmp_requestRing;
+                *completionRing = tmp_completionRing;
+                returnValue = ELOS_OK;
+            } else {
+                returnValue = ELOS_GENERIC_ERROR;
+            }
+        } break;
+        case _SYS_DESTROY_ASYNC_RING: {
+            ELOS_AsyncRequestRing* requestRing = (void*)arg0;
+            ELOS_AsyncCompletionRing* completionRing = (void*)arg1;
+
+            // @TODO Check capability
+            
+            write_cr3((u64)g_kernelPageTable);
+
+            u32 actualMaxEntries = 0;
+            int result = ASYNC_destroy_async_rings(requestRing, completionRing, &actualMaxEntries);
+            if (result != ASYNC_OK) {
+                returnValue = ELOS_GENERIC_ERROR;
+                break;
+            }
+
+            u64 requestRingSize = sizeof(ELOS_AsyncRequestRing) + actualMaxEntries * sizeof(ELOS_AsyncRequest);
+            u64 completionRingSize = sizeof(ELOS_AsyncCompletionRing) + actualMaxEntries * sizeof(ELOS_AsyncCompletion);
+            
+            bool mapped = PMEM_unmap_memory(userPageTable, requestRing, requestRingSize);
+            mapped = PMEM_unmap_memory(userPageTable, completionRing, completionRingSize);
+
+            write_cr3((u64)userPageTable);
+
+            if (result == ASYNC_OK) {
+                returnValue = ELOS_OK;
+            } else {
+                returnValue = ELOS_GENERIC_ERROR;
+            }
+            
+        } break;
+        case _SYS_SUBMIT_ASYNC_RING: {
+            ELOS_AsyncRequestRing* requestRing = (void*)arg0;
+
+            // @TODO Check capability
+            
+            write_cr3((u64)g_kernelPageTable);
+
+            int result = ASYNC_submit_async_ring(requestRing);
+
+            write_cr3((u64)userPageTable);
+
+            if (result == ASYNC_OK) {
+                returnValue = ELOS_OK;
+            } else {
+                returnValue = ELOS_GENERIC_ERROR;
+            }
+            
+        } break;
+        case _SYS_WAIT_ASYNC_RING: {
+            ELOS_AsyncCompletionRing* completionRing = (void*)arg0;
+            u64 timeout_ns = arg1;
+
+            // @TODO Check capability
+            
+            write_cr3((u64)g_kernelPageTable);
+
+            int result = ASYNC_wait_async_ring(completionRing, timeout_ns);
+
+            write_cr3((u64)userPageTable);
+
+            if (result == ASYNC_OK) {
+                returnValue = ELOS_OK;
+            } else {
+                returnValue = ELOS_GENERIC_ERROR;
+            }
+            
         } break;
         default: {
             returnValue = ELOS_INVALID_SYSCALL;

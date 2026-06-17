@@ -152,7 +152,7 @@ def main():
             #-netdev user,id=net0
             -device e1000,netdev=net0  # e1000 ~= intel 8254x
             -machine pc                # PS/2 keyboard input
-            -serial file:kernel.log 
+            -serial file:bin/kernel.log 
             -s 
             {"-S " if gdb else ""}
             -smp 2

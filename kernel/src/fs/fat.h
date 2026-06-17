@@ -613,7 +613,7 @@ int fat__overwrite_header(fat__Context* context) {
 
 
 int fat__write_fat(fat__InternalContext* internal, int cluster, uint32_t value);
-uint32_t fat__read_fat(fat__InternalContext* internal, int cluster);
+uint32_t fat__get_fat(fat__InternalContext* internal, int cluster);
 
 int fat__sane_cstring(fat__InternalContext* internal, const fat__DirectoryEntry* entry, char* out_path) {
     int res;
@@ -879,7 +879,7 @@ int fat__find_dir_entry(fat__InternalContext* internal, int* cluster, int create
 }
 
 
-uint32_t fat__read_fat(fat__InternalContext* internal, int cluster) {
+uint32_t fat__get_fat(fat__InternalContext* internal, int cluster) {
     int res;
     fat__Context* context = internal->context;
     
@@ -991,7 +991,7 @@ int fat__write_fat(fat__InternalContext* internal, int cluster, uint32_t value) 
         res = context->write_sectors(internal->loaded_fat_sector, context->lba_start + sector_index, 1 + wrapped_boundary, context->user_data);
         if (res) return res;
 
-        uint32_t written_value = fat__read_fat(internal, cluster);
+        uint32_t written_value = fat__get_fat(internal, cluster);
         if (written_value != value && !(written_value == fat__END_OF_FILE && value == 0xFFF)) {
             log("Read did not return written FAT, %u != %u\n", value, written_value);
             fat__trigger_break();
@@ -1014,7 +1014,7 @@ int fat__find_free_cluster(fat__InternalContext* internal, int* cluster) {
     uint32_t total_clusters = (total_sectors - internal->bpb->reserved_sectors - internal->sectors_per_fat * internal->bpb->fat_count) / internal->bpb->sectors_per_cluster;
 
     for (int i = 2; i < total_clusters; i++) {
-        uint32_t value = fat__read_fat(internal, i);
+        uint32_t value = fat__get_fat(internal, i);
         if (value == 0) {
             // log("  found %d\n", i);
             *cluster = i;
@@ -1289,7 +1289,7 @@ int fat__write_data(fat__Context* context, const char* path, uint64_t offset, vo
 
     while (advance_clusters) {
         advance_clusters--;
-        uint32_t next_cluster = fat__read_fat(internal, cluster);
+        uint32_t next_cluster = fat__get_fat(internal, cluster);
         if (next_cluster == fat__END_OF_FILE) {
             // Allocate new cluster
             int new_cluster;
@@ -1319,7 +1319,7 @@ int fat__write_data(fat__Context* context, const char* path, uint64_t offset, vo
     while (buffer_offset < size) {
 
         if (sector_index >= bpb->sectors_per_cluster) {
-            uint32_t next_cluster = fat__read_fat(internal, cluster);
+            uint32_t next_cluster = fat__get_fat(internal, cluster);
             if (next_cluster == fat__END_OF_FILE) {
                 // Allocate new cluster
                 int new_cluster;

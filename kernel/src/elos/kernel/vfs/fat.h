@@ -14,8 +14,6 @@ typedef enum fat__DirectoryAttributes {
     fat__LFN_MASK   = fat__READ_ONLY | fat__HIDDEN | fat__SYSTEM | fat__VOLUME_ID | fat__DIRECTORY | fat__ARCHIVE,
 } fat__DirectoryAttributes;
 
-#define fat__LAST_LONG_ENTRY 0x40
-
 #pragma pack(push, 1)
 typedef struct fat__BPB {
     uint8_t  jmp_short[3];
@@ -119,7 +117,16 @@ typedef struct {
 } fat__LongNameEntry;
 #pragma pack(pop)
 
+#define fat__LFN_MAX_CHARS 13
+#define fat__LAST_LONG_ENTRY 0x40
 
 
 #define fat__END_OF_FILE 0xFFFFFFF
 #define fat__RESERVED 0xFFFFFF8
+
+
+static bool IsLeapYear(int year);
+static int DaysBeforeMonth(int month, bool leap);
+u64 FAT_ToUnixMicroseconds(u16 fatDate, u16 fatTime, u8 creationTenths);
+u64 fat__sane_mtime(const fat__DirectoryEntry* entry);
+bool fat__string_equal(const cstring name, const cstring entryName);

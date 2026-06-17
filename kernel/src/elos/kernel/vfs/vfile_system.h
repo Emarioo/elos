@@ -50,3 +50,15 @@ typedef struct {
 
 } VFS_Handle_impl;
 
+
+typedef struct {
+    DiskDevice diskDevice;
+    int        partitionIndex;
+    u64        start_lba;
+    u64        end_lba;
+} VFS_FileSystem;
+
+
+
+VFS_Node* resolveNode(const char* path, VFS_FileSystem** fileSystem);
+

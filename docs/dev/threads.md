@@ -26,12 +26,12 @@ def work1():
 def work2():
     import apps.prism.build
     apps.prism.build.main(prism_path)
-    cmd(f"objdump -S {prism_path} > prism.dis")
+    cmd(f"objdump -S {prism_path} > bin/prism.dis")
     
 def work3():
     import apps.terminal.build
     apps.terminal.build.main(term_path)
-    cmd(f"objdump -S {term_path} > term.dis")
+    cmd(f"objdump -S {term_path} > bin/term.dis")
 
 threads = []
 threads.append(cmd_async(work0))

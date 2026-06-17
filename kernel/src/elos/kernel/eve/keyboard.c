@@ -91,7 +91,7 @@ void KBD_push_key_event(int scancode, int pressed) {
         .type = ELOS_USER_EVENT_KEY,
         .id = 0,
         .key = {
-            .kind = keyEvent.keycode,
+            .keycode = keyEvent.keycode,
             .character = chr,
             .scancode = scancode,
             .value = pressed != 0,
