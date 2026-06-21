@@ -1,7 +1,8 @@
 
 #include "elos/common/string.h"
 
-#include <stdint.h>
+
+void __memset_chk() { }
 
 static int output_int(char* buffer, int size, int value) {
     if (!buffer || !size)
@@ -47,7 +48,7 @@ static int output_int(char* buffer, int size, int value) {
     #undef CHECK
 }
 
-static int output_hex(char* buffer, int size, u32 value, int width) {
+static int output_hex(char* buffer, size_t size, u32 value, int width) {
     if (!buffer || !size)
         return 0;
 
@@ -86,10 +87,11 @@ static int output_hex(char* buffer, int size, u32 value, int width) {
     #undef CHECK
 }
 
-int vsnprintf(char* buffer, int size, const char* format, va_list va) {
-    if(!buffer || !size)
+int vsnprintf(char* buffer, size_t _size, const char* format, va_list va) {
+    if(!buffer || !_size)
         return 0;
 
+    int size = (int)_size; // Bad, assert warning if size is large
     int format_len = strlen(format);
     int head = 0;
     int i = 0;
@@ -200,7 +202,7 @@ int vsnprintf(char* buffer, int size, const char* format, va_list va) {
     return head;
 }
 
-int snprintf(char* buffer, int size, const char* format, ...) {
+int snprintf(char* buffer, size_t size, const char* format, ...) {
     va_list va;
     va_start(va, format);
     const int res = vsnprintf(buffer, size, format, va);
@@ -289,35 +291,35 @@ size_t strnlen(const char* ptr, size_t maxlen) {
 //     }
 // }
 
-void memmove(void* dst, const void* src, int size) {
+void memmove(void* dst, const void* src, size_t size) {
     if (dst == src)
         return;
     
     if ((u64)dst % 8 == 0 && (u64)src % 8 == 0 && size % 8 == 0) {
         // aligned
         if (dst < src) {
-            for (int i=0;i<size/8;i++) {
+            for (int i=0;i<(int)size/8;i++) {
                 ((u64*)dst)[i] = ((u64*)src)[i];
             }
         } else {
-            for (int i=size/8-1;i>=0;i--) {
+            for (int i=(int)size/8-1;i>=0;i--) {
                 ((u64*)dst)[i] = ((u64*)src)[i];
             }
         }
     } else {
         if (dst < src) {
-            for (int i=0;i<size;i++) {
+            for (int i=0;i<(int)size;i++) {
                 ((char*)dst)[i] = ((char*)src)[i];
             }
         } else {
-            for (int i=size-1;i>=0;i--) {
+            for (int i=(int)size-1;i>=0;i--) {
                 ((char*)dst)[i] = ((char*)src)[i];
             }
         }
     }
 }
 
-int memcmp(const void* dst, const void* src, int size) {
+int memcmp(const void* dst, const void* src, size_t size) {
     for(int i=0;i<size;i++) {
         if ( ((char*)dst)[i] != ((char*)src)[i] )
             // Did i flip the subtraction?
@@ -342,7 +344,7 @@ int strcmp(const char* dst, const char* src) {
     return 0;
 }
 
-int strncmp(const char* dst, const char* src, int len) {
+int strncmp(const char* dst, const char* src, size_t len) {
     int i=0;
     while (i < len) {
         char s = src[i];
@@ -358,8 +360,8 @@ int strncmp(const char* dst, const char* src, int len) {
     return 0;
 }
 
-void memset(void* dst, int val, int size) {
-    for(int i=0;i<size;i++) {
+void memset(void* dst, int val, size_t size) {
+    for(int i=0;i<(int)size;i++) {
         *((char*)dst + i) = val;
     }
 }

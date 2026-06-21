@@ -19,7 +19,7 @@ def main(OUTPUT = "scripts/disk_fs/term.elf"):
     ]
 
     SRC_FILES = " ".join(SRC_FILES)
-    FLAGS  = "-g -pie -fpic -nostdlib -nostartfiles"
+    FLAGS  = "-g -pie -fpic -nostdlib -nostartfiles -fno-stack-protector -Wl,--no-warn-execstack"
     FLAGS += " -Wno-builtin-declaration-mismatch"
     FLAGS += f" -I kernel/src -I kernel/include -I {PROG_ROOT} -I {PRISM_ROOT}/include "
 

@@ -1,5 +1,4 @@
 
-#include <stdint.h>
 
 #include "elos/physical_memory.h"
 
@@ -68,6 +67,15 @@ void PMEM_init(BootAPI* boot_api) {
         { (u64)boot_api->initrd,  (u64)boot_api->initrd + boot_api->initrd_size },
     };
 
+    // Ensure ranges are page aligned
+    // @TODO A warning might be better since it means the linker script
+    //   doesn't align sections correctly.
+    for (int ri = 0; ri < ARRAY_LENGTH(ranges); ri++) {
+        Range* range = &ranges[ri];
+        range->address = ((range->address)/PAGE_SIZE)*PAGE_SIZE;;
+        range->size    = ((range->size + PAGE_SIZE-1)/PAGE_SIZE)*PAGE_SIZE;
+    }
+
     // @TODO If we run out of static g_free_regions then
     //   we can allocate another buffer of free regions.
     //   We can have a double linked list of region arrays 
@@ -99,11 +107,11 @@ void PMEM_init(BootAPI* boot_api) {
                 Range range = ranges[i];
 
                 // Quick check for any collision
-                if (range.address + range.size > alloc->physicalStart && range.address < alloc->physicalStart + alloc->pageCount * PAGE_SIZE) {
+                if (range.address + range.size > region->physicalStart && range.address < region->physicalStart + region->pageCount * PAGE_SIZE) {
                     
                     //       [ region ]
                     //   [     range     ]
-                    if (range.address <= alloc->physicalStart && range.address + range.size >= alloc->physicalStart + alloc->pageCount * PAGE_SIZE) {
+                    if (range.address <= region->physicalStart && range.address + range.size >= region->physicalStart + region->pageCount * PAGE_SIZE) {
                         // if cover completely
                         g_num_free_regions--;
                         removed=true;
@@ -111,23 +119,23 @@ void PMEM_init(BootAPI* boot_api) {
                     }
                     //     [ region  ]
                     //  [ range ]
-                    else if (range.address < alloc->physicalStart && range.address + range.size < alloc->physicalStart + alloc->pageCount * PAGE_SIZE) {
+                    else if (range.address <= region->physicalStart && range.address + range.size < region->physicalStart + region->pageCount * PAGE_SIZE) {
                         // left
-                        int physEnd = alloc->physicalStart + alloc->pageCount * PAGE_SIZE;
-                        alloc->physicalStart = PAGE_SIZE * ( ( (range.address + range.size) + (PAGE_SIZE-1) ) / PAGE_SIZE );
-                        alloc->pageCount = (physEnd - alloc->physicalStart) / PAGE_SIZE;
+                        int physEnd = region->physicalStart + region->pageCount * PAGE_SIZE;
+                        region->physicalStart = PAGE_SIZE * ( ( (range.address + range.size) + (PAGE_SIZE-1) ) / PAGE_SIZE );
+                        region->pageCount = (physEnd - region->physicalStart) / PAGE_SIZE;
                     }
                     //  [ region  ]
                     //       [ range ]
-                    else if (range.address > alloc->physicalStart && range.address + range.size < alloc->physicalStart + alloc->pageCount * PAGE_SIZE) {
+                    else if (range.address > region->physicalStart && range.address + range.size <= region->physicalStart + region->pageCount * PAGE_SIZE) {
                         // right
-                        alloc->pageCount = (range.address - alloc->physicalStart ) / PAGE_SIZE;
+                        region->pageCount = (range.address - region->physicalStart ) / PAGE_SIZE;
                     }
                     //   [    region    ]
                     //       [ range ]
-                    else if (range.address > alloc->physicalStart && range.address + range.size < alloc->physicalStart + alloc->pageCount * PAGE_SIZE) {
+                    else if (range.address > region->physicalStart && range.address + range.size < region->physicalStart + region->pageCount * PAGE_SIZE) {
                         // middle (toughest because we split region in two and have to check if they collide with other ranges)
-                        region->pageCount = (range.address - alloc->physicalStart) / PAGE_SIZE;
+                        region->pageCount = (range.address - region->physicalStart) / PAGE_SIZE;
                         
                         int regions_to_move = g_num_free_regions - check_index+1;
 
@@ -142,6 +150,9 @@ void PMEM_init(BootAPI* boot_api) {
                         new_region->physicalStart = PAGE_SIZE * ( (range.address + range.size + (PAGE_SIZE-1)) / PAGE_SIZE );
                         new_region->pageCount = (region->physicalStart + region->pageCount*PAGE_SIZE - new_region->physicalStart) / PAGE_SIZE;
                         g_num_free_regions++;
+                    } else {
+                        printf("UNHANDLED MEM REGION range=%x:%x region=%x:%x\n", range.address, range.size, region->physicalStart, region->pageCount*PAGE_SIZE);
+                        kernel_bug();
                     }
                 }
             }
@@ -160,7 +171,7 @@ void PMEM_init(BootAPI* boot_api) {
 u32 allocate_spinlock;
 
 void* PMEM_allocate(u64 size, void* ptr) {
-    void* returnValue;
+    void* returnValue = NULL;
 
     // printf("ALLOCATE %d 0x%x\n", size, ptr);
 
@@ -195,7 +206,6 @@ void* PMEM_allocate(u64 size, void* ptr) {
         }
 
         if (found_used_index == -1) {
-            returnValue = NULL;
             goto cleanup;
         }
 
@@ -245,7 +255,6 @@ void* PMEM_allocate(u64 size, void* ptr) {
         }
 
         if (found_used_index == -1) {
-            returnValue = NULL;
             goto cleanup;
         }
 
@@ -260,7 +269,6 @@ void* PMEM_allocate(u64 size, void* ptr) {
         }
 
         if (found_free_index == -1) {
-            returnValue = NULL;
             goto cleanup;
         }
 
@@ -282,12 +290,10 @@ void* PMEM_allocate(u64 size, void* ptr) {
         if (!yes) {
             kernel_bug();
             // Bug in kernel if this doesn't work
-            returnValue = NULL;
             goto cleanup;
         }
 
         // we return NULL on success when freeing
-        returnValue = NULL;
         goto cleanup;
 
     } else /* if (size) */ {
@@ -310,7 +316,6 @@ void* PMEM_allocate(u64 size, void* ptr) {
 
         if (found_free_index == -1) {
             printf("No free index\n");
-            returnValue = NULL;
             goto cleanup;
         }
 
@@ -326,7 +331,6 @@ void* PMEM_allocate(u64 size, void* ptr) {
 
         if (found_used_index == -1) {
             printf("No used index\n");
-            returnValue = NULL;
             goto cleanup;
         }
 
@@ -354,7 +358,6 @@ void* PMEM_allocate(u64 size, void* ptr) {
         bool yes = PMEM_map_memory(g_kernelPageTable, new_ptr, new_ptr, requested_pages * PAGE_SIZE, PMEM_FLAG_NONE);
         if (!yes) {
             kernel_bug();
-            returnValue = NULL;
             goto cleanup;
         }
 

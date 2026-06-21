@@ -1,6 +1,5 @@
 
-#include <stdint.h>
-#include <stddef.h>
+#include "elos/common/types.h"
 
 #include "elos/kernel/eve/keys.h"
 

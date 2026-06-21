@@ -88,6 +88,7 @@ static inline uint64_t rdtsc() {
         "or %%rdx, %%rax\n"
         : "=a" (value)
         :
+        : "rdx"
     );
     return value;
 }

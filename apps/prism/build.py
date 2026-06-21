@@ -17,7 +17,7 @@ def main(OUTPUT = "scripts/disk_fs/prism.elf"):
 
     SRC_FILES = " ".join(SRC_FILES)
     FLAGS  = "-g -pie -fpic -nostdlib -nostartfiles"
-    FLAGS += " -Wno-builtin-declaration-mismatch"
+    FLAGS += " -Wno-builtin-declaration-mismatch -fno-stack-protector -Wl,--no-warn-execstack"
     FLAGS += f" -I kernel/src -I kernel/include -I {PROG_ROOT}/include -I {PROG_ROOT}/src"
 
     cmd(f"gcc -o {OUTPUT} {SRC_FILES} {FLAGS}")

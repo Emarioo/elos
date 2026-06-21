@@ -153,9 +153,9 @@ void init_pata() {
         : "memory", "eax"
     );
 
-    printf("48bit mode: %d\n", (int) (identify_data[83] >> 10) & 1);
-    printf("28bit max lba: %d\n", (int) *(u32*)&identify_data[60]);
-    printf("48bit max lba: %d\n", (int) *(u64*)&identify_data[100]);
+    printf("48bit mode: %d\n", (int) (*(identify_data + 83) >> 10) & 1);
+    printf("28bit max lba: %d\n", (int) *(u32*)(identify_data + 60));
+    printf("48bit max lba: %d\n", (int) *(u64*)(identify_data + 100));
 }
 
 

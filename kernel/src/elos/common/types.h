@@ -2,7 +2,11 @@
 
 // We assume 64-bit system
 
+#undef _FORTIFY_SOURCE
+#define _FORTIFY_SOURCE 0
+
 #include <stdint.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdbool.h>
 
@@ -38,7 +42,7 @@ void kernel_bug();
 #define min(X,Y) ( (X) < (Y) ? (X) : (Y) )
 #define max(X,Y) ( (X) > (Y) ? (X) : (Y) )
 
-#define ARRAY_LENGTH(ARR) (sizeof(ARR)/sizeof(*ARR))
+#define ARRAY_LENGTH(ARR) ((int)(sizeof(ARR)/sizeof(*ARR)))
 
 #ifdef _WIN32
 #define _align(N) __declspec(align(4096))

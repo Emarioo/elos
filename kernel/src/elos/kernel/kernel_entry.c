@@ -94,7 +94,7 @@ void kernel_entry(BootAPI* in_boot_api) {
 
     KCON_printf("Initializing physical memory regions\n");
     PMEM_init(boot_api);
-
+    
     MON_init(boot_api);
 
     MonitorDevice monDevices[1];

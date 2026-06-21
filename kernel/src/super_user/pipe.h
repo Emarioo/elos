@@ -1,5 +1,5 @@
 
-#include "stdint.h"
+#include "elos/common/types.h"
 
 
 typedef uint64_t Handle;

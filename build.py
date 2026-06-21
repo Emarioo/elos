@@ -428,7 +428,7 @@ def cmd(c):
     if err:
         if not VERBOSE:
             print("ERR",c)
-        exit(1)
+        os._exit(1)
 
     return 0
 

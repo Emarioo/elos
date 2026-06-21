@@ -315,6 +315,7 @@ void work() {
         if (header->type == NETBOOT_REQUEST_FILE) {
             NetBoot_Request_File* req = (NetBoot_Request_File*)header;
             const char* path = req->filePath;
+            // @TODO Verify path length is sane (no bigger than message size).
 
             mutex_lock(&g_mutex);
 
@@ -329,7 +330,7 @@ void work() {
             }
 
             char fullpath[256];
-            snprintf(fullpath, sizeof(fullpath), "%s/%s", base_directory, path);
+            snprintf(fullpath, sizeof(fullpath), "%s/%.*s", base_directory, req->filePath_len, path);
             
             FILE* file = fopen(fullpath, "rb");
             if (!file) {
@@ -345,7 +346,7 @@ void work() {
 
 
             Session* session = create_session(*(uint32_t*)&client.sin_addr, client.sin_port);
-            snprintf(session->path, sizeof(session->path), "%s", path);
+            snprintf(session->path, sizeof(session->path), "%.*s", req->filePath_len, path);
             session->file        = file;
             session->file_offset = req->offset;
             session->file_size   = req->size;

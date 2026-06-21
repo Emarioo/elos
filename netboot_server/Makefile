@@ -21,7 +21,7 @@ ROOT := $(abspath $(dir $(abspath $(lastword $(MAKEFILE_LIST))))..)
 
 CC := gcc
 
-CFLAGS := -ggdb -ffreestanding -fno-asynchronous-unwind-tables -fno-exceptions
+CFLAGS := -ggdb -ffreestanding -fno-asynchronous-unwind-tables -fno-exceptions -fno-stack-protector
 CFLAGS += -I$(ROOT)/kernel/include
 CFLAGS += -Wall -Werror -fshort-wchar -Werror=implicit-function-declaration
 CFLAGS += -Wno-multichar

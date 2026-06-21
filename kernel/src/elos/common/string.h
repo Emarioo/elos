@@ -1,23 +1,20 @@
 #pragma once
 
-#include <stdarg.h>
-#include <stdint.h>
-
 #include "elos/common/types.h"
 
-int snprintf(char* buffer, int size, const char* format, ...);
-int vsnprintf(char* buffer, int size, const char* format, va_list va);
+int snprintf(char* buffer, size_t size, const char* format, ...);
+int vsnprintf(char* buffer, size_t size, const char* format, va_list va);
 
 size_t strlen(const char* ptr);
 size_t strnlen(const char* ptr, size_t maxlen);
-void memcpy(void* dst, const void* src, int size);
-void memmove(void* dst, const void* src, int size);
+void memcpy(void* dst, const void* src, size_t size);
+void memmove(void* dst, const void* src, size_t size);
 
-int memcmp(const void* dst, const void* src, int size);
+int memcmp(const void* dst, const void* src, size_t size);
 
 int strcmp(const char* dst, const char* src);
-int strncmp(const char* dst, const char* src, int);
-void memset(void* dst, int val, int size);
+int strncmp(const char* dst, const char* src, size_t maxlen);
+void memset(void* dst, int val, size_t size);
 
 long strtol(const char* ptr, char** endptr, int base);
 

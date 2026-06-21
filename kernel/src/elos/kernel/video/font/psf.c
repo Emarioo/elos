@@ -60,8 +60,8 @@ bool font_psf__load_from_bytes(const u8* data, u32 size, Font** out_font, Alloca
     int glyphHeight;
     int bytesPerGlyph;
     const u8* glyph_data;
-    const u8* unicodeTable;
-    int unicodeTableSize;
+    const u8* unicodeTable = NULL;
+    int unicodeTableSize = 0;
 
     if (*(u32*)data == PSF2_FONT_MAGIC) {
         

@@ -3,7 +3,7 @@
 #
 
 # Parameters to set:
-INT_DIR      ?= int/kernel
+INT_DIR      ?= $(CURDIR)/int/kernel
 KERNEL_ELF   ?= $(INT_DIR)/kernel.elf
 KERNEL_IMAGE ?= $(INT_DIR)/kernel.img
 
@@ -21,20 +21,23 @@ LD      := ld
 OBJCOPY := objcopy
 
 
-CFLAGS := -ggdb -ffreestanding
+CFLAGS := -ggdb -ffreestanding -fno-pic -fno-pie -fno-plt -mcmodel=kernel -nostartfiles -nodefaultlibs
+CFLAGS := -O0 # No optimization for better debugging
 CFLAGS += -I$(ROOT)/kernel/src -I$(ROOT)/kernel/include
 CFLAGS += -fshort-wchar -Werror=implicit-function-declaration
-CFLAGS += -fno-asynchronous-unwind-tables -fno-exceptions
+CFLAGS += -fno-asynchronous-unwind-tables -fno-exceptions -fno-stack-protector
 CFLAGS += -Wall -Werror -Wno-multichar
 CFLAGS += -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable -Wno-unused-label
 CFLAGS += -mno-red-zone
+CFLAGS += -D_FORTIFY_SOURCE=0
+CFLAGS += -Wno-builtin-declaration-mismatch -Wno-format-truncation
 # CFLAGS += -mno-sse -mno-sse2 -mno-mmx # For debugging disabling SSE can be useful
 
 ASFLAGS := -g
 
 KERNEL_LD_SCRIPT := $(ROOT)/kernel/sections.ld
 
-LDFLAGS := -nostdlib  -T $(KERNEL_LD_SCRIPT) --no-warn-execstack
+LDFLAGS := -nostdlib  -T $(KERNEL_LD_SCRIPT) --no-warn-execstack --orphan-handling=error --no-gc-sections -no-pie
 
 SRC_DIRS := \
 	$(ROOT)/kernel/src/elos \
@@ -92,7 +95,7 @@ $(INT_DIR)/default_font.o: $(ROOT)/res/Lat2-Terminus16.psf | $(INT_DIR)
 
 $(KERNEL_ELF): $(OBJ_FILES) $(KERNEL_LD_SCRIPT) | $(INT_DIR)
 	$(SILENT) mkdir -p $(@D)
-	$(SILENT) $(LD) $(LDFLAGS) -o $@ $(OBJ_FILES)
+	$(SILENT) $(LD) $(LDFLAGS) -o $@ $(OBJ_FILES) -Map $(basename $@).map
 	
 $(KERNEL_IMAGE): $(KERNEL_ELF) | $(INT_DIR)
 	$(SILENT) mkdir -p $(@D)

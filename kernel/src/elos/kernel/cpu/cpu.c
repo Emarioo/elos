@@ -819,15 +819,17 @@ void CPU_enable_extensions() {
     //   Need to properly save it when context switching.
     //   I can't get avx to work in QEMU. Maybe some Windows -> WSL -> KVM -> QEMU issues (understandable).
 
-    u32 eax, ebx, ecx, edx;
-    cpuid(7, 0, &eax, &ebx, &ecx, &edx);
-    bool has_fsgsbase = ebx & (1 << 0);
+    // u32 eax, ebx, ecx, edx;
+    // cpuid(7, 0, &eax, &ebx, &ecx, &edx);
+    // bool has_fsgsbase = ebx & (1 << 0);
     // printf("Has fs %d, %d\n", has_fsgsbase, ebx);
 
     // cpuid(1, 0, &eax, &ebx, &ecx, &edx);
     // if ((ecx & (1 << 27)) == 0) {
     //     printf("NO AVX support!\n");
     //     while (1) pause();
+    // } else {
+    //     printf("AVX support?\n");
     // }
 
     asm (
