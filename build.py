@@ -146,7 +146,7 @@ def main():
             # cmd(f"gcc scripts/fwrite.c -g -o int/fwrite && int/fwrite {DISK_IMG}")
 
         qemu_flags = f'''
-            # -enable-kvm -cpu host,avx
+            -enable-kvm -cpu host
             -bios {OVMF_FD}
             -netdev tap,id=net0,ifname=tap0,script=no,downscript=no
             #-netdev user,id=net0
