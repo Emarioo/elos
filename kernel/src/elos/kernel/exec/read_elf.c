@@ -39,7 +39,7 @@ bool read_elf(const char* path, ElfObject* object) {
     VFS_Handle handle = VFS_NULL_HANDLE;
     void* fileData = NULL;
 
-    handle = VFS_open(path, VFS_FLAG_READ);
+    handle = VFS_open(path, VFS_FLAG_READ_ONLY);
     if (!handle) {
         debug("read_elf: Cannot read %s\n", path);
         goto exit;

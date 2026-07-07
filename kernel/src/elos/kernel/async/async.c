@@ -259,7 +259,7 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
     switch (request->operation) {
         case ELOS_ASYNC_FILE_OPEN: {
 
-            VFS_Handle handle = VFS_open(request->open.path, VFS_FLAG_READ_WRITE);
+            VFS_Handle handle = VFS_open(request->open.path, 0);
 
             u32 tail = ring->completionRing->tail & ring->ringMask;
             volatile ELOS_AsyncCompletion* completion = &ring->completionRing->entries[tail];
