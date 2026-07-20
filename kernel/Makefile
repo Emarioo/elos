@@ -41,7 +41,7 @@ LDFLAGS := -nostdlib  -T $(KERNEL_LD_SCRIPT) --no-warn-execstack --orphan-handli
 
 SRC_DIRS := \
 	$(ROOT)/kernel/src/elos \
-	$(ROOT)/kernel/src/super_user
+# 	$(ROOT)/kernel/src/super_user
 
 SRC_FILES := \
 	$(foreach dir,$(SRC_DIRS),$(shell find $(dir) \( -name '*.c' -o -name '*.s' \) )) \

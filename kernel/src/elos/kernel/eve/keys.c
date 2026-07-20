@@ -118,7 +118,7 @@ const char* key_name(int keycode) {
 }
 
 int scancode_to_keycode(int scancode) {
-    return _default_keymap.scan_to_key[((scancode>>16) == 0xE0 ? 256 : 0) + (scancode&0xFF)].keycode;
+    return _default_keymap.scan_to_key[((scancode>>8) == 0xE0 ? 256 : 0) + (scancode&0xFF)].keycode;
 }
 
 

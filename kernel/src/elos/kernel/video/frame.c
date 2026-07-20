@@ -278,7 +278,7 @@ Texture* load_texture(const char* path) {
 
     // @TODO Handle cleanup of allocations if a later one fails.
 
-    VFS_Handle handle = VFS_open(path, VFS_FLAG_READ);
+    VFS_Handle handle = VFS_open(path, VFS_FLAG_READ_ONLY);
     if (!handle) {
         printf("Couldn't open %s\n", path);
         return NULL;

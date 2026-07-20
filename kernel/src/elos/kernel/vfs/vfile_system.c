@@ -461,102 +461,102 @@ exit:
     return returnValue;
 }
 
-VFS_Node* resolveNode(const char* path, VFS_FileSystem** fileSystem) {
+// VFS_Node* resolveNode(const char* path, VFS_FileSystem** fileSystem) {
 
-}
+// }
 
-bool VFS_rename(const char* old_path, const char* new_path) {
+// bool VFS_rename(const char* old_path, const char* new_path) {
  
-    bool returnValue = false;
-    UNLOCK_INT(&g_vfs_lock);
+//     bool returnValue = false;
+//     UNLOCK_INT(&g_vfs_lock);
 
 
-    VFS_Node* old_node = find_node(old_path);
+//     VFS_Node* old_node = find_node(old_path);
     
-    VFS_Node* new_node = find_node(new_path);
+//     VFS_Node* new_node = find_node(new_path);
 
-    // If nodes on same file system then special thing.
+//     // If nodes on same file system then special thing.
 
-    // Otherwise copy data from one to the other.
+//     // Otherwise copy data from one to the other.
 
-    if (SameFileSystem(old_node, new_node) && IsFatSystem(old_node)) {
+//     if (SameFileSystem(old_node, new_node) && IsFatSystem(old_node)) {
 
-    } else {
-        VFS_remove(new_path);
-        // Remove new path.
-        char buffer[512];
-        FileSize();
-        ReadData();
-    }
+//     } else {
+//         VFS_remove(new_path);
+//         // Remove new path.
+//         char buffer[512];
+//         FileSize();
+//         ReadData();
+//     }
 
 
 
-    VFS_Node* currentNode = g_vfs_root;
+//     VFS_Node* currentNode = g_vfs_root;
 
-    int path_index = 0;
+//     int path_index = 0;
 
-    // @TODO Code copied from remove, need's cleanup.
-    cstring path = PTR_CSTR(cpath);
+//     // @TODO Code copied from remove, need's cleanup.
+//     cstring path = PTR_CSTR(cpath);
 
-    while (currentNode) {
+//     while (currentNode) {
 
-        // We do not allow multiple slashes to force consistency.
-        // Neither do we allow .. or .
-        if (path.ptr[path_index] != '/') {
-            // Corrupt path
-            goto exit;
-        }
+//         // We do not allow multiple slashes to force consistency.
+//         // Neither do we allow .. or .
+//         if (path.ptr[path_index] != '/') {
+//             // Corrupt path
+//             goto exit;
+//         }
         
-        if (currentNode->mounted_diskDevice != DISK_NULL_DEVICE) {
-            // Search mounted device.
-            DiskInfo info = {0};
-            DISK_get_info(currentNode->mounted_diskDevice, &info);
-            printf("Searching mounted device %s (%d MB)\n", info.name, info.diskSize/0x100000);
+//         if (currentNode->mounted_diskDevice != DISK_NULL_DEVICE) {
+//             // Search mounted device.
+//             DiskInfo info = {0};
+//             DISK_get_info(currentNode->mounted_diskDevice, &info);
+//             printf("Searching mounted device %s (%d MB)\n", info.name, info.diskSize/0x100000);
             
-            cstring subpath = PTR_CSTR(path.ptr + path_index);
+//             cstring subpath = PTR_CSTR(path.ptr + path_index);
             
-            u64 start_lba;
-            u64 end_lba;
-            bool foundPart = find_partition(currentNode->mounted_diskDevice, currentNode->mounted_partitionIndex, &start_lba, &end_lba);
-            if (!foundPart) {
-                goto exit;
-            }
+//             u64 start_lba;
+//             u64 end_lba;
+//             bool foundPart = find_partition(currentNode->mounted_diskDevice, currentNode->mounted_partitionIndex, &start_lba, &end_lba);
+//             if (!foundPart) {
+//                 goto exit;
+//             }
             
-            returnValue = fat_remove(currentNode->mounted_diskDevice, start_lba, end_lba, subpath);
-            goto exit;
-        }
+//             returnValue = fat_remove(currentNode->mounted_diskDevice, start_lba, end_lba, subpath);
+//             goto exit;
+//         }
 
-        path_index++;
+//         path_index++;
 
-        cstring nodeName = {0};
+//         cstring nodeName = {0};
 
-        int slash_pos = find_slash(path, path_index);
-        if (slash_pos == -1) {
-            // No slash
-            nodeName.ptr = path.ptr + path_index;
-            nodeName.len = path.len - path_index;
-            path_index = path.len;
-        } else {
-            nodeName.ptr = path.ptr + path_index;
-            nodeName.len = slash_pos - path_index;
-            path_index = slash_pos;
-        }
+//         int slash_pos = find_slash(path, path_index);
+//         if (slash_pos == -1) {
+//             // No slash
+//             nodeName.ptr = path.ptr + path_index;
+//             nodeName.len = path.len - path_index;
+//             path_index = path.len;
+//         } else {
+//             nodeName.ptr = path.ptr + path_index;
+//             nodeName.len = slash_pos - path_index;
+//             path_index = slash_pos;
+//         }
 
 
 
-        if (slash_pos != -1) {
-            VFS_Node* child = find_child_node(currentNode, nodeName);
-            currentNode = child;
-        } else {
-            returnValue = remove_child_node(currentNode, nodeName);
-            goto exit;
-        }
-    }
+//         if (slash_pos != -1) {
+//             VFS_Node* child = find_child_node(currentNode, nodeName);
+//             currentNode = child;
+//         } else {
+//             returnValue = remove_child_node(currentNode, nodeName);
+//             goto exit;
+//         }
+//     }
 
-exit:
-    UNLOCK_INT(&g_vfs_lock);
-    return returnValue;
-}
+// exit:
+//     UNLOCK_INT(&g_vfs_lock);
+//     return returnValue;
+// }
 
 void VFS_info(VFS_Handle _handle, VFS_HandleInfo* info) {
     VFS_Handle_impl* handle = (VFS_Handle)_handle;
@@ -598,6 +598,11 @@ u64 VFS_read(VFS_Handle _handle, u64 offset, u64 size, void* buffer) {
         return 0;
     }
 }
+
+u64 VFS_write(VFS_Handle _handle, u64 offset, u64 size, void* buffer) {
+    return 0;
+}
+
 
 
 

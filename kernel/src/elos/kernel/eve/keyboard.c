@@ -78,6 +78,12 @@ void KBD_push_key_event(int scancode, int pressed) {
             else
                 keyboard_mods &= ~KEY_MOD_ALT;
         } break;
+        case KEY_SUPER: {
+            if (pressed)
+                keyboard_mods |= KEY_MOD_SUPER;
+            else
+                keyboard_mods &= ~KEY_MOD_SUPER;
+        } break;
     }
     // printf("key=%d scan=%x mod=%d pressed=%d\n", keyEvent.keycode, scancode, keyboard_mods, pressed);
     int chr = scancode_to_char(scancode, keyboard_mods);

@@ -118,6 +118,21 @@ void ps2_send_command(u8 cmd) {
     while ((inb(KBD_STATUS) & PS2_WRITE_STATUS_MASK)) ;
     outb(KBD_STATUS, cmd);
 }
+void ps2_enable_interrupts(bool enabled) {
+    ps2_send_command(0xAD);
+    ps2_send_command(0xA7);
+    if (enabled) {
+        u8 config_byte = ps2_send_read_command(0x20);
+        config_byte = (config_byte & 0b01110100) | 1;
+        ps2_send_write_command(0x60, config_byte);
+    } else {
+        u8 config_byte = ps2_send_read_command(0x20);
+        config_byte = (config_byte & 0b01110100);
+        ps2_send_write_command(0x60, config_byte);
+    }
+
+    ps2_send_command(0xAE);
+}
 
 int ps2_init() {
     u8 byte;
@@ -338,34 +353,37 @@ static int _keycode_ask_list[] = {
 Keymap _default_keymap;
 
 int ps2_ask_keymap() {
+
+    ps2_enable_interrupts(false);
     
     int key_index = 0;
     int key_len = sizeof(_keycode_ask_list)/sizeof(*_keycode_ask_list);
-
+    
     while (key_index < key_len) {
         int keycode = _keycode_ask_list[key_index];
         key_index++;
-
+        
         const char* name = key_name(keycode);
-
+        
         printf("Press: %s ", name);
-
+        
         int scancode = ps2_read_scancode();
         printf("%x\n", scancode);
-
+        
         _default_keymap.key_to_scan[keycode].keycode = keycode; 
         _default_keymap.key_to_scan[keycode].scancode = scancode;
-        _default_keymap.scan_to_key[(((scancode >> 16) == 0xE0) ? 256 : 0) + (scancode & 0xFF)].keycode = keycode; 
-        _default_keymap.scan_to_key[(((scancode >> 16) == 0xE0) ? 256 : 0) + (scancode & 0xFF)].scancode = scancode;
+        _default_keymap.scan_to_key[(((scancode >> 8) == 0xE0) ? 256 : 0) + (scancode & 0xFF)].keycode = keycode; 
+        _default_keymap.scan_to_key[(((scancode >> 8) == 0xE0) ? 256 : 0) + (scancode & 0xFF)].scancode = scancode;
     }
-
-    // serial_printf("Keymap (keycode,scancode):\n");
-    // for (int i=0;i<KEY_MAX;i++) {
-    //     KeymapEntry* entry = &_default_keymap.key_to_scan[i];
-    //     if (entry->keycode != KEY_NONE) {
-    //         serial_printf("%d %d\n", entry->keycode, entry->scancode);
-    //     }
-    // }
+    ps2_enable_interrupts(true);
+    
+    printf("Keymap (keycode,scancode):\n");
+    for (int i=0;i<KEY_MAX;i++) {
+        KeymapEntry* entry = &_default_keymap.key_to_scan[i];
+        if (entry->keycode != KEY_NONE) {
+            printf("%d %d\n", entry->keycode, entry->scancode);
+        }
+    }
 
     return 0;
 }
@@ -418,8 +436,8 @@ int ps2_load_keymap(const char* text, Keymap* keymap) {
 
         keymap->key_to_scan[keycode].keycode = keycode;
         keymap->key_to_scan[keycode].scancode = scancode;
-        keymap->scan_to_key[(((scancode >> 16) == 0xE0) ? 256 : 0) + (scancode & 0xFF)].keycode = keycode;
-        keymap->scan_to_key[(((scancode >> 16) == 0xE0) ? 256 : 0) + (scancode & 0xFF)].scancode = scancode;
+        keymap->scan_to_key[(((scancode >> 8) == 0xE0) ? 256 : 0) + (scancode & 0xFF)].keycode = keycode;
+        keymap->scan_to_key[(((scancode >> 8) == 0xE0) ? 256 : 0) + (scancode & 0xFF)].scancode = scancode;
     }
 
     return 0;

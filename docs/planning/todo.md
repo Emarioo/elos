@@ -19,6 +19,8 @@ The categories are:
 Tasks related to kernel and operating system
 
 ## @current
+- [ ] Separate CPU architecture specific code to separate folder/files.
+- [ ] System console.
 - [ ] Text editor. Try to port https://github.com/martanne/vis?
 - [ ] Terminal.
 - [ ] PRISM Compositor, moving and resizing windows, double buffering, transparent windows, input passthrough. Keyboard and mouse input.

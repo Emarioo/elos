@@ -164,4 +164,5 @@ enum Keycode {
     KEY_MOD_ALT      = 0x2,
     KEY_MOD_CAPSLOCK = 0x4,
     KEY_MOD_CTRL     = 0x8,
+    KEY_MOD_SUPER    = 0x10,
 };

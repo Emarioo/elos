@@ -7,6 +7,8 @@ int ps2_init();
 int ps2_read_scancode();
 int ps2_poll_scancode(int* pressed);
 
+void ps2_enable_interrupts(bool enabled);
+
 int ps2_ask_keymap();
 
 int ps2_load_keymap(const char* text, Keymap* keymap);
