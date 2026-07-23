@@ -23,6 +23,7 @@ def main(OUTPUT = "scripts/disk_fs/term.elf"):
     FLAGS += " -Wno-builtin-declaration-mismatch"
     FLAGS += f" -I kernel/src -I kernel/include -I {PROG_ROOT} -I {PRISM_ROOT}/include "
 
+    os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
     cmd(f"gcc -o {OUTPUT} {SRC_FILES} {FLAGS}")
 
 

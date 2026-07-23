@@ -91,7 +91,7 @@ bool fat_mkdir(DiskDevice device, u64 start_lba, u64 end_lba, const cstring path
                 return false;                               \
             }                                              \
             path_index++;                                  \
-            int slash_pos = find_slash(path, path_index);  \
+            slash_pos = find_slash(path, path_index);  \
             if (slash_pos == -1) {                         \
                 subname.ptr = path.ptr + path_index;       \
                 subname.len = path.len - path_index;       \
@@ -152,7 +152,7 @@ VFS_FileObject* find_file_object(DiskDevice device, u64 start_lba, u32 clusterIn
 }
 
 
-VFS_Handle_impl* search_fat(DiskDevice device, const cstring path, u64 start_lba, u64 end_lba) {
+VFS_FileObject* search_fat(DiskDevice device, const cstring path, u64 start_lba, u64 end_lba) {
     int res;
 
     FATContext _ctx = {0};
@@ -191,7 +191,7 @@ VFS_Handle_impl* search_fat(DiskDevice device, const cstring path, u64 start_lba
             }
             path_index++;
             
-            int slash_pos = find_slash(path, path_index);
+            slash_pos = find_slash(path, path_index);
             if (slash_pos == -1) {
                 // No slash
                 subname.ptr = path.ptr + path_index;
@@ -281,26 +281,27 @@ VFS_Handle_impl* search_fat(DiskDevice device, const cstring path, u64 start_lba
             if (slash_pos == -1) {
                 printf("Found file/directory %s\n", subname);
 
-                VFS_Handle_impl* handle = reserve_handle();
+                // VFS_Handle_impl* handle = reserve_handle();
 
-                handle->type = VFS_HANDLE_FAT;
+                // handle->type = VFS_HANDLE_FAT;
                 u32 clusterIndex = entry->cluster_low | (entry->cluster_high << 16);
 
-                // Check if (diskDevice,clusterIndex) refers to a VFS_Node already.
+                // Check if (diskDevice,clusterIndex) refers to a VFS_VirtualNode already.
                 // If not create on with that identity.
 
-                // VFS_Node refers to a file object.
+                // VFS_VirtualNode refers to a file object.
 
                 // If we move a directory entry to another file then cluster still refers to the correct
-                // file. The VFS_Node refers to directoryEntrySector + directoryEntryIndex which is updated
+                // file. The VFS_VirtualNode refers to directoryEntrySector + directoryEntryIndex which is updated
                 // when we move. If we find a node with the cluster info then we can move it.
 
                 VFS_FileObject* fileObject = find_file_object(device, start_lba, clusterIndex);
                 fileObject->direntryIndex = i;
                 fileObject->direntrySector = sector_start + sector_index;
-                handle->fat.fileObject = fileObject;
+                fileObject->device = device;
+                // handle->fileObject = fileObject;
       
-                return handle;
+                return fileObject;
             }
 
             if ((entry->attributes & fat__DIRECTORY) == 0) {
@@ -337,10 +338,10 @@ u64 read_fat(VFS_Handle_impl* handle, u64 offset, u64 size, void* buffer) {
 
     #define SECTOR_SIZE 512
 
-    DiskDevice device = handle->fat.fileObject->device;
-    u64 start_lba = handle->fat.fileObject->start_lba;
+    DiskDevice device = handle->fileObject->device;
+    u64 start_lba = handle->fileObject->start_lba;
 
-    VFS_FileObject* fileObject = handle->fat.fileObject;
+    VFS_FileObject* fileObject = handle->fileObject;
 
     u8 stackBuffer[2*512];
     int buffer_head = 0;
@@ -492,7 +493,7 @@ bool fat_remove(DiskDevice device, u64 start_lba, u64 end_lba, const cstring pat
                 return false;                               \
             }                                              \
             path_index++;                                  \
-            int slash_pos = find_slash(path, path_index);  \
+            slash_pos = find_slash(path, path_index);  \
             if (slash_pos == -1) {                         \
                 subname.ptr = path.ptr + path_index;       \
                 subname.len = path.len - path_index;       \

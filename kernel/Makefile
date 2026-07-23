@@ -21,15 +21,14 @@ LD      := ld
 OBJCOPY := objcopy
 
 
-CFLAGS := -ggdb -ffreestanding -fno-pic -fno-pie -fno-plt -mcmodel=kernel -nostartfiles -nodefaultlibs
-CFLAGS := -O0 # No optimization for better debugging
+CFLAGS += -ggdb -ffreestanding -fno-pic -fno-pie -fno-plt -mcmodel=kernel -nostartfiles -nodefaultlibs
+CFLAGS += -O0 # No optimization for better debugging
 CFLAGS += -I$(ROOT)/kernel/src -I$(ROOT)/kernel/include
 CFLAGS += -fshort-wchar -Werror=implicit-function-declaration
 CFLAGS += -fno-asynchronous-unwind-tables -fno-exceptions -fno-stack-protector
 CFLAGS += -Wall -Werror -Wno-multichar
 CFLAGS += -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable -Wno-unused-label
 CFLAGS += -mno-red-zone
-CFLAGS += -D_FORTIFY_SOURCE=0
 CFLAGS += -Wno-builtin-declaration-mismatch -Wno-format-truncation
 # CFLAGS += -mno-sse -mno-sse2 -mno-mmx # For debugging disabling SSE can be useful
 

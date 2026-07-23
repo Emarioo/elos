@@ -123,20 +123,31 @@ void kernel_entry(BootAPI* in_boot_api) {
     DISK_scan_devices(diskDevices, &diskDevices_len);
     KCON_printf("Disk devices: %d\n", diskDevices_len);
 
+    bool hasBootDevice = false;
     for (int i=0;i<diskDevices_len;i++) {
         DiskDevice dev = diskDevices[i];
         DiskInfo diskInfo = {0};
         DISK_get_info(dev, &diskInfo);
 
         char path[256];
-        snprintf(path, sizeof(path), "/dev%dp%d", i, 0);
-
+        if (!strcmp(diskInfo.name, "initrd")) {
+            // If we don't have initrd then one of our normal partitions should
+            // be root. This should be described in a text file in boot partition.
+            snprintf(path, sizeof(path), "/", i, 0);
+        } else if (i == 1) {
+            // We should find partition GUID.
+            snprintf(path, sizeof(path), "/boot", i, 0);
+        } else {
+            snprintf(path, sizeof(path), "/dev%dp%d", i, 0);
+        }
+        // @TODO We should NOT assume partition 0. Boot EFI system partition may be index 0 while our root file system may be index 1.
         bool res = VFS_mount(path, dev, 0);
         if (res) {
             KCON_printf("Mounted %s (%d MB) at %s\n", diskInfo.name, diskInfo.diskSize/1024/1024, path);
         } else {
             KCON_printf("Could not mount %s at %s\n", diskInfo.name, path);
         }
+
     }
 
     //###############################
@@ -218,19 +229,21 @@ void kernel_entry(BootAPI* in_boot_api) {
     EXEC_init();
 
     // Create user terminal process
-    // EXEC_create_user_thread("/dev0p0/term.elf", 0);
+    // EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
+    // EXEC_create_user_thread("/pkg/term/term.elf", 0);
 
     // CPU_sleep(1500000000);
 
-    // EXEC_create_user_thread("/dev0p0/prism.elf", 1);
+    // @TODO Mount USB EFI system partition at /boot
+
+    // @TODO Copy INITRD ramdisk 
+
+    EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
+    EXEC_create_user_thread("/pkg/slate/slate.elf", 0);
 
     // ps2_ask_keymap();
 
-    SCON_main();
-
-    kernel_idle();
-
-
+    // EXEC_create_kernel_thread(SCON_main, 0);
 
 
     while (1) {

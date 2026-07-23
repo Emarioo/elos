@@ -2,9 +2,6 @@
 
 // We assume 64-bit system
 
-#undef _FORTIFY_SOURCE
-#define _FORTIFY_SOURCE 0
-
 #include <stdint.h>
 #include <stdarg.h>
 #include <stddef.h>

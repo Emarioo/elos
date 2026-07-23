@@ -50,13 +50,16 @@ void EXEC_timer_handler(InterruptFrame* frame) {
         core->active_thread = (core->active_thread + 1) % THREAD_LIMIT;
         if (currentThread_index == core->active_thread && !currentThread->used) {
             // Did not find any. Use idle thread.
+            // @TODO Idle thread is not initialized.
+            printf("AHH, can't use idle thread\n");
             nextThread = &core->idleThread;
             break;
-        } else if (core->threads[core->active_thread].used) {
+        } else if (core->threads[core->active_thread].used && !core->threads[core->active_thread].waitingForIO) {
             nextThread = &core->threads[core->active_thread];
             break;
         }
     }
+
     if (currentThread == nextThread) {
         // printf("Single thread\n");
         // There's only one thread.
@@ -64,9 +67,9 @@ void EXEC_timer_handler(InterruptFrame* frame) {
         memcpy(&currentThread->frame, frame, sizeof(*frame));
         memcpy(frame, &nextThread->frame, sizeof(*frame));
 
-        // SS privilege gets cleared on my laptop.
-        // May have set up something bad in descriptors.
-        // But this ensures we get the right wrong.
+        // SS privilege gets cleared on my laptop (not in QEMU).
+        // May be doing something wrong but
+        // this ensures we get right privilege.
         frame->ss |= frame->cs & 3;
 
         // printf("Switch\n");
@@ -91,6 +94,12 @@ void EXEC_init() {
 
     printf("Enable scheduling\n");
     scheduling_enabled = true;
+}
+
+EXEC_Thread* EXEC_get_active_thread() {
+    int coreIndex = CPU_get_core_index();
+    EXEC_Core* core = &cores[coreIndex];
+    return &core->threads[core->active_thread];
 }
 
 bool EXEC_create_kernel_thread(void* entry, int pinnedCoreIndex) {

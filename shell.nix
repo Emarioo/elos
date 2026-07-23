@@ -4,6 +4,8 @@
 # to build this project.
 
 pkgs.mkShell {
+  hardeningDisable = [ "fortify" ];
+
   buildInputs = [
     pkgs.pkgsCross.mingwW64.buildPackages.gcc
     pkgs.pkgsCross.mingwW64.buildPackages.binutils

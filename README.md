@@ -31,7 +31,7 @@ build.py install
 
 **Install dependencies (manual)**
 ```bash
-sudo apt install python3
+sudo apt install python3 gcc make
 sudo apt install x86_64-w64-mingw32-gcc
 sudo apt install qemu-system-x86 # (also installs qemu-system-x86_64)
 ```

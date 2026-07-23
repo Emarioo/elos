@@ -2,12 +2,12 @@
 #include "prism/prism.h"
 #include "prism/prism_protocol.h"
 
-#define ELOS_SYSCALL_IMPL
 #include "elos/syscalls.h"
 #include "elos/common/intrinsics.h"
 
 #include "elos/common/string.h"
 
+#include "stdlib.h"
 
 
 typedef struct {
@@ -29,7 +29,6 @@ typedef struct {
 void printf(const char* fmt, ...);
 
 
-void exit(int exitCode);
 
 void prism_loop();
 
@@ -77,8 +76,11 @@ void prism_loop() {
         }
 
         // printf("prism: %d %d %d %d\n", message->type, message->moveSurface.surfaceID, message->moveSurface.x, message->moveSurface.y);
-
+        
         switch (message->type) {
+            case PRISM_CREATE_SURFACE_RESPONSE: {
+                printf("prism: Received response type which shouldn't happen.\n");
+            } break;
             case PRISM_CREATE_SURFACE: {
                 Surface* surface = create_surface(message->createSurface.width, message->createSurface.height);
 
@@ -177,7 +179,7 @@ Surface* create_surface(int width, int height) {
             continue;
         }
         surface = surf;
-        surface->surfaceId = i;
+        surfaceID = i;
         break;
     }
 
@@ -267,9 +269,3 @@ void present_surface(int surfaceID) {
 }
 
 
-
-
-void exit(int exitCode) {
-    // @TODO Implement exit syscall
-    while (1) pause();
-}

@@ -410,17 +410,16 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             }
         } break;
         case _SYS_REQUEST_USER_EVENT_BUFFER: {
-            u64 size = arg0;
+            u32 minimumEvents = arg0;
             ELOS_UserEventBuffer** buffer = (void*)arg1;
 
             // @TODO Check capability
             
             write_cr3((u64)g_kernelPageTable);
 
-            u64 wholeBufferSize = sizeof(ELOS_UserEventBuffer)
-                + (size + sizeof(ELOS_UserEvent)-1) / sizeof(ELOS_UserEvent);
+            u64 wholeBufferSize;
             ELOS_UserEventBuffer* tmp_buffer;
-            bool result = EVE_request_user_event_buffer(size, &tmp_buffer);
+            bool result = EVE_request_user_event_buffer(minimumEvents, &tmp_buffer, &wholeBufferSize);
 
             if (result) {
                 bool mapped = PMEM_map_memory(userPageTable, tmp_buffer, tmp_buffer, wholeBufferSize, PMEM_FLAG_USER_SPACE);
@@ -460,7 +459,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             u64 requestRingSize = sizeof(ELOS_AsyncRequestRing) + actualMaxEntries * sizeof(ELOS_AsyncRequest);
             u64 completionRingSize = sizeof(ELOS_AsyncCompletionRing) + actualMaxEntries * sizeof(ELOS_AsyncCompletion);
 
-            if (result) {
+            if (result == ASYNC_OK) {
                 bool mapped = PMEM_map_memory(userPageTable, tmp_requestRing, tmp_requestRing, requestRingSize, PMEM_FLAG_USER_SPACE);
                 if (!mapped) {
                     // @TODO Leaking created ring!
@@ -540,18 +539,32 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             u64 timeout_ns = arg1;
 
             // @TODO Check capability
+            // @TODO Validate completion ring pointer
             
-            write_cr3((u64)g_kernelPageTable);
+            int coreIndex = CPU_get_core_index();
+            EXEC_Core* core = &cores[coreIndex];
+            EXEC_Thread* activeThread = &core->threads[core->active_thread];
 
-            int result = ASYNC_wait_async_ring(completionRing, timeout_ns);
-
-            write_cr3((u64)userPageTable);
-
-            if (result == ASYNC_OK) {
-                returnValue = ELOS_OK;
+            core->rescheduleSyscall = true;
+            activeThread->waitingForIO = true;
+            
+            // @TODO We need to consider atomics and memory ordering especially on ARM if we support it.
+            // @TODO If multiple threads called or are waiting on wait async syscall then we should only
+            //    Resume as many as we have completions. We can't just an atomic counter remainingCompletions
+            //    because the user is not required to consume one compleition per wait syscall.
+            //    It may consume all or none.
+            //    We don't have multiple threads per process yet so we need to revisit later. USER syscall API
+            //    probably won't change?
+            
+            if (completionRing->head != completionRing->tail) {
+                // We have completed stuff.
+                core->rescheduleSyscall = false;
+                activeThread->waitingForIO = false;
             } else {
-                returnValue = ELOS_GENERIC_ERROR;
+                // We need to wait for stuff to be completed.
             }
+
+            returnValue = ELOS_OK;
             
         } break;
         default: {

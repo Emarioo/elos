@@ -1,5 +1,5 @@
 /*
-    Terminal implementation:
+    Text editor implementation:
 
         1. Init compositor connection.
 
@@ -15,29 +15,30 @@
             
 */
 
+#include "slate/slate.h"
+
 #include "prism/prism.h"
-
-#include <stdint.h>
-
-#define ELOS_SYSCALL_IMPL
 #include "elos/syscalls.h"
-
 #include "elos/common/intrinsics.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 
 // From apps/std/stdio.c (uses SYS_debug_log)
-void printf(const char* format, ...);
-
-void exit(int exitCode);
-
+int printf(const char* format, ...);
 void sleep(u64 ns);
 
-void terminal_loop();
+void editor_loop();
 
 void draw_rect(int x, int y, int w, int h, uint32_t rgba);
 
 #define BLACK 0xFF000000
 #define RED 0xFFD91938
+
+#define BACKGROUND        0xFFAAAAAA
+#define BACKGROUND_BORDER 0xFFEEEEEE
 
 PrismInstance* g_instance;
 PrismSurface* g_surface;
@@ -47,6 +48,8 @@ PrismSurfaceInfo g_surfaceInfo;
 u64 ticks_per_second;
 
 ELOS_UserEventBuffer* userEvents;
+
+SlateSession slateSession;
 
 bool get_event(ELOS_UserEvent* event) {
     // @TODO Not thread or context switch safe.
@@ -66,13 +69,13 @@ void _start() {
 
     g_instance = prism_init();
     if (!g_instance) {
-        printf("terminal: Could not init PRISM client\n");
+        printf("slate: Could not init PRISM client\n");
         exit(1);
     }
 
     g_surface = prism_createSurface(g_instance, 800, 600);
     if (!g_surface) {
-        printf("terminal: Could not create surface\n");
+        printf("slate: Could not create surface\n");
         exit(1);
     }
 
@@ -81,20 +84,20 @@ void _start() {
     prism_moveSurface(g_surface, 200, 200);
 
     ELOS_Error error;
-    error = SYS_request_user_event_buffer(10000, &userEvents);
+    error = SYS_request_user_event_buffer(100, &userEvents);
     if (error != ELOS_OK) {
-        printf("terminal: Could not create user event buffer\n");
+        printf("slate: Could not create user event buffer\n");
         exit(1);
     }
 
-
-    terminal_loop();
+    editor_loop();
 }
 
 
 
-void terminal_loop() {
+void editor_loop() {
 
+    slate_open(&slateSession, "/boot/TEMPLATE.CFG");
 
     int x = 10;
     int y = 10;
@@ -110,8 +113,9 @@ void terminal_loop() {
             printf("type=%d id=%d chr=%c pressed=%d\n", event.type, event.id, event.key.character, event.key.value);
         }
 
-        draw_rect(x, y, size, size, BLACK);
-        draw_rect(x+padding, y+padding, size-2*padding, size-2*padding, RED);
+        // It would be more efficient to draw 4 border rects
+        draw_rect(x, y, size, size, BACKGROUND_BORDER);
+        draw_rect(x+padding, y+padding, size-2*padding, size-2*padding, BACKGROUND);
 
         x += velx;
         y += vely;
@@ -134,6 +138,82 @@ void terminal_loop() {
 
 
 
+// #####################
+//    EDITOR SPECIFICS
+// #####################
+
+
+void slate_open(SlateSession* session, const char* path) {
+    FILE* file;
+    char* buffer;
+
+    printf("slate_open: Opening %s\n", path);
+
+    file = fopen(path, "r");
+    if (!file) {
+        printf("slate_open: Could not open %s\n", path);
+        return;
+    }
+    fseek(file, 0, SEEK_END);
+    int fileSize = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    
+    buffer = malloc(fileSize + 1);
+    if (!buffer) {
+        printf("slate_open: Could not allocate %d for %s\n", fileSize, path);
+        return;
+    }
+    
+    int readBytes = fread(buffer, 1, fileSize, file);
+    if (readBytes != fileSize) {
+        printf("slate_open: Could not read %d from %s\n", fileSize, path);
+        return;
+    }
+    buffer[fileSize] = '\0';
+
+    session->cursor_x = 0;
+    session->cursor_y = 0;
+    session->modified = false;
+    strncpy(session->filename, path, sizeof(session->filename)-1);
+    session->lines_len = 0;
+
+    if (!session->lines) {
+        session->lines_max = 100;
+        session->lines = malloc(sizeof(Line) * session->lines_max);
+    }
+
+    int head = 0;
+    int lineStart = 0;
+    while (head < fileSize) {
+        char chr = buffer[head];
+        head++;
+        
+        if (chr == '\n') {
+            int len = head - lineStart - 1;
+            if (len > 0) {
+
+            }
+            lineStart = head;
+        }
+    }
+
+exit:
+    if (buffer) {
+        free(buffer);
+    }
+    if (file) {
+        fclose(file);
+    }
+}
+
+void slate_save(SlateSession* session) {
+    printf("slate_save: not implemented\n");
+}
+
+
+// #####################
+//    UTILITIES
+// #####################
 
 
 void draw_rect(int x, int y, int w, int h, uint32_t rgba) {
@@ -164,18 +244,13 @@ void draw_rect(int x, int y, int w, int h, uint32_t rgba) {
 
 void sleep(u64 ns) {
     u64 start = rdtsc();
-    printf("tps=%d K  start=%d\n", ticks_per_second / 1000, start/1000);
+    // printf("tps=%d K  start=%d\n", ticks_per_second / 1000, start/1000);
     while (1) {
         u64 now = rdtsc();
         u64 now_ns = (1000000000 * (now - start)) / ticks_per_second;
         if (now_ns > ns) {
             return;
         }
-        printf("tps=%d K  start=%d\n", ticks_per_second / 1000, (now-start)/1000);
+        // printf("tps=%d K  start=%d\n", ticks_per_second / 1000, (now-start)/1000);
     }
-}
-
-void exit(int exitCode) {
-    // @TODO Implement syscall to exit.
-    while (1) pause();
 }

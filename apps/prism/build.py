@@ -20,6 +20,7 @@ def main(OUTPUT = "scripts/disk_fs/prism.elf"):
     FLAGS += " -Wno-builtin-declaration-mismatch -fno-stack-protector -Wl,--no-warn-execstack"
     FLAGS += f" -I kernel/src -I kernel/include -I {PROG_ROOT}/include -I {PROG_ROOT}/src"
 
+    os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
     cmd(f"gcc -o {OUTPUT} {SRC_FILES} {FLAGS}")
 
 

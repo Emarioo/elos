@@ -135,10 +135,12 @@ bool parse_elf(ParseContext* ctx) {
         }
     }
 
-    u64 image_size = vaddr_high - vaddr_low;
+    u64 image_size = vaddr_high;
+    // We assume vaddr_low is 0x1000
+    // u64 image_size = vaddr_high - vaddr_low;
 
-    if (image_size > 0x800000) {
-        printf("REFUSE TO LOAD LARGE IMAGE (%d MB)\n", image_size/0x100000);
+    if (image_size > 0x100000) {
+        printf("REFUSE TO LOAD 1MB LARGE IMAGE (%d MB)\n", image_size/0x100000);
         goto exit;
     }
 
@@ -178,12 +180,8 @@ bool parse_elf(ParseContext* ctx) {
         const char* name = &sectionNames[section->sh_name];
         // printf("%s: %d bytes\n", name, section->sh_size);
 
-        #define COPY_DATA  memcpy((u8*)virt_image_base + section->sh_addr - vaddr_low, \
-                ctx->fileData + section->sh_offset, \
-                section->sh_size);
-
-        u8* vaddr = (u8*)virt_image_base + section->sh_addr - vaddr_low;
-        u8* paddr = (u8*)phys_image_base + section->sh_addr - vaddr_low;
+        u8* vaddr = (u8*)virt_image_base + section->sh_addr;
+        u8* paddr = (u8*)phys_image_base + section->sh_addr;
         u8* src = ctx->fileData + section->sh_offset;
 
         // @TODO Check that the virtual addresses for sections don't overlap in pages.
@@ -207,7 +205,7 @@ bool parse_elf(ParseContext* ctx) {
     ctx->object->virt_image_base = virt_image_base;
     ctx->object->phys_image_base = phys_image_base;
     ctx->object->image_size = image_size;
-    ctx->object->entry_point = (u8*)virt_image_base + elfHeader->e_entry - vaddr_low;
+    ctx->object->entry_point = (u8*)virt_image_base + elfHeader->e_entry;
     ctx->object->pageTable = pageTable;
 
     returnValue = true;

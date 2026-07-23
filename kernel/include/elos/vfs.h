@@ -66,7 +66,7 @@ u64 VFS_read(VFS_Handle handle, u64 offset, u64 size, void* buffer);
 /*
     Only for files
 */
-u64 VFS_write(VFS_Handle handle, u64 offset, u64 size, void* buffer);
+u64 VFS_write(VFS_Handle handle, u64 offset, u64 size, const void* buffer);
 
 /*
     Only for directories

@@ -1,5 +1,13 @@
 
 #include "stdint.h"
+#include "stddef.h"
+
+#include "stdlib.h"
+
+size_t strlen(const char* s);
+void* malloc(size_t size);
+void memcpy(void* dst, const void* src, size_t size);
+
 
 char *strdup(const char *s)
 {

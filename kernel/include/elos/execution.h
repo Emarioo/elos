@@ -14,6 +14,7 @@ typedef struct {
     u32             stack_size;
     bool            used;
     bool            userSpace;
+    bool            waitingForIO;
 
     u16             pcid;
 
@@ -27,9 +28,10 @@ typedef struct {
     //   They are hardcoded in assembly.
     void* syscall_stack;
     void* user_stack; // saved user stack on syscall
-    u32   syscall_stack_size;
-
+    bool  rescheduleSyscall;
+    
     // Free to modify, not used by assembly
+    u32   syscall_stack_size;
     EXEC_Thread threads[THREAD_LIMIT];
     EXEC_Thread idleThread; // kernel idle thread
     int active_thread;

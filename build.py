@@ -9,7 +9,7 @@ The following tools/binaries exist:
 
 '''
 
-import os, sys, platform, shutil, shlex, glob, math, threading, multiprocessing, dataclasses, subprocess
+import os, sys, math, re, platform, shutil, shlex, glob, math, threading, multiprocessing, dataclasses, subprocess
 from dataclasses import dataclass
 
 
@@ -144,7 +144,7 @@ def main():
 
             # cmd(f"qemu-img create -f raw {DISK_IMG} 64M")
             # cmd(f"gcc scripts/fwrite.c -g -o int/fwrite && int/fwrite {DISK_IMG}")
-
+        core_count = 1
         qemu_flags = f'''
             -enable-kvm -cpu host
             -bios {OVMF_FD}
@@ -155,7 +155,7 @@ def main():
             -serial file:bin/kernel.log 
             -s 
             {"-S " if gdb else ""}
-            -smp 2
+            -smp {core_count}
 
             -device ahci,id=ahci
 
@@ -192,6 +192,8 @@ def main():
 
         cmd(f"qemu-system-x86_64 {qemu_flags}")
 
+        parse_fault()
+
 
 def package_elos(release_dir, build_iso = False):
     name    = "elos"
@@ -214,8 +216,9 @@ def package_elos(release_dir, build_iso = False):
     bootx64_path    = f"{temp_folder_path}/fs/EFI/BOOT/BOOTX64.EFI"
     kernel_path     = f"{temp_folder_path}/fs/KERNEL.IMG"
     initrd_path     = f"{temp_folder_path}/fs/INITRD.IMG"
-    prism_path      = f"{temp_folder_path}/initrd/prism.elf"
-    term_path       = f"{temp_folder_path}/initrd/term.elf"
+    prism_path      = f"{temp_folder_path}/initrd/pkg/prism/prism.elf"
+    term_path       = f"{temp_folder_path}/initrd/pkg/term/term.elf"
+    slate_path      = f"{temp_folder_path}/initrd/pkg/slate/slate.elf"
 
     INT_DIR         = f"{ROOT}/int"
     fat_path        = f"{INT_DIR}/fat.img"
@@ -230,26 +233,34 @@ def package_elos(release_dir, build_iso = False):
         cmd(f"make -f {ROOT}/kernel/Makefile INT_DIR={INT_DIR}/kernel KERNEL_IMAGE={kernel_path} KERNEL_ELF={kernel_elf_path}")
     
     def sync2():
-        import apps.prism.build
-        apps.prism.build.main(prism_path)
+        # import apps.prism.build
+        # apps.prism.build.main(prism_path)
+        cmd(f"APP_OUTPUT={prism_path} make -f apps/prism/Makefile")
         cmd(f"objdump -S {prism_path} > prism.dis")
         
     def sync3():
-        import apps.terminal.build
-        apps.terminal.build.main(term_path)
+        # import apps.terminal.build
+        # apps.terminal.build.main(term_path)
+        cmd(f"APP_OUTPUT={term_path} make -f apps/terminal/Makefile")
         cmd(f"objdump -S {term_path} > term.dis")
+
+    def sync4():
+        cmd(f"APP_OUTPUT={slate_path} make -f apps/slate/Makefile")
+        cmd(f"objdump -S {slate_path} > slate.dis")
     
     threads.append(cmd_async(sync0))
     threads.append(cmd_async(sync1))
     threads.append(cmd_async(sync2))
     threads.append(cmd_async(sync3))
+    threads.append(cmd_async(sync4))
 
     wait_pool(threads)
 
 
     DEPS_SPEC: list[tuple[str,str]] = [
-        (prism_path, "PRISM.ELF"),
-        (term_path, "TERM.ELF"),
+        (prism_path, "PKG/PRISM/PRISM.ELF"),
+        (term_path,  "PKG/TERM/TERM.ELF"),
+        (slate_path, "PKG/SLATE/SLATE.ELF"),
     ]
     make_gpt(initrd_path, DEPS_SPEC)
     
@@ -257,8 +268,8 @@ def package_elos(release_dir, build_iso = False):
         (bootx64_path, "EFI/BOOT/BOOTX64.EFI"),
         (kernel_path, "KERNEL.IMG"),
         (initrd_path, "INITRD.IMG"),
-        # ("res/Lat2-Terminus16.psf", "RES/STDFONT.PSF"),  # baked into kernel image, not needed here
         ("boot/template.cfg", "TEMPLATE.CFG"),
+        # ("res/Lat2-Terminus16.psf", "RES/STDFONT.PSF"),  # baked into kernel image, not needed here
     ]
 
     fat_size, ISO_DIR = make_fat(fat_path, DEPS_SPEC)
@@ -376,7 +387,9 @@ def make_fat(out_path: str, deps_spec: list[tuple[str,str]]):
         if len(split) > 1 or len(split[0]) > 0:
             for s in split:
                 acc = os.path.join(acc, s)
-                cmd(f"mmd -D o -i {out_path} ::/{acc}")
+                # @TODO Check if already exists. mmd fail if dir already exists.
+                #    We use || true to silence error for the time being.
+                cmd(f"mmd -D o -i {out_path} ::/{acc} || true")
         cmd(f"mcopy -D o -i {out_path} {src} ::/{dst}")
 
         int_dst = os.path.join(INT_DIR, dst)
@@ -384,6 +397,45 @@ def make_fat(out_path: str, deps_spec: list[tuple[str,str]]):
         shutil.copy(src, int_dst)
 
     return fatSize, INT_DIR
+
+
+def parse_fault():
+    path = "bin/kernel.log"
+
+    with open(path, "r") as f:
+        text = f.read()
+
+    m = re.search(r'rip=0x([0-9a-f]+)', text, re.IGNORECASE)
+    if m is not None and len(m.groups()) > 0:
+        rip_addr = int(m.groups()[0], base = 16)
+
+        stride = 0x100000
+        app_index = math.floor((rip_addr - 0xC0000000) / stride)
+        apps = [
+            "prism.dis",
+            "slate.dis"
+        ]
+
+        if app_index >= 0 and app_index < len(apps):
+            base = 0xC0000000 + app_index * stride
+            app_dis = apps[app_index]
+        else:
+            base = 0
+            app_dis = "bin/kernel.dis"
+
+        with open(app_dis, "r") as f:
+            disas = f.read()
+
+        word = hex(rip_addr - base)[2:]
+
+        print(f"rip={hex(rip_addr)}  {word} {app_dis}")
+        # ser = re.search(word, disas)
+        at = disas.find(word)
+        if at != -1:
+            linenr = disas.count('\n', 0, at)
+            location = f"{app_dis}:{linenr}"
+            print(location)
+            cmd(f"echo {location} >> {path}")
 
 
 def install_deps():
@@ -426,8 +478,7 @@ def cmd(c):
         print(c, file=sys.stderr)
     err = os.system(c)
     if err:
-        if not VERBOSE:
-            print("ERR",c)
+        print("ERR",c)
         os._exit(1)
 
     return 0

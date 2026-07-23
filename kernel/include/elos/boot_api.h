@@ -1,8 +1,6 @@
 #pragma once
 
 
-#undef _FORTIFY_SOURCE
-#define _FORTIFY_SOURCE 0
 #include <stdint.h>
 
 typedef struct {
@@ -19,6 +17,8 @@ typedef struct {
     void*    initrd;
     uint64_t initrd_size;
     uint64_t utc_time_ns; // since_unix_epoch
+
+    // @TODO Provide disk and partition GUID we booted from.
 
     //
     //  Accessible Memory Regions

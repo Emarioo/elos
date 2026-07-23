@@ -108,6 +108,9 @@ typedef struct {
 } ELOS_UserEvent;
 
 typedef struct {
+    // We won't have more than 4 billion events at once so 32-bit integers would work however
+    // u64 means we can increment head and tail without worrying about wrap around.
+    // unless program runs for a really long time with many events.
     const    u64 maxEvents;
     volatile u64 head; // @TODO reserve, commit head/tail?
     volatile u64 tail;
@@ -265,7 +268,7 @@ ELOS_Error SYS_shared_memory_info(ELOS_SharedMemory handle, void** buffer, u64* 
 
     @pre ELOS_CAP_USER_EVENT capability is required.
 */
-ELOS_Error SYS_request_user_event_buffer(u64 size, ELOS_UserEventBuffer** buffer);
+ELOS_Error SYS_request_user_event_buffer(u32 minimumEvents, ELOS_UserEventBuffer** buffer);
 
 
 
@@ -297,6 +300,7 @@ typedef enum {
 } ELOS_AsyncCreateFlag;
 
 enum _ELOS_AsyncOperation {
+    ELOS_ASYNC_INVALID = 0,
     ELOS_ASYNC_FILE_OPEN = 1,
     ELOS_ASYNC_FILE_CLOSE,
     ELOS_ASYNC_FILE_READ,
@@ -314,6 +318,14 @@ typedef enum {
     ELOS_FILE_OPEN_FLAG_READ_ONLY = 0x1, // Allows multiple readers on same file.
     ELOS_FILE_OPEN_FLAG_CREATE = 0x2, // Create file if missing
 } ELOS_FileOpenFlag;
+
+typedef struct {
+    u64  fileSize;
+    u32  blockSize;
+    bool isDirectory;
+    bool readOnly;
+    u64  lastWriteTime_us;
+} ELOS_FileInfo;
 
 
 typedef struct {
@@ -340,8 +352,12 @@ typedef struct {
             ELOS_File file;
             u64       offset;
             u64       size;
-            void*     buffer;
+            const void*     buffer;
         } write;
+        struct {
+            ELOS_File      file;
+            ELOS_FileInfo* fileInfo;
+        } info;
         struct {
             ELOS_File file;
             u64       entryIndex;
@@ -641,9 +657,9 @@ ELOS_Error SYS_shared_memory_info(ELOS_SharedMemory handle, void** buffer, u64* 
     return rax;
 }
 
-ELOS_Error SYS_request_user_event_buffer(u64 size, ELOS_UserEventBuffer** buffer) {
+ELOS_Error SYS_request_user_event_buffer(u32 maxEvents, ELOS_UserEventBuffer** buffer) {
     ELOS_Error rax;
-    SYSCALL2(_SYS_REQUEST_USER_EVENT_BUFFER, size, buffer);
+    SYSCALL2(_SYS_REQUEST_USER_EVENT_BUFFER, maxEvents, buffer);
     return rax;
 }
 

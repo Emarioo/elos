@@ -24,7 +24,6 @@ CFLAGS += -Wall -Werror -fshort-wchar -Werror=implicit-function-declaration
 CFLAGS += -Wno-multichar
 CFLAGS += -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable
 CFLAGS += -mno-red-zone
-CFLAGS += -D_FORTIFY_SOURCE=0
 
 LDFLAGS := -nostdlib --dll --image-base=0 -shared --subsystem 10 -e efi_main
 

@@ -4,14 +4,14 @@
 
 void __memset_chk() { }
 
-static int output_int(char* buffer, int size, int value) {
+static int output_int(char* buffer, size_t size, int value) {
     if (!buffer || !size)
         return 0;
 
     int head = 0;
     int acc = 0;
 
-    #define CHECK if (head-1 >= size) { buffer[head] = '\0'; return head; }
+    #define CHECK if (head > size) { buffer[head] = '\0'; return head; }
 
     CHECK
 
@@ -55,7 +55,7 @@ static int output_hex(char* buffer, size_t size, u32 value, int width) {
     int head = 0;
     u32 acc = value;
 
-    #define CHECK if (head-1 >= size) { buffer[head] = '\0'; return head; }
+    #define CHECK if (head > size) { buffer[head] = '\0'; return head; }
 
     CHECK
 
@@ -96,7 +96,7 @@ int vsnprintf(char* buffer, size_t _size, const char* format, va_list va) {
     int head = 0;
     int i = 0;
     
-    #define CHECK if (head-1 >= size) { buffer[head] = '\0'; return head; }
+    #define CHECK if (head > size) { buffer[head] = '\0'; return head; }
     
     while (i < format_len) {
         if (format[i] != '%') {

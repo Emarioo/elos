@@ -19,7 +19,7 @@ volatile u32 g_userEventLock;
 ELOS_UserEventBuffer* g_eventBuffers[MAX_EVENT_BUFFERS];
 
 
-bool EVE_request_user_event_buffer(u64 size, ELOS_UserEventBuffer** buffer) {
+bool EVE_request_user_event_buffer(u32 maxEvents, ELOS_UserEventBuffer** buffer, u64* wholeBufferSize) {
     bool returnValue = false;
     LOCK_INT(&g_userEventLock);
 
@@ -33,21 +33,23 @@ bool EVE_request_user_event_buffer(u64 size, ELOS_UserEventBuffer** buffer) {
     if (freeIndex == -1) {
         goto exit;
     }
+    
+    u64 bufferSize = (sizeof(ELOS_UserEventBuffer) + maxEvents * sizeof(ELOS_UserEvent) + (PAGE_SIZE-1)) & (PAGE_SIZE-1);
 
-    u64 wholeBufferSize = sizeof(ELOS_UserEventBuffer)
-     + (size + sizeof(ELOS_UserEvent) - 1) / sizeof(ELOS_UserEvent);
-
-    ELOS_UserEventBuffer* newBuffer = PMEM_alloc_phys(wholeBufferSize, PMEM_FLAG_IDENTITY_MAPPED);
+    ELOS_UserEventBuffer* newBuffer = PMEM_alloc_phys(bufferSize, PMEM_FLAG_IDENTITY_MAPPED);
     if (!newBuffer) {
         goto exit;
     }
 
-    memset(newBuffer, 0, wholeBufferSize);
+    memset(newBuffer, 0, bufferSize);
     newBuffer->head = 0;
     newBuffer->tail = 0;
-    *(u64*)&newBuffer->maxEvents = (wholeBufferSize - sizeof(ELOS_UserEventBuffer)) / sizeof(ELOS_UserEvent);
+    // Should we round up maxEvents or provide the exact amount user requested?
+    // We round up for now. It's easier to change API later to provide exact amount if needed.
+    *(u64*)&newBuffer->maxEvents = (bufferSize - sizeof(ELOS_UserEventBuffer)) / sizeof(ELOS_UserEvent);
     g_eventBuffers[freeIndex] = newBuffer;
 
+    *wholeBufferSize = bufferSize;
     *buffer = newBuffer;
     returnValue = true;
 

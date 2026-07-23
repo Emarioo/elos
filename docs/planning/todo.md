@@ -32,6 +32,9 @@ Tasks related to kernel and operating system
 - [ ] DOOM port.
 
 ## @urgent
+- [ ] build.py clean, make clean do not work properly.
+      For example i had build without g flag and now wanted to add it back so i build.py clean, build.py gdb but
+      there was still no debug info. I had to manually remove bin/int. Maybe clean should remove those directories specifically? Instead of the specific objects (make clean in prism app for example will just clean prism, i guess we don't need that ability?)
 - [ ] Exception handler that prints useful info. rax, rdx, RIP, RSP, RBP. This is currently not correct. It needs to be correct for page faults and general protection.
      Some push and doens't push error codes and other information.
 

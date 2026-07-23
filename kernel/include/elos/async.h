@@ -23,6 +23,7 @@
 #include "elos/syscalls.h"
 
 #define ASYNC_OK 0
+#define ASYNC_GENERIC_ERROR 1
 
 
 u32 ringMaskFromEntryCount(u32 count);
@@ -33,7 +34,7 @@ int ASYNC_destroy_async_rings(ELOS_AsyncRequestRing* requestRing, ELOS_AsyncComp
 
 int ASYNC_submit_async_ring(ELOS_AsyncRequestRing* requestRing);
 
-int ASYNC_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, u64 timeout_ns);
+// int ASYNC_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, u64 timeout_ns);
 
 
 void ASYNC_handler();

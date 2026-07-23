@@ -4,6 +4,10 @@
 #include "elos/syscalls.h"
 
 #include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
+
+typedef void FILE;
 
 void* malloc(size_t size) {
     ELOS_Error error;
