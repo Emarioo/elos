@@ -246,22 +246,28 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
 void keyboard_handler(int isr_number, KeyboardInterruptFrame* frame, u64 extra) {
     // printf("Interrupt #%d\n", isr_number);
 
+    u64 userPageTable = read_cr3();
+
+    write_cr3((uintptr_t)g_kernelPageTable);
+    
     while (1) {
         int pressed;
         int scancode = ps2_poll_scancode(&pressed);
         if (scancode == 0)
-            break;
+        break;
         
         // @TODO Reboot key is nice but it should not be here.
         int keycode = scancode_to_keycode(scancode);
         if (keycode == KEY_F1) {
             CPU_reset();
         }
-
+        
         KBD_push_key_event(scancode, pressed);
-
+        
         // printf("scancode %d, %c\n", scancode, chr);
     }
+
+    write_cr3(userPageTable);
     
     // SS privilege gets cleared on my laptop.
     // May have set up something bad in descriptors.

@@ -29,7 +29,7 @@ CFLAGS += -mno-red-zone
 CFLAGS += -Wno-multichar -Wno-builtin-declaration-mismatch
 CFLAGS += -Wno-unused-variable -Wno-unused-value -Wno-unused-function -Wno-unused-but-set-variable -Wno-unused-result -Wno-unused-label
 
-CFLAGS += -I$(ROOT)/kernel/include -I$(ROOT)/kernel/src -I$(APP_ROOT)/include -I$(ROOT)/apps/std
+CFLAGS += -I$(ROOT)/kernel/include -I$(ROOT)/kernel/src -I$(APP_ROOT)/include -I$(APP_ROOT)/src -I$(ROOT)/apps/std
 
 LDFLAGS := -g $(LDFLAGS) -nostdlib -nostartfiles -Wl,--no-warn-execstack
 

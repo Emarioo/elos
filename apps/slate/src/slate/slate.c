@@ -20,11 +20,16 @@
 #include "prism/prism.h"
 #include "elos/syscalls.h"
 #include "elos/common/intrinsics.h"
+#include "elos/common/string.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "slate/frame.h"
+
+
+#define ASSERT(expression) ((expression) ? true : (printf("[Assert] %s (%s:%u)\n",#expression,__FILE__,__LINE__), *((char*)0) = 0))
 
 // From apps/std/stdio.c (uses SYS_debug_log)
 int printf(const char* format, ...);
@@ -32,13 +37,13 @@ void sleep(u64 ns);
 
 void editor_loop();
 
-void draw_rect(int x, int y, int w, int h, uint32_t rgba);
+// void draw_rect(int x, int y, int w, int h, uint32_t rgba);
 
-#define BLACK 0xFF000000
-#define RED 0xFFD91938
+// #define BLACK 0xFF000000
+// #define RED 0xFFD91938
 
-#define BACKGROUND        0xFFAAAAAA
-#define BACKGROUND_BORDER 0xFFEEEEEE
+#define BACKGROUND        0xFF0F172A
+// #define BACKGROUND_BORDER 0xFFEEEEEE
 
 PrismInstance* g_instance;
 PrismSurface* g_surface;
@@ -94,8 +99,47 @@ void _start() {
 }
 
 
+void* slate_font_allocator(Allocator* allocator, u64 size, void* old_ptr) {
+    return realloc(old_ptr, size);
+}
+
+bool slate_load_font() {
+    const char* path = "/boot/STDFONT.PSF";
+    FILE* handle = fopen(path, "rb");
+    if (!handle) {
+        printf("Couldn't open %s\n", path);
+        return false;
+    }
+
+    fseek(handle, 0, SEEK_END);
+    int fileSize = ftell(handle);
+    fseek(handle, 0, SEEK_SET);
+
+    u8* data = malloc(fileSize);
+    if (!data) {
+        printf("Couldn't allocate %d for %s\n", fileSize, path);
+        return false;
+    }
+
+    int readBytes = fread(data, 1, fileSize, handle);
+    if (readBytes != fileSize) {
+        printf("Could not read font %s, (read %d bytes, texture is %d bytes)\n", path, readBytes, fileSize);
+        return false;
+    }
+
+    Allocator allocator = { slate_font_allocator };
+    bool res = font__load_from_bytes(data, fileSize, &g_default_font, &allocator);
+    return res;
+}
+
+
 
 void editor_loop() {
+
+    bool res = slate_load_font();
+    if (!res) {
+        exit(1);
+    }
 
     slate_open(&slateSession, "/boot/TEMPLATE.CFG");
 
@@ -106,6 +150,9 @@ void editor_loop() {
     int velx = 1;
     int vely = 1;
 
+    int text_height = 20;
+    int text_color = WHITE;
+
     while (1) {
         ELOS_UserEvent event;
         bool has = get_event(&event);
@@ -113,19 +160,22 @@ void editor_loop() {
             printf("type=%d id=%d chr=%c pressed=%d\n", event.type, event.id, event.key.character, event.key.value);
         }
 
-        // It would be more efficient to draw 4 border rects
-        draw_rect(x, y, size, size, BACKGROUND_BORDER);
-        draw_rect(x+padding, y+padding, size-2*padding, size-2*padding, BACKGROUND);
+        draw_rect(0, 0, g_surfaceInfo.width, g_surfaceInfo.height, BACKGROUND);
 
-        x += velx;
-        y += vely;
+        for (int li=0;li<slateSession.lines_len;li++) {
+            Line* line = &slateSession.lines[li];
 
-        if (x+size > g_surfaceInfo.width || x < 0) {
-            velx *= -1;
+            cstring text = { .ptr = line->text, .len = line->length };
+
+            int textWidth = draw_text_width(text, text_height, g_default_font);
+
+            if (textWidth > g_surfaceInfo.width ) {
+                text.len = (g_surfaceInfo.width) / (textWidth/text.len);
+            }
+
+            draw_glyphs_from_text_bcolor(0, text_height * li, text_height, text, g_default_font, text_color, 0);
         }
-        if (y+size > g_surfaceInfo.height || y < 0) {
-            vely *= -1;
-        }
+
 
         prism_presentSurface(g_surface);
 
@@ -182,25 +232,39 @@ void slate_open(SlateSession* session, const char* path) {
         session->lines = malloc(sizeof(Line) * session->lines_max);
     }
 
+    char* textBuffer = malloc(10000);
+    int textBuffer_len = 0;
+
     int head = 0;
     int lineStart = 0;
     while (head < fileSize) {
         char chr = buffer[head];
+        char chr_next = 0;
+        if (head + 1 < fileSize)
+            chr_next = buffer[head + 1];
         head++;
         
-        if (chr == '\n') {
+        if (chr == '\n' || (chr == '\r' && chr_next == '\n')) {
             int len = head - lineStart - 1;
-            if (len > 0) {
-
-            }
+            // if (len > 0) {
+            Line* nextLine = &session->lines[session->lines_len];
+            session->lines_len++;
+            nextLine->text = buffer + lineStart;
+            nextLine->capacity = 0;
+            nextLine->length = len;
+            // NOT null terminated!
+            // }
             lineStart = head;
         }
     }
 
+    printf("Lines: %d\n", session->lines_len);
+
 exit:
-    if (buffer) {
-        free(buffer);
-    }
+    // We use buffer memory in line parts so we can't free this.
+    // if (buffer) {
+    //     free(buffer);
+    // }
     if (file) {
         fclose(file);
     }
@@ -216,28 +280,28 @@ void slate_save(SlateSession* session) {
 // #####################
 
 
-void draw_rect(int x, int y, int w, int h, uint32_t rgba) {
-    if (x < 0) {
-        w += x;
-        x = 0;
-    }
-    if (y < 0) {
-        h += y;
-        y = 0;
-    }
-    if (x + w > g_surfaceInfo.width)
-        w = g_surfaceInfo.width - x;
-    if (y + h > g_surfaceInfo.height)
-        h = g_surfaceInfo.height - y;
+// void draw_rect(int x, int y, int w, int h, uint32_t rgba) {
+//     if (x < 0) {
+//         w += x;
+//         x = 0;
+//     }
+//     if (y < 0) {
+//         h += y;
+//         y = 0;
+//     }
+//     if (x + w > g_surfaceInfo.width)
+//         w = g_surfaceInfo.width - x;
+//     if (y + h > g_surfaceInfo.height)
+//         h = g_surfaceInfo.height - y;
 
-    uint32_t* const pixels           = g_surfaceInfo.buffer;
-    uint32_t  const pixels_per_line  = g_surfaceInfo.stride;
-    for (int iy = y; iy < y + h; iy++) {
-        for (int ix = x; ix < x + w; ix++) {
-            pixels[ix + iy * pixels_per_line] = rgba;
-        }
-    }
-}
+//     uint32_t* const pixels           = g_surfaceInfo.buffer;
+//     uint32_t  const pixels_per_line  = g_surfaceInfo.stride;
+//     for (int iy = y; iy < y + h; iy++) {
+//         for (int ix = x; ix < x + w; ix++) {
+//             pixels[ix + iy * pixels_per_line] = rgba;
+//         }
+//     }
+// }
 
 
 

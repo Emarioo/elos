@@ -7,6 +7,8 @@
 #include "elos/cpu.h"
 #include "elos/physical_memory.h"
 
+#include "elos/kernel_console.h"
+
 
 void EVE_init(BootAPI* boot_api) {
     KBD_init(boot_api);
@@ -53,6 +55,8 @@ bool EVE_request_user_event_buffer(u32 maxEvents, ELOS_UserEventBuffer** buffer,
     *buffer = newBuffer;
     returnValue = true;
 
+    KCON_printf("EVE 0x%x\n", newBuffer);
+
 exit:
     UNLOCK_INT(&g_userEventLock);
     return returnValue;
@@ -72,6 +76,8 @@ void EVE_push_event(ELOS_UserEvent* newEvent) {
         //   If we write too much weird stuff happens. Fine for slow key presses
         //   but mouse movement would spam events. I can't use spinlock because
         //   user process should not block kernel thread.
+
+        // @TODO We can't trust maxEvents. user may have put a wierd value there.
 
         u64 index = buffer->head % buffer->maxEvents;
         ELOS_UserEvent* event = &buffer->events[index];

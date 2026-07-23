@@ -269,7 +269,9 @@ def package_elos(release_dir, build_iso = False):
         (kernel_path, "KERNEL.IMG"),
         (initrd_path, "INITRD.IMG"),
         ("boot/template.cfg", "TEMPLATE.CFG"),
-        # ("res/Lat2-Terminus16.psf", "RES/STDFONT.PSF"),  # baked into kernel image, not needed here
+        ("res/Lat2-Terminus16.psf", "STDFONT.PSF"),  # baked into kernel image and not needed.
+                                                     # We currently don't package files with user apps
+                                                     # so we provide this default font in a file.
     ]
 
     fat_size, ISO_DIR = make_fat(fat_path, DEPS_SPEC)
