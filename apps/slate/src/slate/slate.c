@@ -1,18 +1,21 @@
 /*
-    Text editor implementation:
+    @TODO
 
-        1. Init compositor connection.
+    Consider memory allocation for line text. Current approach is frail.
+        Realloc or allocate more text buffer memory.
+        Since the memory is used in lines we can't realloc because it would
+        invalidate the memory.
+        We would need to allocate new memory, go through all lines and copy text
+        to new buffer then free old buffer.
+        Or we can have a linked list of memory chunks we can allocate from.
+        A heap allocator implementation in user land that is optimized
+        for small strings may be a good idea.
+        Or some other good idea for small strings.
 
-        2. Request a surface/window.
+    Opening big files. How large files do we want to support. 512MB?
+        1GB but special optimizations for memory with read-only limitation?
 
-        3. Read keyboard input and perform action (write text and execute command)
 
-        4. Draw text on the surface
-
-        5. Present surface to compositor
-
-        6. Repeat 3
-            
 */
 
 #include "slate/slate.h"
@@ -46,7 +49,7 @@ void slate_deletion(ELOS_Keycode direction);
 
 
 #define BACKGROUND        0xFF0F172A
-// #define BACKGROUND_BORDER 0xFFEEEEEE
+#define BACKGROUND_CMD    0xFF5F0000
 
 PrismInstance* g_instance;
 PrismSurface* g_surface;
@@ -167,12 +170,6 @@ void editor_loop() {
 
     ASSERT(session->lines_len != 0);
 
-    int x = 10;
-    int y = 10;
-    int size = 20;
-    int padding = 2;
-    int velx = 1;
-    int vely = 1;
 
     int text_height = 20;
     int text_color = WHITE;
@@ -202,38 +199,119 @@ void editor_loop() {
             
             apply_numpad(&event.key.keycode, event.key.mods);
 
-            printf("code=%d chr=%c pressed=%d scan=0x%x\n", event.key.keycode, event.key.character, event.key.value, event.key.scancode);
+            // printf("code=%d chr=%c pressed=%d scan=0x%x\n", event.key.keycode, event.key.character, event.key.value, event.key.scancode);
 
             ELOS_UserEvent_Key key = event.key;
-            if (key.keycode == KEY_LEFT_ARROW) {
-                slate_move(key.keycode);
-            } else if (key.keycode == KEY_RIGHT_ARROW) {
-                slate_move(key.keycode);
-            } else if (key.keycode == KEY_DOWN_ARROW) {
-                slate_move(key.keycode);
-            } else if (key.keycode == KEY_UP_ARROW) {
-                slate_move(key.keycode);
-            } else if (key.keycode == KEY_HOME) {
-                slate_move(key.keycode);
-            } else if (key.keycode == KEY_END) {
-                slate_move(key.keycode);
-            } else if (key.keycode == KEY_PAGE_UP) {
-                slate_move(key.keycode);
-            } else if (key.keycode == KEY_PAGE_DOWN) {
-                slate_move(key.keycode);
-            } else if (key.keycode == KEY_BACKSPACE) {
-                slate_deletion(key.keycode);
-            } else if (key.keycode == KEY_DELETE) {
-                slate_deletion(KEY_DELETE);
-            } else if(key.character != 0) {
-                slate_insert(key.character);
+            
+            if (key.keycode == KEY_O && (key.mods & KEY_MOD_CTRL)) {
+                printf("Open file\n");
+                session->command = CMD_OPEN_FILE;
+            } else if (key.keycode == KEY_S && (key.mods & KEY_MOD_CTRL)) {
+                printf("Save file\n");
+                session->command = CMD_SAVE_FILE;
+            } else {
+                if (session->command == CMD_OPEN_FILE || session->command == CMD_SAVE_FILE) {
+                    if (key.keycode == KEY_LEFT_ARROW) {
+                        if (session->commandCursor_x > 0) {
+                            session->commandCursor_x--;
+                        }
+                    } else if (key.keycode == KEY_RIGHT_ARROW) {
+                        if (session->commandCursor_x < session->commandBuffer_len) {
+                            session->commandCursor_x++;
+                        }
+                    } else if (key.keycode == KEY_HOME) {
+                        session->commandCursor_x = 0;
+                    } else if (key.keycode == KEY_END) {
+                        session->commandCursor_x = session->commandBuffer_len;
+                    } else if (key.keycode == KEY_BACKSPACE) {
+                        if (session->commandCursor_x > 0) {
+                            memmove(session->commandBuffer + session->commandCursor_x - 1,
+                                session->commandBuffer + session->commandCursor_x,
+                                session->commandBuffer_len - (session->commandCursor_x+1));
+                            session->commandCursor_x--;
+                            session->commandBuffer_len--;
+                        }
+                    } else if (key.keycode == KEY_DELETE) {
+                        if (session->commandCursor_x < session->commandBuffer_len) {
+                            memmove(session->commandBuffer + session->commandCursor_x,
+                                session->commandBuffer + session->commandCursor_x + 1,
+                                session->commandBuffer_len - (session->commandCursor_x+1));
+                            session->commandBuffer_len--;
+                        }
+                    } else if (key.keycode == KEY_ESCAPE) {
+                        session->command = CMD_NONE;
+                    } else if (key.keycode == KEY_ENTER) {
+                        if (session->command == CMD_OPEN_FILE) {
+                            // Open file
+                            printf("Open %s\n", session->commandBuffer);
+                        } else if (session->command == CMD_SAVE_FILE) {
+                            // Save file
+                            printf("Save %s\n", session->commandBuffer);
+                        }
+                        session->command = CMD_NONE;
+                    } else if(key.character != 0) {
+                        memmove(session->commandBuffer + session->commandCursor_x + 1,
+                                session->commandBuffer + session->commandCursor_x,
+                                session->commandBuffer_len - session->commandCursor_x);
+                        session->commandBuffer[session->commandCursor_x] = key.character;
+                        session->commandBuffer_len++;
+                        session->commandCursor_x++;
+                    }
+                } else {
+                    if (key.keycode == KEY_LEFT_ARROW) {
+                        slate_move(key.keycode);
+                    } else if (key.keycode == KEY_RIGHT_ARROW) {
+                        slate_move(key.keycode);
+                    } else if (key.keycode == KEY_DOWN_ARROW) {
+                        slate_move(key.keycode);
+                    } else if (key.keycode == KEY_UP_ARROW) {
+                        slate_move(key.keycode);
+                    } else if (key.keycode == KEY_HOME) {
+                        slate_move(key.keycode);
+                    } else if (key.keycode == KEY_END) {
+                        slate_move(key.keycode);
+                    } else if (key.keycode == KEY_PAGE_UP) {
+                        slate_move(key.keycode);
+                    } else if (key.keycode == KEY_PAGE_DOWN) {
+                        slate_move(key.keycode);
+                    } else if (key.keycode == KEY_BACKSPACE) {
+                        slate_deletion(key.keycode);
+                    } else if (key.keycode == KEY_DELETE) {
+                        slate_deletion(KEY_DELETE);
+                    } else if(key.character != 0) {
+                        slate_insert(key.character);
+                    }
+                }
             }
         }
 
         draw_rect(0, 0, g_surfaceInfo.width, g_surfaceInfo.height, BACKGROUND);
 
+        // session->scroll_y refers to the line shown at the top left corner
+        // at any time we want cursor_y to be visible on screen.
+        // this means abs(session->scroll_y - session->cursor_y) * text_height < g_surfaceInfo.height
+        // If this is false we should bring it closer.
+        // if (session->cursor_y > session->scroll_y + g_surfaceInfo.height / text_height - 3) {
+        //     session->scroll_y = session->cursor_y - g_surfaceInfo.height / text_height + 3;
+        // }
+        // if (session->cursor_y + 3 < session->scroll_y) {
+        //     if (session->cursor_y < 3) {
+        //         session->scroll_y = 0;
+        //     } else {
+        //         session->scroll_y = session->cursor_y - 3;
+        //     }
+
+        // }
+        int maxLinesOnScreen = g_surfaceInfo.height / text_height;
+
+        if (session->cursor_y >= maxLinesOnScreen/2) {
+            session->scroll_y = session->cursor_y - maxLinesOnScreen/2;
+        } else {
+            session->scroll_y = 0;
+        }
+
         
-        for (int li=0;li<slateSession.lines_len;li++) {
+        for (int li=session->scroll_y;li<slateSession.lines_len && li < session->scroll_y + maxLinesOnScreen;li++) {
             Line* line = &slateSession.lines[li];
 
             if (LINE_LENGTH(line) == 0)
@@ -246,13 +324,26 @@ void editor_loop() {
             if (textWidth > g_surfaceInfo.width ) {
                 text.len = (g_surfaceInfo.width) / characterWidth;
             }
+
+            int text_y = text_height * (li - session->scroll_y);
             
-            draw_glyphs_from_text_bcolor(0, text_height * li, text_height, text, g_default_font, text_color, 0);
+            draw_glyphs_from_text_bcolor(0, text_y, text_height, text, g_default_font, text_color, 0);
         }
         
         // We required monospace font here
         
-        draw_rect(characterWidth * session->cursor_x, text_height * session->cursor_y, 3, text_height, WHITE);
+        if (session->command == CMD_NONE) {
+            draw_rect(characterWidth * session->cursor_x, text_height * (session->cursor_y - session->scroll_y), 3, text_height, WHITE);
+        } else {
+            int command_x = 2;
+            int command_y = g_surfaceInfo.height - text_height - 2;
+
+            cstring text = { session->commandBuffer, session->commandBuffer_len };
+            draw_rect(command_x, command_y, characterWidth * 20, text_height, BACKGROUND_CMD);
+            draw_glyphs_from_text_bcolor(command_x, command_y, text_height, text, g_default_font, text_color, BACKGROUND_CMD);
+
+            draw_rect(command_x + characterWidth * session->commandCursor_x, command_y, 3, text_height, WHITE);
+        }
 
         prism_presentSurface(g_surface);
 
@@ -269,6 +360,9 @@ void editor_loop() {
 //    EDITOR SPECIFICS
 // #####################
 
+char* textBuffer;
+int   textBuffer_len;
+int   textBuffer_max;
 
 void slate_open(SlateSession* session, const char* path) {
     FILE* file;
@@ -298,10 +392,13 @@ void slate_open(SlateSession* session, const char* path) {
     }
     buffer[fileSize] = '\0';
 
+    // Reset line buffer.
+    textBuffer_len = 0;
+
     session->cursor_x = 0;
     session->cursor_y = 0;
     session->modified = false;
-    strncpy(session->filename, path, sizeof(session->filename)-1);
+    strncpy(session->currentFile, path, sizeof(session->currentFile));
     session->lines_len = 0;
 
     if (!session->lines) {
@@ -358,15 +455,7 @@ void slate_save(SlateSession* session) {
 }
 
 
-// #####################
-//    UTILITIES
-// #####################
 
-
-
-char* textBuffer;
-int   textBuffer_len;
-int   textBuffer_max;
 
 void reserve_text_buffer(int max) {
     textBuffer = realloc(textBuffer, max);
@@ -395,7 +484,7 @@ void slate_move(ELOS_Keycode direction) {
             session->cursor_x++;
         }
     } else if (direction == KEY_DOWN_ARROW) {
-        if (session->cursor_y < session->lines_len) {
+        if (session->cursor_y+1 < session->lines_len) {
             session->cursor_y++;
         }
     } else if (direction == KEY_UP_ARROW) {
@@ -449,6 +538,8 @@ void slate_insert(char c) {
         session->cursor_x = 0;
         session->cursor_y++;
     } else {
+        ASSERT(textBuffer_len + line->text.len + 4 <= textBuffer_max);
+
         memcpy(textBuffer + textBuffer_len, line->text.ptr, session->cursor_x);
         if (session->cursor_x != line->text.len) {
             memcpy(textBuffer + textBuffer_len + session->cursor_x + 1, line->text.ptr + session->cursor_x, line->text.len - session->cursor_x);
@@ -480,6 +571,9 @@ void slate_deletion(ELOS_Keycode direction) {
         } else if (session->cursor_y > 0) {
             Line* prevLine = &session->lines[session->cursor_y-1];
             Line* line = &session->lines[session->cursor_y];
+            
+            ASSERT(textBuffer_len + prevLine->text.len + line->text.len <= textBuffer_max);
+            
             session->cursor_x = prevLine->text.len;
             memcpy(textBuffer + textBuffer_len, prevLine->text.ptr, prevLine->text.len);
             memcpy(textBuffer + textBuffer_len + prevLine->text.len, line->text.ptr, line->text.len);
@@ -491,7 +585,6 @@ void slate_deletion(ELOS_Keycode direction) {
             memmove(&session->lines[session->cursor_y], &session->lines[session->cursor_y+1], sizeof(Line) * (session->lines_len - session->cursor_y+1));
             session->lines_len--;
             session->cursor_y--;
-            printf("Backspace good\n");
         }
     } else if (direction == KEY_DELETE) {
         Line* line = &session->lines[session->cursor_y];
@@ -501,6 +594,9 @@ void slate_deletion(ELOS_Keycode direction) {
         } else if (session->cursor_y+1 < session->lines_len) {
             Line* line = &session->lines[session->cursor_y];
             Line* nextLine = &session->lines[session->cursor_y+1];
+            
+            ASSERT(textBuffer_len + line->text.len + nextLine->text.len <= textBuffer_max);
+
             memcpy(textBuffer + textBuffer_len, line->text.ptr, line->text.len);
             memcpy(textBuffer + textBuffer_len + line->text.len, nextLine->text.ptr, nextLine->text.len);
             line->text.len += nextLine->text.len;

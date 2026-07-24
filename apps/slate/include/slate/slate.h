@@ -14,10 +14,13 @@
 
 typedef struct {
     string text;
-    // char* text;
-    // int   length;
-    // int   capacity;
 } Line;
+
+typedef enum {
+    CMD_NONE,
+    CMD_OPEN_FILE,
+    CMD_SAVE_FILE,
+} SlateCommand;
 
 typedef struct {
     Line* lines;
@@ -27,9 +30,17 @@ typedef struct {
     uint32_t cursor_x;
     uint32_t cursor_y;
 
+    uint32_t scroll_x;
+    uint32_t scroll_y;
+
     bool modified;
 
-    char filename[256];
+    char currentFile[256];
+
+    SlateCommand command;
+    uint32_t     commandCursor_x;
+    int          commandBuffer_len;
+    char         commandBuffer[256];
 } SlateSession;
 
 void slate_open(SlateSession* session, const char* path);
