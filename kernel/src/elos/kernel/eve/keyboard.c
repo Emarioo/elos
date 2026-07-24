@@ -5,6 +5,7 @@
 #include "elos/kernel/eve/keys.h"
 
 #include "elos/kernel_console.h"
+#include "elos/common/string.h"
 
 #include "elos/user_event.h"
 
@@ -12,29 +13,15 @@
 #define printf(...) KCON_printf(__VA_ARGS__)
 
 
-extern const char* sv_keymap;
+Keymap* g_currentKeymap;
 
 void KBD_init(BootAPI* boot_api) {
     ps2_init();
   
-    ps2_load_keymap(sv_keymap, &_default_keymap);
+    KBD_set_layout("sv");
 }
 
-
-// Keycode KBD_read_key(int* character, int* mods) {
-//     // BLOCKING
-//     int scancode = ps2_read_scancode();
-
-//     *character = scancode_to_char(scancode, 0);
-//     return scancode_to_keycode(scancode);
-// }
-
-
-// Keycode KBD_poll_key() {
-//     int scancode = ps2_poll_scancode();
-    
-//     return scancode_to_keycode(scancode);
-// }
+#define MAX_KEY_EVENTS 256
 
 KeyEvent keyEvents[MAX_KEY_EVENTS];
 volatile u32 keyEvents_head;
@@ -48,31 +35,29 @@ void KBD_push_key_event(int scancode, int pressed) {
     KeyEvent keyEvent = {
         .scancode = scancode,
         .pressed = pressed,
-        .keycode = scancode_to_keycode(scancode),
+        .keycode = scancode_to_keycode(g_currentKeymap, scancode),
     };
 
-    switch (keyEvent.keycode) {
-        case KEY_LSHIFT:
-        case KEY_RSHIFT: {
+    switch ((int)keyEvent.keycode) {
+        case KEY_LEFT_SHIFT:
+        case KEY_RIGHT_SHIFT: {
             if (pressed)
                 keyboard_mods |= KEY_MOD_SHIFT;
             else
                 keyboard_mods &= ~KEY_MOD_SHIFT;
         } break;
-        case KEY_LCTRL:
-        case KEY_RCTRL: {
+        case KEY_LEFT_CTRL:
+        case KEY_RIGHT_CTRL: {
             if (pressed)
                 keyboard_mods |= KEY_MOD_CTRL;
             else
                 keyboard_mods &= ~KEY_MOD_CTRL;
         } break;
-        case KEY_CAPSLOCK: {
+        case KEY_CAPS_LOCK: {
             if (pressed)
-                keyboard_mods |= KEY_MOD_CAPSLOCK;
-            else
-                keyboard_mods &= ~KEY_MOD_CAPSLOCK;
+                keyboard_mods ^= KEY_MOD_CAPS_LOCK;
         } break;
-        case KEY_RALT: {
+        case KEY_RIGHT_ALT: {
             if (pressed)
                 keyboard_mods |= KEY_MOD_ALT;
             else
@@ -84,9 +69,13 @@ void KBD_push_key_event(int scancode, int pressed) {
             else
                 keyboard_mods &= ~KEY_MOD_SUPER;
         } break;
+        case KEY_NUM_LOCK: {
+            if (pressed)
+                keyboard_mods ^= KEY_MOD_NUM_LOCK;
+        } break;
     }
     // printf("key=%d scan=%x mod=%d pressed=%d\n", keyEvent.keycode, scancode, keyboard_mods, pressed);
-    int chr = scancode_to_char(scancode, keyboard_mods);
+    u32 chr = scancode_to_character(g_currentKeymap, scancode, keyboard_mods, NULL);
     keyEvent.mods      = keyboard_mods;
     keyEvent.character = chr;
 
@@ -129,83 +118,15 @@ bool KBD_poll_key_event(KeyEvent* keyEvent) {
     return false;
 }
 
+extern Keymap sv_keymap;
 
+bool KBD_set_layout(const char* layout) {
+    if (!strcmp(layout, "sv")) {
+        g_currentKeymap = &sv_keymap;
+        return true;
+    } else {
+        // If layout is a path then read and parse it?
+    }
+    return false;
+}
 
-                    // keycode scancode
-const char* sv_keymap = "1 118\n"
-                        "2 18\n"
-                        "3 89\n"
-                        "4 20\n"
-                        "5 57364\n"
-                        "6 17\n"
-                        "7 57361\n"
-                        "8 102\n"
-                        "9 13\n"
-                        "10 90\n"
-                        "12 57452\n"
-                        "13 57456\n"
-                        "14 57457\n"
-                        "15 57449\n"
-                        "16 57466\n"
-                        "17 57469\n"
-                        // "19 20\n" // Super key, can't be detected in qemu
-                        "20 88\n"
-                        "21 41\n"
-                        "28 93\n"
-                        "32 78\n"
-                        "33 65\n"
-                        "34 74\n"
-                        "35 73\n"
-                        "37 69\n"
-                        "38 22\n"
-                        "39 30\n"
-                        "40 38\n"
-                        "41 37\n"
-                        "42 46\n"
-                        "43 54\n"
-                        "44 61\n"
-                        "45 62\n"
-                        "46 70\n"
-                        "54 28\n"
-                        "55 50\n"
-                        "56 33\n"
-                        "57 35\n"
-                        "58 36\n"
-                        "59 43\n"
-                        "60 52\n"
-                        "61 51\n"
-                        "62 67\n"
-                        "63 59\n"
-                        "64 66\n"
-                        "65 75\n"
-                        "66 58\n"
-                        "67 49\n"
-                        "68 68\n"
-                        "69 77\n"
-                        "70 21\n"
-                        "71 45\n"
-                        "72 27\n"
-                        "73 44\n"
-                        "74 60\n"
-                        "75 42\n"
-                        "76 29\n"
-                        "77 34\n"
-                        "78 53\n"
-                        "79 26\n"
-                        "85 85\n"
-                        "90 57451\n"
-                        "91 57460\n"
-                        "92 57461\n"
-                        "93 57458\n"
-                        "94 5\n"
-                        "95 6\n"
-                        "96 4\n"
-                        "97 12\n"
-                        "98 3\n"
-                        "99 11\n"
-                        "100 131\n"
-                        "101 10\n"
-                        "102 1\n"
-                        "103 9\n"
-                        "104 120\n"
-                        "105 7\n";

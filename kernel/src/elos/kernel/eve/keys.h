@@ -2,21 +2,14 @@
 
 #include "elos/keyboard.h"
 
-typedef struct KeymapEntry {
-    int keycode;
-    int scancode;
-} KeymapEntry;
-
 typedef struct Keymap {
-    KeymapEntry scan_to_key[256 + 256];
-    KeymapEntry key_to_scan[KEY_MAX];
+    ELOS_Keycode scancode_to_keycode[512];
+    u32          scancode_to_char[512][4];
 } Keymap;
 
-extern Keymap _default_keymap;
 
 
-const char* key_name(int keycode);
+const char* key_name(ELOS_Keycode keycode);
 
-int scancode_to_char(int scancode, int mod);
-
-int scancode_to_keycode(int scancode);
+ELOS_Keycode scancode_to_keycode(Keymap* keymap, u32 scancode);
+u32 scancode_to_character(Keymap* keymap, u32 scancode, u32 mod, ELOS_Keycode* keycode);

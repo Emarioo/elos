@@ -13,3 +13,5 @@ int atoi(const char *s);
 void exit(int code);
 int puts(const char *s);
 int putchar(int c);
+
+void sleep(uint64_t ns);

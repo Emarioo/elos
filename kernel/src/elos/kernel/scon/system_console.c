@@ -58,14 +58,14 @@ int textColor = WHITE;
 int backColor = TERMINAL_BACK;
 
 void send_command(cstring text);
-void edit_text(char* text_ptr, int text_max, int* inout_text_len, Keycode keycode, int character, int mods, int* cursor);
+void edit_text(char* text_ptr, int text_max, int* inout_text_len, ELOS_Keycode keycode, int character, int mods, int* cursor);
 
 void SCON_enable(bool enabled) {
     g_systemConsole_is_enabled = enabled;
 }
 
 
-Keycode g_superKey = KEY_LALT;
+ELOS_Keycode g_superKey = KEY_LEFT_ALT;
 bool g_superKeyIsDown = false;
 
 /*
@@ -169,7 +169,7 @@ void SCON_main() {
 }
 
 
-void edit_text(char* text_ptr, int text_max, int* inout_text_len, Keycode keycode, int character, int mods, int* cursor) {
+void edit_text(char* text_ptr, int text_max, int* inout_text_len, ELOS_Keycode keycode, int character, int mods, int* cursor) {
 
     int text_len = *inout_text_len;
 

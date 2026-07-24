@@ -10,19 +10,22 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "elos/common/string.h"
+
 typedef struct {
-    char* text;
-    int   length;
-    int   capacity;
+    string text;
+    // char* text;
+    // int   length;
+    // int   capacity;
 } Line;
 
 typedef struct {
-    Line *lines;
+    Line* lines;
     int   lines_len;
     int   lines_max;
 
-    int cursor_x;
-    int cursor_y;
+    uint32_t cursor_x;
+    uint32_t cursor_y;
 
     bool modified;
 

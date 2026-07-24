@@ -243,6 +243,8 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     while (1) asm ( "cli\nhlt\n" );
 }
 
+extern Keymap* g_currentKeymap;
+
 void keyboard_handler(int isr_number, KeyboardInterruptFrame* frame, u64 extra) {
     // printf("Interrupt #%d\n", isr_number);
 
@@ -257,7 +259,7 @@ void keyboard_handler(int isr_number, KeyboardInterruptFrame* frame, u64 extra) 
         break;
         
         // @TODO Reboot key is nice but it should not be here.
-        int keycode = scancode_to_keycode(scancode);
+        int keycode = scancode_to_keycode(g_currentKeymap, scancode);
         if (keycode == KEY_F1) {
             CPU_reset();
         }

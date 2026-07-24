@@ -84,6 +84,10 @@ void exit(int code)
         ;
 }
 
+void sleep(uint64_t ns) {
+    SYS_sleep_ns(ns);
+}
+
 int puts(const char *s)
 {
     SYS_debug_log(s, strlen(s));

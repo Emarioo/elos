@@ -29,7 +29,6 @@
 void printf(const char* format, ...);
 
 
-void sleep(u64 ns);
 
 void terminal_loop();
 
@@ -159,17 +158,3 @@ void draw_rect(int x, int y, int w, int h, uint32_t rgba) {
 }
 
 
-
-
-void sleep(u64 ns) {
-    u64 start = rdtsc();
-    printf("tps=%d K  start=%d\n", ticks_per_second / 1000, start/1000);
-    while (1) {
-        u64 now = rdtsc();
-        u64 now_ns = (1000000000 * (now - start)) / ticks_per_second;
-        if (now_ns > ns) {
-            return;
-        }
-        printf("tps=%d K  start=%d\n", ticks_per_second / 1000, (now-start)/1000);
-    }
-}

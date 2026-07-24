@@ -9,11 +9,11 @@
 */
 
 #ifndef ELOS_SYSCALL_INCLUDE
-// Enabled furher down where we define keys
-// #define ELOS_SYSCALL_INCLUDE
+#define ELOS_SYSCALL_INCLUDE
 
 // consider using stdint.h instead
 #include "elos/common/types.h"
+#include "elos/keycode.h"
 
 typedef enum {
     ELOS_OK = 0,
@@ -90,6 +90,14 @@ typedef enum {
 } ELOS_UserEventType;
 
 typedef struct {
+    u32 keycode;
+    u32 scancode;
+    u32 character;
+    u32 value; // zero = released, non-zero = how much it is pressed
+    u32 mods;
+} ELOS_UserEvent_Key;
+
+typedef struct {
     ELOS_UserEventType type;
     ELOS_DeviceID id;
     union {
@@ -97,13 +105,7 @@ typedef struct {
         // } connected;
         // struct {
         // } disconnected;
-        struct {
-            u32 keycode;
-            u32 scancode;
-            u32 character;
-            u32 value; // zero = released, non-zero = how much it is pressed
-            u32 mods;
-        } key;
+        ELOS_UserEvent_Key key;
     };
 } ELOS_UserEvent;
 
@@ -693,137 +695,3 @@ ELOS_Error SYS_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, u64 tim
 #endif // ELOS_SYSCALL_IMPL
 
 
-
-#ifndef ELOS_SYSCALL_INCLUDE
-#define ELOS_SYSCALL_INCLUDE
-
-enum ELOS_Keycode {
-    ELOS_KEY_NONE, // empty/invalid key
-    ELOS_KEY_ESCAPE,
-    ELOS_KEY_LSHIFT,
-    ELOS_KEY_RSHIFT,
-    ELOS_KEY_LCTRL,
-    ELOS_KEY_RCTRL,
-    ELOS_KEY_LALT,
-    ELOS_KEY_RALT,
-    ELOS_KEY_BACKSPACE,
-    ELOS_KEY_TAB,
-    ELOS_KEY_ENTER,
-    ELOS_KEY_FN,
-    ELOS_KEY_HOME,
-    ELOS_KEY_INSERT,
-    ELOS_KEY_DELETE,
-    ELOS_KEY_END,
-    ELOS_KEY_PAGE_DOWN,
-    ELOS_KEY_PAGE_UP,
-    ELOS_KEY_NUM_LOCK,
-    ELOS_KEY_SUPER,
-    ELOS_KEY_CAPSLOCK,
-
-    ELOS_KEY_SPACE,
-    ELOS_KEY_EXCLAMATION_MARK,
-    ELOS_KEY_DQUOTE,
-    ELOS_KEY_HASHTAG,
-    ELOS_KEY_DOLLAR,
-    ELOS_KEY_PERCENT,
-    ELOS_KEY_AMPERSAND,
-    ELOS_KEY_SQUOTE,
-    ELOS_KEY_LPAREN,
-    ELOS_KEY_RPAREN,
-    ELOS_KEY_ASTERISK,
-    ELOS_KEY_PLUS,
-    ELOS_KEY_COMMA,
-    ELOS_KEY_MINUS,
-    ELOS_KEY_PERIOD,
-    ELOS_KEY_SLASH,
-
-    ELOS_KEY_0,
-    ELOS_KEY_1,
-    ELOS_KEY_2,
-    ELOS_KEY_3,
-    ELOS_KEY_4,
-    ELOS_KEY_5,
-    ELOS_KEY_6,
-    ELOS_KEY_7,
-    ELOS_KEY_8,
-    ELOS_KEY_9,
-
-    ELOS_KEY_COLON,
-    ELOS_KEY_SEMICOLON,
-    ELOS_KEY_LESSER,
-    ELOS_KEY_EQUAL,
-    ELOS_KEY_GREATER,
-    ELOS_KEY_QUESTION_MARK,
-    ELOS_KEY_AT_SIGN,
-
-
-    ELOS_KEY_A,
-    ELOS_KEY_B,
-    ELOS_KEY_C,
-    ELOS_KEY_D,
-    ELOS_KEY_E,
-    ELOS_KEY_F,
-    ELOS_KEY_G,
-    ELOS_KEY_H,
-    ELOS_KEY_I,
-    ELOS_KEY_J,
-    ELOS_KEY_K,
-    ELOS_KEY_L,
-    ELOS_KEY_M,
-    ELOS_KEY_N,
-    ELOS_KEY_O,
-    ELOS_KEY_P,
-    ELOS_KEY_Q,
-    ELOS_KEY_R,
-    ELOS_KEY_S,
-    ELOS_KEY_T,
-    ELOS_KEY_U,
-    ELOS_KEY_V,
-    ELOS_KEY_W,
-    ELOS_KEY_X,
-    ELOS_KEY_Y,
-    ELOS_KEY_Z,
-
-    ELOS_KEY_LBRACKET,
-    ELOS_KEY_BACKSLASH,
-    ELOS_KEY_RBRACKET,
-    ELOS_KEY_CARET,
-    ELOS_KEY_UNDERSCORE,
-    ELOS_KEY_BACKTICK,
-
-    ELOS_KEY_LBRACE,
-    ELOS_KEY_VERTICAL_BAR,
-    ELOS_KEY_RBRACE,
-    ELOS_KEY_TILDE,
-
-    ELOS_KEY_LEFT_ARROW,
-    ELOS_KEY_RIGHT_ARROW,
-    ELOS_KEY_UP_ARROW,
-    ELOS_KEY_DOWN_ARROW,
-
-    ELOS_KEY_F1,
-    ELOS_KEY_F2,
-    ELOS_KEY_F3,
-    ELOS_KEY_F4,
-    ELOS_KEY_F5,
-    ELOS_KEY_F6,
-    ELOS_KEY_F7,
-    ELOS_KEY_F8,
-    ELOS_KEY_F9,
-    ELOS_KEY_F10,
-    ELOS_KEY_F11,
-    ELOS_KEY_F12,
-    ELOS_KEY_F13,
-    ELOS_KEY_F14,
-    ELOS_KEY_F15,
-
-    ELOS_KEY_MAX,
-
-    ELOS_KEY_MOD_SHIFT    = 0x1,
-    ELOS_KEY_MOD_ALT      = 0x2,
-    ELOS_KEY_MOD_CAPSLOCK = 0x4,
-    ELOS_KEY_MOD_CTRL     = 0x8,
-};
-
-
-#endif // ELOS_SYSCALL_INCLUDE

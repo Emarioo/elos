@@ -199,7 +199,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             
             write_cr3((u64)g_kernelPageTable);
 
-            HeapEntry* heapEntry = get_heap_entry(oldAddress);
+            HeapEntry* heapEntry = oldAddress == NULL ? NULL : get_heap_entry(oldAddress);
             if (!heapEntry) {
                 
                 void* address = PMEM_alloc_phys(size, PMEM_FLAG_USER_SPACE);
