@@ -25,19 +25,12 @@ const char* key_name(ELOS_Keycode keycode) {
         case KEY_SUPER:             return "Super";
         case KEY_CAPS_LOCK:          return "CapsLock";
         case KEY_SPACE:             return "Space";
-        case KEY_EXCLAMATION_MARK:  return "!";
-        case KEY_DQUOTE:            return "\"";
-        case KEY_HASHTAG:           return "#";
-        case KEY_DOLLAR:            return "$";
-        case KEY_PERCENT:           return "%";
-        case KEY_AMPERSAND:         return "&";
-        case KEY_SQUOTE:            return "'";
         case KEY_LEFT_PAREN:        return "(";
         case KEY_RIGHT_PAREN:       return ")";
-        case KEY_ASTERISK:          return "*";
         case KEY_PLUS:              return "+";
         case KEY_COMMA:             return ",";
         case KEY_MINUS:             return "-";
+        case KEY_GRAVE:             return "Grave";
         case KEY_PERIOD:            return ".";
         case KEY_SLASH:             return "/";
         case KEY_0:                 return "0";
@@ -50,13 +43,11 @@ const char* key_name(ELOS_Keycode keycode) {
         case KEY_7:                 return "7";
         case KEY_8:                 return "8";
         case KEY_9:                 return "9";
+        case KEY_APOSTROPHE:        return "Apostrophe";
+        case KEY_ARROW:             return "Arrow";
         case KEY_COLON:             return ":";
         case KEY_SEMICOLON:         return ";";
-        case KEY_LESSER:            return "<";
         case KEY_EQUAL:             return "=";
-        case KEY_GREATER:           return ">";
-        case KEY_QUESTION_MARK:     return "?";
-        case KEY_AT_SIGN:           return "@";
         case KEY_A:                 return "A";
         case KEY_B:                 return "B";
         case KEY_C:                 return "C";
@@ -86,13 +77,6 @@ const char* key_name(ELOS_Keycode keycode) {
         case KEY_LEFT_BRACKET:      return "[";
         case KEY_BACKSLASH:         return "\\";
         case KEY_RIGHT_BRACKET:     return "]";
-        case KEY_CARET:             return "^";
-        case KEY_UNDERSCORE:        return "_";
-        case KEY_BACKTICK:          return "`";
-        case KEY_LEFT_BRACE:        return "{";
-        case KEY_VERTICAL_BAR:      return "|";
-        case KEY_RIGHT_BRACE:       return "}";
-        case KEY_TILDE:             return "~";
         case KEY_LEFT_ARROW:        return "LeftArrow";
         case KEY_RIGHT_ARROW:       return "RightArrow";
         case KEY_UP_ARROW:          return "UpArrow";
@@ -139,12 +123,30 @@ ELOS_Keycode scancode_to_keycode(Keymap* keymap, u32 scancode) {
 
 
 u32 scancode_to_character(Keymap* keymap, u32 scancode, u32 mod, ELOS_Keycode* out_keycode) {
+    ELOS_Keycode keycode = scancode_to_keycode(keymap, scancode);
     if (out_keycode) {
-        ELOS_Keycode keycode = scancode_to_keycode(keymap, scancode);
         *out_keycode = keycode;
     }
 
-    int index = ((mod & KEY_MOD_SHIFT) ? 1 : 0) + ( (mod & KEY_MOD_ALT) ? 2 : 0);
+    int isLetter = keycode >= KEY_A && keycode <= KEY_Z;
+    for (int i=0;i<ARRAY_LENGTH(keymap->extra_capslock_scancodes);i++) {
+        if (keymap->extra_capslock_scancodes[i] == scancode) {
+            isLetter = true;
+            break;
+        }
+    }
+
+    int isNumpad = keycode >= KEY_NUMPAD_0 && keycode <= KEY_NUMPAD_ENTER;
+
+    int index;
+    if (isLetter) {
+        index = ((!(mod & KEY_MOD_SHIFT) ^ !(mod & KEY_MOD_CAPS_LOCK)) ? 1 : 0) + ( (mod & KEY_MOD_ALT) ? 2 : 0);
+    } else if (isNumpad) {
+        index = ((!(mod & KEY_MOD_SHIFT) ^ !(mod & KEY_MOD_NUM_LOCK)) ? 0 : 1) + ( (mod & KEY_MOD_ALT) ? 2 : 0);
+    } else {
+        index = ((mod & KEY_MOD_SHIFT) ? 1 : 0) + ( (mod & KEY_MOD_ALT) ? 2 : 0);
+    }
+
     return keymap->scancode_to_char[scancode][index];
 }
 

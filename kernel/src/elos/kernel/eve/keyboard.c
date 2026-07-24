@@ -26,7 +26,7 @@ void KBD_init(BootAPI* boot_api) {
 KeyEvent keyEvents[MAX_KEY_EVENTS];
 volatile u32 keyEvents_head;
 volatile u32 keyEvents_tail;
-int keyboard_mods;
+u32 keyboard_mods;
 
 void KBD_push_key_event(int scancode, int pressed) {
     if (scancode == 0)
@@ -54,24 +54,28 @@ void KBD_push_key_event(int scancode, int pressed) {
                 keyboard_mods &= ~KEY_MOD_CTRL;
         } break;
         case KEY_CAPS_LOCK: {
-            if (pressed)
+            if (pressed) {
                 keyboard_mods ^= KEY_MOD_CAPS_LOCK;
+            }
         } break;
         case KEY_RIGHT_ALT: {
-            if (pressed)
+            if (pressed) {
                 keyboard_mods |= KEY_MOD_ALT;
-            else
+            } else {
                 keyboard_mods &= ~KEY_MOD_ALT;
+            }
         } break;
         case KEY_SUPER: {
-            if (pressed)
+            if (pressed) {
                 keyboard_mods |= KEY_MOD_SUPER;
-            else
+            } else {
                 keyboard_mods &= ~KEY_MOD_SUPER;
+            }
         } break;
         case KEY_NUM_LOCK: {
-            if (pressed)
+            if (pressed) {
                 keyboard_mods ^= KEY_MOD_NUM_LOCK;
+            }
         } break;
     }
     // printf("key=%d scan=%x mod=%d pressed=%d\n", keyEvent.keycode, scancode, keyboard_mods, pressed);
@@ -84,7 +88,7 @@ void KBD_push_key_event(int scancode, int pressed) {
 
     ELOS_UserEvent event = {
         .type = ELOS_USER_EVENT_KEY,
-        .id = 0,
+        .id = 0, // ps2 driver only supports one device at the moment
         .key = {
             .keycode = keyEvent.keycode,
             .character = chr,

@@ -5,6 +5,7 @@
 typedef struct Keymap {
     ELOS_Keycode scancode_to_keycode[512];
     u32          scancode_to_char[512][4];
+    u32          extra_capslock_scancodes[8]; // extra beyond A-Z
 } Keymap;
 
 

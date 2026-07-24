@@ -23,19 +23,13 @@ typedef enum {
     KEY_CAPS_LOCK,
 
     KEY_SPACE,
-    KEY_EXCLAMATION_MARK,
-    KEY_DQUOTE,
-    KEY_HASHTAG,
-    KEY_DOLLAR,
-    KEY_PERCENT,
-    KEY_AMPERSAND,
-    KEY_SQUOTE,
+    KEY_APOSTROPHE,
     KEY_LEFT_PAREN,
     KEY_RIGHT_PAREN,
-    KEY_ASTERISK,
     KEY_PLUS,
     KEY_COMMA,
     KEY_MINUS,
+    KEY_GRAVE,
     KEY_PERIOD,
     KEY_SLASH,
 
@@ -52,11 +46,8 @@ typedef enum {
 
     KEY_COLON,
     KEY_SEMICOLON,
-    KEY_LESSER,
+    KEY_ARROW, // key between shift and z on swedish keyboard
     KEY_EQUAL,
-    KEY_GREATER,
-    KEY_QUESTION_MARK,
-    KEY_AT_SIGN,
 
 
     KEY_A,
@@ -89,14 +80,6 @@ typedef enum {
     KEY_LEFT_BRACKET,
     KEY_BACKSLASH,
     KEY_RIGHT_BRACKET,
-    KEY_CARET,
-    KEY_UNDERSCORE,
-    KEY_BACKTICK,
-
-    KEY_LEFT_BRACE,
-    KEY_VERTICAL_BAR,
-    KEY_RIGHT_BRACE,
-    KEY_TILDE,
 
     KEY_LEFT_ARROW,
     KEY_RIGHT_ARROW,

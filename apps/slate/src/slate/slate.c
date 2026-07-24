@@ -139,7 +139,7 @@ bool slate_load_font() {
 
 
 void apply_numpad(ELOS_Keycode* keycode, int mod) {
-    if ((mod & KEY_NUM_LOCK) || (mod & KEY_MOD_SHIFT)) {
+    if (!(!(mod & KEY_MOD_NUM_LOCK) ^ !(mod & KEY_MOD_SHIFT))) {
         switch ((int)*keycode) {
             case KEY_NUMPAD_0: *keycode = KEY_INSERT; return;
             case KEY_NUMPAD_1: *keycode = KEY_END; return;
@@ -199,9 +199,10 @@ void editor_loop() {
         ELOS_UserEvent event;
         bool has = get_event(&event);
         if (has && event.type == ELOS_USER_EVENT_KEY && event.key.value == 1) {
-            printf("code=%d chr=%c pressed=%d scan=0x%x\n", event.key.keycode, event.key.character, event.key.value, event.key.scancode);
-
+            
             apply_numpad(&event.key.keycode, event.key.mods);
+
+            printf("code=%d chr=%c pressed=%d scan=0x%x\n", event.key.keycode, event.key.character, event.key.value, event.key.scancode);
 
             ELOS_UserEvent_Key key = event.key;
             if (key.keycode == KEY_LEFT_ARROW) {
@@ -437,11 +438,11 @@ void slate_insert(char c) {
     if (c == '\n') {
         // split line
         ASSERT(session->lines_len < session->lines_max);
-        memmove(&session->lines[session->cursor_y+2], &session->lines[session->cursor_y+1], sizeof(Line) * (session->lines_len - (session->cursor_y+2)));
+        memmove(&session->lines[session->cursor_y+2], &session->lines[session->cursor_y+1], sizeof(Line) * (session->lines_len - (session->cursor_y+1)));
         session->lines_len++;
 
         Line* splitLine = &session->lines[session->cursor_y+1];
-        line_init(splitLine, line->text.ptr, line->text.len - session->cursor_x);
+        line_init(splitLine, line->text.ptr + session->cursor_x, line->text.len - session->cursor_x);
 
         // @TODO What if we split at beginning, end or middle?
         line->text.len = session->cursor_x;
@@ -466,22 +467,49 @@ void slate_deletion(ELOS_Keycode direction) {
     SlateSession* session = &slateSession;
     session->modified = true;
 
+    if (!textBuffer) {
+        reserve_text_buffer(10000);
+    }
+
     if (direction == KEY_BACKSPACE) {
         if (session->cursor_x > 0) {
             Line* line = &session->lines[session->cursor_y];
             memmove(line->text.ptr + session->cursor_x-1, line->text.ptr + session->cursor_x, line->text.len - session->cursor_x);
             line->text.len--;
             session->cursor_x--;
-        } else {
-            // requires merging and memmoving lines
+        } else if (session->cursor_y > 0) {
+            Line* prevLine = &session->lines[session->cursor_y-1];
+            Line* line = &session->lines[session->cursor_y];
+            session->cursor_x = prevLine->text.len;
+            memcpy(textBuffer + textBuffer_len, prevLine->text.ptr, prevLine->text.len);
+            memcpy(textBuffer + textBuffer_len + prevLine->text.len, line->text.ptr, line->text.len);
+            prevLine->text.len += line->text.len;
+            prevLine->text.ptr = textBuffer + textBuffer_len;
+            prevLine->text.max = prevLine->text.len;
+            textBuffer_len += prevLine->text.len;
+
+            memmove(&session->lines[session->cursor_y], &session->lines[session->cursor_y+1], sizeof(Line) * (session->lines_len - session->cursor_y+1));
+            session->lines_len--;
+            session->cursor_y--;
+            printf("Backspace good\n");
         }
     } else if (direction == KEY_DELETE) {
         Line* line = &session->lines[session->cursor_y];
         if (session->cursor_x < line->text.len) {
             memmove(line->text.ptr + session->cursor_x, line->text.ptr + session->cursor_x+1, line->text.len - (session->cursor_x+1));
             line->text.len--;
-        } else {
-            // requires merging and memmoving lines
+        } else if (session->cursor_y+1 < session->lines_len) {
+            Line* line = &session->lines[session->cursor_y];
+            Line* nextLine = &session->lines[session->cursor_y+1];
+            memcpy(textBuffer + textBuffer_len, line->text.ptr, line->text.len);
+            memcpy(textBuffer + textBuffer_len + line->text.len, nextLine->text.ptr, nextLine->text.len);
+            line->text.len += nextLine->text.len;
+            line->text.ptr = textBuffer + textBuffer_len;
+            line->text.max = line->text.len;
+            textBuffer_len += line->text.len;
+
+            memmove(&session->lines[session->cursor_y+1], &session->lines[session->cursor_y+2], sizeof(Line) * (session->lines_len - session->cursor_y+2));
+            session->lines_len--;
         }
     } else {
         printf("slate_move: Unhandled keycode %d\n", direction);

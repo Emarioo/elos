@@ -44,7 +44,7 @@ Keymap sv_keymap = {
         [PS2_SC_M] = KEY_M,
 
 
-        [PS2_SC_GRAVE] = KEY_NONE,
+        [PS2_SC_GRAVE] = KEY_GRAVE,
         [PS2_SC_MINUS] = KEY_MINUS,
         [PS2_SC_EQUAL] = KEY_EQUAL,
 
@@ -53,7 +53,7 @@ Keymap sv_keymap = {
         [PS2_SC_BACKSLASH] = KEY_BACKSLASH,
 
         [PS2_SC_SEMICOLON] = KEY_SEMICOLON,
-        [PS2_SC_APOSTROPHE] = KEY_SQUOTE,
+        [PS2_SC_APOSTROPHE] = KEY_APOSTROPHE,
 
         [PS2_SC_COMMA] = KEY_COMMA,
         [PS2_SC_PERIOD] = KEY_PERIOD,
@@ -201,6 +201,9 @@ Keymap sv_keymap = {
         [PS2_SC_KP_0]        = { '0', 0, '0', 0 },
         [PS2_SC_KP_PERIOD]   = { ',', 0, ',', 0 },
         [PS2_SC_KP_ENTER]    = { '\n', '\n', '\n', '\n' }
-    }
+    },
+    .extra_capslock_scancodes = {
+        PS2_SC_LEFT_BRACKET, PS2_SC_APOSTROPHE, PS2_SC_GRAVE,
+    },
 };
 
