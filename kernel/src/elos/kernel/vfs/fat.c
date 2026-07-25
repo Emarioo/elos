@@ -64,7 +64,7 @@ int required_long_name_entries(const cstring name) {
 
 
 
-bool fat_mkdir(DiskDevice device, u64 start_lba, u64 end_lba, const cstring path) {
+bool fat_mkdir(VFS_Mount* mount, const cstring path) {
     int res;
 
     if (path.len == 1 && path.ptr[0] == '/') {
@@ -75,7 +75,7 @@ bool fat_mkdir(DiskDevice device, u64 start_lba, u64 end_lba, const cstring path
     FATContext _ctx = {0};
     FATContext* context = &_ctx;
     
-    init_context(context, device, start_lba, end_lba);
+    init_context(context, mount);
 
     FAT_ID rootDir = get_root_directory(context);
 
@@ -131,12 +131,12 @@ bool fat_mkdir(DiskDevice device, u64 start_lba, u64 end_lba, const cstring path
 VFS_FileObject fileObjects[1000];
 
 
-VFS_FileObject* find_file_object(DiskDevice device, u64 start_lba, u32 clusterIndex) {
+VFS_FileObject* find_file_object(VFS_Mount* mount, u32 clusterIndex) {
     // @TODO Use hash map of some sort. Maybe binary search.
     VFS_FileObject* free_obj = NULL;
     for (int i = 0; i < ARRAY_LENGTH(fileObjects); i++) {
         VFS_FileObject* obj = &fileObjects[i];
-        if (obj->clusterIndex == clusterIndex && obj->device == device && obj->start_lba == start_lba) {
+        if (obj->clusterIndex == clusterIndex && obj->mount->diskDevice == mount->diskDevice && obj->mount->start_lba == mount->start_lba) {
             return obj;
         }
         if (fileObjects[i].clusterIndex == 0) {
@@ -145,20 +145,22 @@ VFS_FileObject* find_file_object(DiskDevice device, u64 start_lba, u32 clusterIn
     }
     if (free_obj) {
         free_obj->clusterIndex = clusterIndex;
-        free_obj->device = device;
-        free_obj->start_lba = start_lba;
+        free_obj->mount = mount;
     }
     return free_obj;
 }
 
 
-VFS_FileObject* search_fat(DiskDevice device, const cstring path, u64 start_lba, u64 end_lba) {
+VFS_FileObject* search_fat(VFS_Mount* mount, const cstring path) {
     int res;
+
+    DiskDevice device = mount->diskDevice;
+    u64 start_lba = mount->start_lba;
 
     FATContext _ctx = {0};
     FATContext* context = &_ctx;
     
-    init_context(context, device, start_lba, end_lba);
+    init_context(context, mount);
 
 
 
@@ -279,11 +281,8 @@ VFS_FileObject* search_fat(DiskDevice device, const cstring path, u64 start_lba,
             }
 
             if (slash_pos == -1) {
-                printf("Found file/directory %s\n", subname);
+                // printf("Found file/directory %s\n", subname);
 
-                // VFS_Handle_impl* handle = reserve_handle();
-
-                // handle->type = VFS_HANDLE_FAT;
                 u32 clusterIndex = entry->cluster_low | (entry->cluster_high << 16);
 
                 // Check if (diskDevice,clusterIndex) refers to a VFS_VirtualNode already.
@@ -295,11 +294,9 @@ VFS_FileObject* search_fat(DiskDevice device, const cstring path, u64 start_lba,
                 // file. The VFS_VirtualNode refers to directoryEntrySector + directoryEntryIndex which is updated
                 // when we move. If we find a node with the cluster info then we can move it.
 
-                VFS_FileObject* fileObject = find_file_object(device, start_lba, clusterIndex);
+                VFS_FileObject* fileObject = find_file_object(mount, clusterIndex);
                 fileObject->direntryIndex = i;
                 fileObject->direntrySector = sector_start + sector_index;
-                fileObject->device = device;
-                // handle->fileObject = fileObject;
       
                 return fileObject;
             }
@@ -333,48 +330,26 @@ VFS_FileObject* search_fat(DiskDevice device, const cstring path, u64 start_lba,
 
 
 
+
 u64 read_fat(VFS_Handle_impl* handle, u64 offset, u64 size, void* buffer) {
     int res;
 
     #define SECTOR_SIZE 512
 
-    DiskDevice device = handle->fileObject->device;
-    u64 start_lba = handle->fileObject->start_lba;
+    DiskDevice device = handle->fileObject->mount->diskDevice;
+    u64        start_lba = handle->fileObject->mount->start_lba;
 
     VFS_FileObject* fileObject = handle->fileObject;
 
     u8 stackBuffer[2*512];
     int buffer_head = 0;
 
-    fat__BPB* bootBlock = (fat__BPB*)(stackBuffer + buffer_head);
-    buffer_head += SECTOR_SIZE;
-
-    res = DISK_read(device, start_lba * SECTOR_SIZE, SECTOR_SIZE, stackBuffer);
-    if (res == 0) {
-        return 0;
-    }
 
     FATContext _ctx = {0};
     FATContext* context = &_ctx;
-    
-    context->fat_version = fat__detect_type(bootBlock);
-    context->bpb = bootBlock;
-    context->ebpb16 = (void*)((char*)bootBlock + 36);
-    context->ebpb32 = (void*)((char*)bootBlock + 36);
-    context->sector_size = 512;
-    context->start_lba = start_lba;
-    context->device = device;
 
-    if (context->fat_version == fat__FAT32) {
-        context->sectors_per_fat = context->ebpb32->sectors_per_fat_32;
-        context->fat_entries_per_sector = context->sector_size / 4;
-    } else if (context->fat_version == fat__FAT16) {
-        context->sectors_per_fat = context->bpb->sectors_per_fat_16;
-        context->fat_entries_per_sector = context->sector_size / 2;
-    } else if (context->fat_version == fat__FAT12) {
-        context->sectors_per_fat = context->bpb->sectors_per_fat_16;
-        context->fat_entries_per_sector = 0; // Can't use this for fat12, doesn't divide cleanly
-    }
+
+    init_context(context, handle->fileObject->mount);
 
 
     fat__DirectoryEntry* direntryBlock = (fat__DirectoryEntry*)(stackBuffer + buffer_head);
@@ -389,13 +364,14 @@ u64 read_fat(VFS_Handle_impl* handle, u64 offset, u64 size, void* buffer) {
     // @TODO Update access time
 
     uint32_t cluster = fileObject->clusterIndex;
-    int advance_clusters = offset / (bootBlock->bytes_per_sector * bootBlock->sectors_per_cluster);
+    int advance_clusters = offset / (context->bpb->bytes_per_sector * context->bpb->sectors_per_cluster);
 
     while (advance_clusters) {
         advance_clusters--;
         uint32_t next_cluster = fat__get_fat(context, cluster);
         if (next_cluster == fat__END_OF_FILE) {
-            printf("Can't read beyond file\n");
+            // Offset points beyond the file, nothing to read.
+            printf("read_fat: Can't read beyond file\n");
             return 0;
         } else {
             cluster = next_cluster;
@@ -404,18 +380,18 @@ u64 read_fat(VFS_Handle_impl* handle, u64 offset, u64 size, void* buffer) {
 
     char data_sector[512];
 
-    int sector_index = 0;
+    int sector_index = (offset/context->sector_size) % context->bpb->sectors_per_cluster;
     uint64_t buffer_offset = 0;
     while (buffer_offset < size) {
 
         if (sector_index >= context->bpb->sectors_per_cluster) {
             uint32_t next_cluster = fat__get_fat(context, cluster);
             if (next_cluster == -1) {
-                printf("No more clusters, %d -> %d\n", cluster, next_cluster);
+                printf("read_fat: Disk read failed, clusters %d -> %d\n", cluster, next_cluster);
                 return buffer_offset;
             } else if (next_cluster == fat__END_OF_FILE) {
                 // No more to read, return what we did read.
-                printf("No more clusters, %d -> %d\n", cluster, next_cluster);
+                // printf("No more clusters, %d -> %d\n", cluster, next_cluster);
                 return buffer_offset;
             } else {
                 cluster = next_cluster;
@@ -425,18 +401,18 @@ u64 read_fat(VFS_Handle_impl* handle, u64 offset, u64 size, void* buffer) {
 
         int sector_offset = fat__cluster_to_sector_offset(context, cluster) + sector_index;
 
-        int alignment = (context->sector_size + (offset - buffer_offset) % context->sector_size ) % context->sector_size;
+        int alignment = (offset + buffer_offset) % context->sector_size;
 
         // @TODO Don't read more than file size.
 
-        if ((alignment != 0) || (buffer_offset + context->sector_size > size) || (buffer_offset + context->sector_size > fileSize)) {
+        if ((alignment != 0) || (buffer_offset + context->sector_size > size) || (buffer_offset + offset + context->sector_size > fileSize)) {
             // writing a partial sector.
             // We must read the sector
             // memcpy in our partial data to write then
             // do a full sector write
             res = DISK_read(device, (context->start_lba + sector_offset) * context->sector_size, context->sector_size, data_sector);
             if (!res) {
-                printf("Failed read at sector %d\n", context->start_lba + sector_offset);
+                printf("read_fat: Failed read at sector %d\n", context->start_lba + sector_offset);
                 return buffer_offset;
             }
 
@@ -444,8 +420,8 @@ u64 read_fat(VFS_Handle_impl* handle, u64 offset, u64 size, void* buffer) {
             if (part_size > size - buffer_offset) {
                 part_size = size - buffer_offset;
             }
-            if (part_size > fileSize - buffer_offset) {
-                part_size = fileSize - buffer_offset;
+            if (part_size > fileSize - (offset + buffer_offset)) {
+                part_size = fileSize - (offset + buffer_offset);
             }
             memcpy((char*)buffer + buffer_offset, data_sector + alignment, part_size);
 
@@ -454,7 +430,7 @@ u64 read_fat(VFS_Handle_impl* handle, u64 offset, u64 size, void* buffer) {
         } else {
             res = DISK_read(device, (context->start_lba + sector_offset) * context->sector_size, context->sector_size, (char*)buffer + buffer_offset);
             if (!res) {
-                printf("Failed read at sector %d\n", context->start_lba + sector_offset);
+                printf("read_fat: Failed read at sector %d\n", context->start_lba + sector_offset);
                 return buffer_offset;
             }
 
@@ -466,7 +442,154 @@ u64 read_fat(VFS_Handle_impl* handle, u64 offset, u64 size, void* buffer) {
     return buffer_offset;
 }
 
-bool fat_remove(DiskDevice device, u64 start_lba, u64 end_lba, const cstring path) {
+
+u64 write_fat(VFS_Handle_impl* handle, u64 offset, u64 size, const void* buffer) {
+     int res;
+
+    #define SECTOR_SIZE 512
+
+    DiskDevice device = handle->fileObject->mount->diskDevice;
+    u64        start_lba = handle->fileObject->mount->start_lba;
+
+    VFS_FileObject* fileObject = handle->fileObject;
+
+    u8 stackBuffer[2*512];
+    int buffer_head = 0;
+
+
+    FATContext _ctx = {0};
+    FATContext* context = &_ctx;
+
+
+    init_context(context, handle->fileObject->mount);
+
+    // @TODO Error checkking on set_fat/get_fat, they read disk and can return false
+
+
+    fat__DirectoryEntry* direntryBlock = (fat__DirectoryEntry*)(stackBuffer + buffer_head);
+    buffer_head += SECTOR_SIZE;
+
+    res = DISK_read(device, (start_lba + fileObject->direntrySector) * SECTOR_SIZE, SECTOR_SIZE, direntryBlock);
+    if (!res) return 0;
+
+    fat__DirectoryEntry* direntry = &direntryBlock[fileObject->direntryIndex];
+    u64 fileSize = direntry->file_size;
+
+    // @TODO Update access time
+    //       Modified time
+
+    uint32_t cluster = fileObject->clusterIndex;
+    // We assume cluster is valid? bad?
+    if (cluster <= 1 || cluster == -1) {
+        printf("write_fat: fileObject->clusterIndex = %d BAD!\n", cluster);
+        return 0;
+    }
+    int advance_clusters = offset / (context->bpb->bytes_per_sector * context->bpb->sectors_per_cluster);
+
+    while (advance_clusters) {
+        advance_clusters--;
+        uint32_t next_cluster = fat__get_fat(context, cluster);
+        if (next_cluster == -1) {
+            // Disk read failed
+            return 0;
+        }
+        if (next_cluster == fat__END_OF_FILE) {
+            // Extend file
+            int freeCluster = get_free_cluster(context);
+            if (freeCluster == -1) {
+                return 0;
+            }
+            res = fat__set_fat(context, cluster, freeCluster);
+            if (!res) return 0;
+            res = fat__set_fat(context, freeCluster, fat__END_OF_FILE);
+            if (!res) return 0;
+            cluster = freeCluster;
+        } else {
+            cluster = next_cluster;
+        }
+    }
+
+    char data_sector[512];
+
+    int sector_index = (offset/context->sector_size) % context->bpb->sectors_per_cluster;
+    uint64_t buffer_offset = 0;
+    while (buffer_offset < size) {
+
+        if (sector_index >= context->bpb->sectors_per_cluster) {
+            uint32_t next_cluster = fat__get_fat(context, cluster);
+            if (next_cluster == -1) {
+                // Disk read failed
+                printf("write_fat: Disk read failed, clusters %d -> %d\n", cluster, next_cluster);
+                return buffer_offset;
+            } else if (next_cluster == fat__END_OF_FILE) {
+                // Extend file
+                int freeCluster = get_free_cluster(context);
+                if (freeCluster == -1) {
+                    return 0;
+                }
+                res = fat__set_fat(context, cluster, freeCluster);
+                if (!res) return 0;
+                res = fat__set_fat(context, freeCluster, fat__END_OF_FILE);
+                if (!res) return 0;
+                cluster = freeCluster;
+                sector_index = 0;
+            } else {
+                cluster = next_cluster;
+                sector_index = 0;
+            }
+        }
+
+        int sector_offset = fat__cluster_to_sector_offset(context, cluster) + sector_index;
+
+        int sectorByteAlignment = (offset + buffer_offset) % context->sector_size;
+
+        if ((sectorByteAlignment != 0) || (buffer_offset + context->sector_size > size)) {
+            // writing a partial sector.
+            // We must read the sector
+            // memcpy in our partial data to write then
+            // do a full sector write
+            res = DISK_read(device, (context->start_lba + sector_offset) * context->sector_size, context->sector_size, data_sector);
+            if (!res) {
+                printf("write_fat: Failed read at sector %d\n", context->start_lba + sector_offset);
+                return buffer_offset;
+            }
+
+            int part_size = context->sector_size - sectorByteAlignment;
+            if (part_size > size - buffer_offset) {
+                part_size = size - buffer_offset;
+            }
+            memcpy(data_sector + sectorByteAlignment, (char*)buffer + buffer_offset, part_size);
+
+            res = DISK_write(device, (context->start_lba + sector_offset) * context->sector_size, context->sector_size, data_sector);
+            if (!res) {
+                printf("write_fat: Failed write at sector %d\n", context->start_lba + sector_offset);
+                return buffer_offset;
+            }
+
+            buffer_offset += part_size;
+            sector_index++;
+        } else {
+            res = DISK_write(device, (context->start_lba + sector_offset) * context->sector_size, context->sector_size, (char*)buffer + buffer_offset);
+            if (!res) {
+                printf("write_fat: Failed write at sector %d\n", context->start_lba + sector_offset);
+                return buffer_offset;
+            }
+
+            buffer_offset += context->sector_size;
+            sector_index++;
+        }
+    }
+
+    direntry->file_size = offset + buffer_offset;
+
+    res = DISK_write(device, (start_lba + fileObject->direntrySector) * SECTOR_SIZE, SECTOR_SIZE, direntryBlock);
+    if (!res) return 0;
+
+    return buffer_offset;
+}
+
+
+bool fat_remove(VFS_Mount* mount, const cstring path) {
     int res;
 
     if (path.len == 1 && path.ptr[0] == '/') {
@@ -477,7 +600,7 @@ bool fat_remove(DiskDevice device, u64 start_lba, u64 end_lba, const cstring pat
     FATContext _ctx = {0};
     FATContext* context = &_ctx;
     
-    init_context(context, device, start_lba, end_lba);
+    init_context(context, mount);
 
     FAT_ID rootDir = get_root_directory(context);
 
@@ -577,8 +700,7 @@ int fat__get_fat(FATContext* context, int cluster) {
 
     return value;
 }
-int fat__set_fat(FATContext* context, int cluster, uint32_t value)
-{
+int fat__set_fat(FATContext* context, int cluster, uint32_t value) {
     int res;
 
     char tempBuffer[2 * 512];
@@ -684,19 +806,19 @@ int fat__set_fat(FATContext* context, int cluster, uint32_t value)
 
 
 
-void init_context(FATContext* context, DiskDevice device, u64 start_lba, u64 end_lba) {
+void init_context(FATContext* context, VFS_Mount* mount) {
     int res;
 
-    res = DISK_read(device, start_lba * SECTOR_SIZE, SECTOR_SIZE, context->_bootSector);
+    res = DISK_read(mount->diskDevice, mount->start_lba * SECTOR_SIZE, SECTOR_SIZE, context->_bootSector);
     if (res == 0) {
         return;
     }
 
     fat__BPB* bootBlock = (fat__BPB*)(context->_bootSector);
     
-    context->device = device;
-    context->start_lba = start_lba;
-    context->end_lba = end_lba;
+    context->device    = mount->diskDevice;
+    context->start_lba = mount->start_lba;
+    context->end_lba   = mount->end_lba;
 
     context->fat_version = fat__detect_type(bootBlock);
     context->bpb = bootBlock;

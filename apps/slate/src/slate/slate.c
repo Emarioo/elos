@@ -49,7 +49,7 @@ void slate_deletion(ELOS_Keycode direction);
 
 
 #define BACKGROUND        0xFF0F172A
-#define BACKGROUND_CMD    0xFF5F0000
+#define BACKGROUND_CMD    0xFF051120
 
 PrismInstance* g_instance;
 PrismSurface* g_surface;
@@ -166,7 +166,19 @@ void editor_loop() {
         exit(1);
     }
 
-    slate_open(session, "/boot/TEMPLATE.CFG");
+    const char* defaultPath = "/boot/TEMPLATE.CFG";
+
+    slate_open(session, defaultPath);
+
+    session->lines[1].text.len = snprintf(session->lines[1].text.ptr, 200, "HELLO THERE");
+
+    slate_save(session, defaultPath);
+
+    slate_open(session, defaultPath);
+
+    session->commandBuffer_len = strlen(defaultPath);
+    memcpy(session->commandBuffer, defaultPath, session->commandBuffer_len);
+    session->commandBuffer[session->commandBuffer_len] = 0;
 
     ASSERT(session->lines_len != 0);
 
@@ -204,10 +216,10 @@ void editor_loop() {
             ELOS_UserEvent_Key key = event.key;
             
             if (key.keycode == KEY_O && (key.mods & KEY_MOD_CTRL)) {
-                printf("Open file\n");
+                // printf("Open file\n");
                 session->command = CMD_OPEN_FILE;
             } else if (key.keycode == KEY_S && (key.mods & KEY_MOD_CTRL)) {
-                printf("Save file\n");
+                // printf("Save file\n");
                 session->command = CMD_SAVE_FILE;
             } else {
                 if (session->command == CMD_OPEN_FILE || session->command == CMD_SAVE_FILE) {
@@ -230,6 +242,7 @@ void editor_loop() {
                                 session->commandBuffer_len - (session->commandCursor_x+1));
                             session->commandCursor_x--;
                             session->commandBuffer_len--;
+                            session->commandBuffer[session->commandBuffer_len] = '\0';
                         }
                     } else if (key.keycode == KEY_DELETE) {
                         if (session->commandCursor_x < session->commandBuffer_len) {
@@ -237,25 +250,31 @@ void editor_loop() {
                                 session->commandBuffer + session->commandCursor_x + 1,
                                 session->commandBuffer_len - (session->commandCursor_x+1));
                             session->commandBuffer_len--;
+                            session->commandBuffer[session->commandBuffer_len] = '\0';
                         }
                     } else if (key.keycode == KEY_ESCAPE) {
                         session->command = CMD_NONE;
                     } else if (key.keycode == KEY_ENTER) {
                         if (session->command == CMD_OPEN_FILE) {
                             // Open file
-                            printf("Open %s\n", session->commandBuffer);
+                            // printf("Open %s\n", session->commandBuffer);
+                            slate_open(session, session->commandBuffer);
                         } else if (session->command == CMD_SAVE_FILE) {
                             // Save file
-                            printf("Save %s\n", session->commandBuffer);
+                            // printf("Save %s\n", session->commandBuffer);
+                            slate_save(session, session->commandBuffer);
                         }
                         session->command = CMD_NONE;
                     } else if(key.character != 0) {
-                        memmove(session->commandBuffer + session->commandCursor_x + 1,
-                                session->commandBuffer + session->commandCursor_x,
-                                session->commandBuffer_len - session->commandCursor_x);
-                        session->commandBuffer[session->commandCursor_x] = key.character;
-                        session->commandBuffer_len++;
-                        session->commandCursor_x++;
+                        if (session->commandBuffer_len < sizeof(session->commandBuffer)-1) {
+                            memmove(session->commandBuffer + session->commandCursor_x + 1,
+                                    session->commandBuffer + session->commandCursor_x,
+                                    session->commandBuffer_len - session->commandCursor_x);
+                            session->commandBuffer[session->commandCursor_x] = key.character;
+                            session->commandBuffer_len++;
+                            session->commandCursor_x++;
+                            session->commandBuffer[session->commandBuffer_len] = '\0';
+                        }
                     }
                 } else {
                     if (key.keycode == KEY_LEFT_ARROW) {
@@ -287,23 +306,7 @@ void editor_loop() {
 
         draw_rect(0, 0, g_surfaceInfo.width, g_surfaceInfo.height, BACKGROUND);
 
-        // session->scroll_y refers to the line shown at the top left corner
-        // at any time we want cursor_y to be visible on screen.
-        // this means abs(session->scroll_y - session->cursor_y) * text_height < g_surfaceInfo.height
-        // If this is false we should bring it closer.
-        // if (session->cursor_y > session->scroll_y + g_surfaceInfo.height / text_height - 3) {
-        //     session->scroll_y = session->cursor_y - g_surfaceInfo.height / text_height + 3;
-        // }
-        // if (session->cursor_y + 3 < session->scroll_y) {
-        //     if (session->cursor_y < 3) {
-        //         session->scroll_y = 0;
-        //     } else {
-        //         session->scroll_y = session->cursor_y - 3;
-        //     }
-
-        // }
         int maxLinesOnScreen = g_surfaceInfo.height / text_height;
-
         if (session->cursor_y >= maxLinesOnScreen/2) {
             session->scroll_y = session->cursor_y - maxLinesOnScreen/2;
         } else {
@@ -330,7 +333,7 @@ void editor_loop() {
             draw_glyphs_from_text_bcolor(0, text_y, text_height, text, g_default_font, text_color, 0);
         }
         
-        // We required monospace font here
+        // We require monospace font here
         
         if (session->command == CMD_NONE) {
             draw_rect(characterWidth * session->cursor_x, text_height * (session->cursor_y - session->scroll_y), 3, text_height, WHITE);
@@ -338,6 +341,14 @@ void editor_loop() {
             int command_x = 2;
             int command_y = g_surfaceInfo.height - text_height - 2;
 
+            cstring prompt;
+            if (session->command == CMD_OPEN_FILE) {
+                prompt = PTR_CSTR("Open file");
+            } else if (session->command == CMD_SAVE_FILE) {
+                prompt = PTR_CSTR("Save file");
+            }
+            draw_glyphs_from_text_bcolor(command_x, command_y - text_height, text_height, prompt, g_default_font, text_color, BACKGROUND_CMD);
+            
             cstring text = { session->commandBuffer, session->commandBuffer_len };
             draw_rect(command_x, command_y, characterWidth * 20, text_height, BACKGROUND_CMD);
             draw_glyphs_from_text_bcolor(command_x, command_y, text_height, text, g_default_font, text_color, BACKGROUND_CMD);
@@ -347,8 +358,6 @@ void editor_loop() {
 
         prism_presentSurface(g_surface);
 
-        // sleep((1000/144)*1000000);
-        // printf("HELLO\n");
         sleep((1000/60)*1000000);
     }
 
@@ -368,12 +377,12 @@ void slate_open(SlateSession* session, const char* path) {
     FILE* file;
     char* buffer;
 
-    printf("slate_open: Opening %s\n", path);
+    // printf("slate_open: Opening %s\n", path);
 
     file = fopen(path, "r");
     if (!file) {
         printf("slate_open: Could not open %s\n", path);
-        return;
+        goto exit;
     }
     fseek(file, 0, SEEK_END);
     int fileSize = ftell(file);
@@ -382,13 +391,13 @@ void slate_open(SlateSession* session, const char* path) {
     buffer = malloc(fileSize + 1);
     if (!buffer) {
         printf("slate_open: Could not allocate %d for %s\n", fileSize, path);
-        return;
+        goto exit;
     }
     
     int readBytes = fread(buffer, 1, fileSize, file);
     if (readBytes != fileSize) {
         printf("slate_open: Could not read %d from %s\n", fileSize, path);
-        return;
+        goto exit;
     }
     buffer[fileSize] = '\0';
 
@@ -405,9 +414,6 @@ void slate_open(SlateSession* session, const char* path) {
         session->lines_max = 100;
         session->lines = malloc(sizeof(Line) * session->lines_max);
     }
-
-    char* textBuffer = malloc(10000);
-    int textBuffer_len = 0;
 
     int head = 0;
     int lineStart = 0;
@@ -438,20 +444,57 @@ void slate_open(SlateSession* session, const char* path) {
         lineStart = head;
     }
 
-    printf("Lines: %d\n", session->lines_len);
+    // We use buffer memory in line parts so we can't free this.
+    buffer = NULL;
+
+    printf("Opened %s (%d lines)\n", path, session->lines_len);
 
 exit:
-    // We use buffer memory in line parts so we can't free this.
-    // if (buffer) {
-    //     free(buffer);
-    // }
+    if (buffer) {
+        free(buffer);
+    }
     if (file) {
         fclose(file);
     }
 }
 
-void slate_save(SlateSession* session) {
-    printf("slate_save: not implemented\n");
+void slate_save(SlateSession* session, const char* path) {
+    FILE* file;
+
+    file = fopen(path, "w");
+    if (!file) {
+        printf("slate_save: Could not open %s\n", path);
+        goto exit;
+    }
+
+    for (int i=0;i<session->lines_len;i++) {
+        Line* line = &session->lines[i];
+        // Copy bytes into a buffer and write chunks at a time.
+        // Some lines have just a few characters.
+        // File system has no internal buffering at the moment.
+        int writtenBytes;
+        if (line->text.len != 0) {
+            writtenBytes = fwrite(line->text.ptr, 1, line->text.len, file);
+            if (writtenBytes != line->text.len) {
+                printf("slate_save: Could not write %d (%d) bytes to %s\n", line->text.len, writtenBytes, path);
+                goto exit;
+            }
+        }
+        char newLine = '\n';
+        writtenBytes = fwrite(&newLine, 1, 1, file);
+        if (writtenBytes != 1) {
+            printf("slate_save: Could not write %d (%d) bytes to %s\n", 1, writtenBytes, path);
+            goto exit;
+        }
+    }
+
+    // @TODO Feedback somewhere
+    printf("Saved %s (%d lines)\n", path, session->lines_len);
+
+exit:
+    if (file) {
+        fclose(file);
+    }
 }
 
 

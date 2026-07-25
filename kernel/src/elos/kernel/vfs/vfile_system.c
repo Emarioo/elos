@@ -26,7 +26,9 @@ static VFS_Handle_impl* g_handles;
 static int g_handles_cap;
 static int g_next_handleIndex;
 
-// static VFS_VirtualNode* g_vfs_root;
+bool find_partition(DiskDevice device, int partitionIndex, u64* start_lba, u64* end_lba);
+
+
 
 VFS_Mount* reserve_mount() {
     VFS_Mount* returnValue = NULL;
@@ -116,54 +118,7 @@ int find_slash(const cstring path, int offset) {
 }
 
 
-// bool equal_node_name(VFS_VirtualNode* node, const cstring nodeName) {
-//     return node->name_len == nodeName.len && !memcmp(node->name, nodeName.ptr, nodeName.len);
-// }
 
-#define get_node_name_length(NODE) ((NODE)->name_len)
-#define get_max_node_name_length(NODE) (sizeof((NODE)->name))
-
-// VFS_VirtualNode* find_child_node(VFS_VirtualNode* node, const cstring nodeName) {
-//     VFS_VirtualNode* child = node->child;
-
-//     while (child) {
-//         if (equal_node_name(child, nodeName)) {
-//             return child;
-//         }
-//         child = child->sibling;
-//     }
-
-//     return NULL;
-// }
-
-// bool remove_child_node(VFS_VirtualNode* node, const cstring nodeName) {
-//     if (!node->child)
-//         return false;
-
-//     if (equal_node_name(node->child, nodeName)) {
-//         // @TODO Memory leak
-//         node->child = node->child->sibling;
-//         return true;
-//     }
-
-//     VFS_VirtualNode* prev_child = node->child;
-//     VFS_VirtualNode* child = node->child->sibling;
-
-//     while (child) {
-//         if (equal_node_name(child, nodeName)) {
-//             // @TODO Memory leak
-//             prev_child->child = child->sibling;
-//             return true;
-//         }
-//         prev_child = child;
-//         child = child->sibling;
-//     }
-
-//     return false;
-// }
-
-bool find_partition(DiskDevice device, int partitionIndex, u64* start_lba, u64* end_lba);
-VFS_FileObject* search_fat(DiskDevice device, const cstring path, u64 start_lba, u64 end_lba);
 
 
 bool VFS_mkdir(const char* cpath) {
@@ -183,7 +138,7 @@ bool VFS_mkdir(const char* cpath) {
     
     cstring subpath = PTR_CSTR(cpath + subIndex);
 
-    returnValue = fat_mkdir(mount->diskDevice, mount->start_lba, mount->end_lba, subpath);
+    returnValue = fat_mkdir(mount, subpath);
 
 exit:
     UNLOCK_INT(&g_vfs_lock);
@@ -269,7 +224,7 @@ void VFS_info(VFS_Handle _handle, VFS_HandleInfo* info) {
 
         memset(info, 0, sizeof(*info));
         
-        res = DISK_read(fileObject->device, (fileObject->start_lba + fileObject->direntrySector) * sectorSize, sectorSize, direntryBlock);
+        res = DISK_read(fileObject->mount->diskDevice, (fileObject->mount->start_lba + fileObject->direntrySector) * sectorSize, sectorSize, direntryBlock);
         if (!res) return;
 
         fat__DirectoryEntry* entry = &direntryBlock[fileObject->direntryIndex];
@@ -296,7 +251,13 @@ u64 VFS_read(VFS_Handle _handle, u64 offset, u64 size, void* buffer) {
 }
 
 u64 VFS_write(VFS_Handle _handle, u64 offset, u64 size, const void* buffer) {
-    return 0;
+    VFS_Handle_impl* handle = (VFS_Handle)_handle;
+    
+    if (handle->fileObject) {
+        return write_fat(handle, offset, size, buffer);
+    } else {
+        return 0;
+    }
 }
 
 
@@ -344,11 +305,11 @@ VFS_FileObject* resolveFileObject(const char* cpath) {
     // Search mounted device.
     DiskInfo info = {0};
     DISK_get_info(mount->diskDevice, &info);
-    printf("Searching mounted device %s (%d MB)\n", info.name, info.diskSize/0x100000);
+    // printf("Searching mounted device %s (%d MB)\n", info.name, info.diskSize/0x100000);
     
     cstring subpath = PTR_CSTR(cpath + subIndex);
 
-    VFS_FileObject* obj = search_fat(mount->diskDevice, subpath, mount->start_lba, mount->end_lba);
+    VFS_FileObject* obj = search_fat(mount, subpath);
     if (!obj) {
         goto exit;
     }

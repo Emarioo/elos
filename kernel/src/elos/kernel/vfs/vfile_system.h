@@ -38,8 +38,8 @@ struct VFS_Mount {
 
 typedef struct {
     // disk and partition
-    DiskDevice device;
-    u64 start_lba; // @TODO If we move partitions then this breaks. But if we change partitions we may shrink or ruin FAT anyway so we should probably flush all file objects.
+    // DiskDevice device;
+    // u64 start_lba; // @TODO If we move partitions then this breaks. But if we change partitions we may shrink or ruin FAT anyway so we should probably flush all file objects.
 
     // Specific to FAT
     u32 clusterIndex;

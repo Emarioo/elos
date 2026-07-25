@@ -54,7 +54,7 @@ typedef struct {
 
 } FATContext;
 
-void init_context(FATContext* context, DiskDevice device, u64 start_lba, u64 end_lba);
+void init_context(FATContext* context, VFS_Mount* mount);
 
 FAT_ID get_root_directory(FATContext* context);
 
@@ -90,14 +90,17 @@ int fat__sane_cstring(const fat__DirectoryEntry* entry, char* out_path);
 int fat__cluster_to_sector_offset(FATContext* context, int cluster);
 
 
-bool fat_mkdir(DiskDevice device, u64 start_lba, u64 end_lba, const cstring path);
+bool fat_mkdir(VFS_Mount* mount, const cstring path);
 
-VFS_FileObject* find_file_object(DiskDevice device, u64 start_lba, u32 clusterIndex);
+VFS_FileObject* find_file_object(VFS_Mount* mount, u32 clusterIndex);
 extern VFS_FileObject fileObjects[1000];
 
 
 int fat__get_fat(FATContext* context, int cluster);
+int fat__set_fat(FATContext* context, int cluster, uint32_t value);
 
+VFS_FileObject* search_fat(VFS_Mount* mount, const cstring path);
 u64 read_fat(VFS_Handle_impl* handle, u64 offset, u64 size, void* buffer);
+u64 write_fat(VFS_Handle_impl* handle, u64 offset, u64 size, const void* buffer);
 
-bool fat_remove(DiskDevice device, u64 start_lba, u64 end_lba, const cstring path);
+bool fat_remove(VFS_Mount* mount, const cstring path);

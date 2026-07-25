@@ -55,8 +55,6 @@ bool EVE_request_user_event_buffer(u32 maxEvents, ELOS_UserEventBuffer** buffer,
     *buffer = newBuffer;
     returnValue = true;
 
-    KCON_printf("EVE 0x%x\n", newBuffer);
-
 exit:
     UNLOCK_INT(&g_userEventLock);
     return returnValue;

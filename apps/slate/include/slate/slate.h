@@ -44,6 +44,6 @@ typedef struct {
 } SlateSession;
 
 void slate_open(SlateSession* session, const char* path);
-void slate_save(SlateSession* session);
+void slate_save(SlateSession* session, const char* path);
 
 void _start();

@@ -58,7 +58,11 @@ FILE *fopen(const char *restrict path, const char *restrict mode) {
 
     req.open.path   = path;
     if (mode[0] == 'r') {
-        req.open.flags  = ELOS_FILE_OPEN_FLAG_READ_ONLY;
+        if (mode[1] == '+') {
+            req.open.flags  = ELOS_FILE_OPEN_FLAG_READ_ONLY;
+        } else {
+            req.open.flags  = 0; // Reading and writing, no truncation
+        }
     } else {
         // @TODO What if we want to open file for writing no truncation?
         req.open.flags  = ELOS_FILE_OPEN_FLAG_CREATE;
@@ -84,8 +88,29 @@ FILE *fopen(const char *restrict path, const char *restrict mode) {
     return file;
 }
 int fclose(FILE *file) {
+    ELOS_Error error;
+
+    ELOS_AsyncRequest req;
+    ELOS_AsyncCompletion cqe;
+    Async_RequestID requestID;
+
+    req.operation   = ELOS_ASYNC_FILE_CLOSE;
+    req.flags       = 0;
+
+    req.close.file  = file->file;
+
+    requestID = async_submit(&req);
+    bool res = async_wait(requestID, &cqe, 0);
+    if (!res) {
+        return -1;
+    }
+
+    if (cqe.error != ELOS_OK) {
+        return -1;
+    }
+
     free(file);
-    // @TODO Implement
+
     return 0;
 }
 

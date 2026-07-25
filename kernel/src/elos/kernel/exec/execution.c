@@ -83,8 +83,6 @@ exit:
 }
 
 void EXEC_init() {
-    printf("EXEC init\n");
-
     int coreIndex = CPU_get_core_index();
     EXEC_Core* core = &cores[coreIndex];
 

@@ -371,7 +371,7 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
                 u64 result = VFS_read(ELOS_FILE_TO_VFS_HANDLE(request->read.file), request->read.offset, request->read.size, request->read.buffer);
 
                 completion->read.readBytes = 0;
-                if (result) {
+                if (result == request->read.size) {
                     completion->error = ELOS_OK;
                     completion->read.readBytes = result;
                 } else {
@@ -397,7 +397,7 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
                     request->write.offset, request->write.size, request->write.buffer);
 
                 completion->write.writtenBytes = 0;
-                if (result) {
+                if (result == request->write.size) {
                     completion->error = ELOS_OK;
                     completion->write.writtenBytes = result;
                 } else {
