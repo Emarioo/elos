@@ -107,6 +107,144 @@ exit:
     return returnValue;
 }
 
+
+typedef struct {
+    // EXEC_Thread* thread; // should be process id
+    PageTable*      userPageTable;
+    MON_FrameBuffer monitor;
+} FrameBufferOwner;
+
+static volatile u32 frameBufferOwners_lock;
+static FrameBufferOwner frameBufferOwners[10];
+static int frameBufferOwners_len;
+static int frameBufferOwners_max = ARRAY_LENGTH(frameBufferOwners);
+static bool use_blankMonitor;
+static MON_FrameBuffer blankFrameBuffer;
+
+void disableDefaultMonitorForUsers() {
+    // kernel memory must be mapped?
+    LOCK_INT(&frameBufferOwners_lock);
+    if (use_blankMonitor) {
+        goto exit;
+    }
+    use_blankMonitor = true;
+
+    if (!blankFrameBuffer.phys_address) {
+        MonitorDevice devices[1];
+        int count = ARRAY_LENGTH(devices);
+        MON_scan_devices(devices, &count);
+
+        if (count <= 0) {
+            printf("KABOOM mon scan device disable default monitor\n");
+            while (1) asm ("hlt");
+        } 
+        
+        bool yes = MON_get_frame_buffer(devices[0], &blankFrameBuffer);
+        if (!yes) {
+            printf("KABOOM mon get frame buffer disable default monitor\n");
+            while (1) asm ("hlt");
+        }
+        blankFrameBuffer.phys_address = PMEM_alloc_phys(blankFrameBuffer.size, 0);
+        if (!blankFrameBuffer.phys_address) {
+            printf("KABOOM alloc phys for blank framebuffer\n");
+            while (1) asm ("hlt");
+        }
+    }
+
+    for (int i=0;i<frameBufferOwners_len;i++) {
+        FrameBufferOwner* owner = &frameBufferOwners[i];
+        if (owner->monitor.size != blankFrameBuffer.size) {
+            printf("KABOOM owner->monitor.size != blankFrameBuffer.size %d %d\n", owner->monitor.size, blankFrameBuffer.size);
+            while (1) asm ("hlt");
+        }
+        bool mapped = PMEM_map_memory(owner->userPageTable,
+            owner->monitor.phys_address, blankFrameBuffer.phys_address,
+            owner->monitor.size, PMEM_FLAG_USER_SPACE);
+        if (!mapped) {
+            printf("KABOOM disableDefaultMonitorForUsers could not map\n");
+            while (1) asm ("hlt");
+        }
+        // @TODO Flush TLB for user pages? especially on other cores?
+    }
+exit:
+    UNLOCK_INT(&frameBufferOwners_lock);
+}
+void enableDefaultMonitorForUsers() {
+    // kernel memory must be mapped?
+    LOCK_INT(&frameBufferOwners_lock);
+    if (!use_blankMonitor) {
+        goto exit;
+    }
+    
+    for (int i=0;i<frameBufferOwners_len;i++) {
+        FrameBufferOwner* owner = &frameBufferOwners[i];
+        if (owner->monitor.size != blankFrameBuffer.size) {
+            printf("KABOOM owner->monitor.size != blankFrameBuffer.size\n");
+            while (1) asm ("hlt");
+        }
+        bool mapped = PMEM_map_memory(owner->userPageTable,
+            owner->monitor.phys_address, owner->monitor.phys_address,
+            owner->monitor.size, PMEM_FLAG_USER_SPACE);
+        if (!mapped) {
+            printf("KABOOM disableDefaultMonitorForUsers could not map\n");
+            while (1) asm ("hlt");
+        }
+        // @TODO Flush TLB for user pages? Especially on other cores?
+    }
+
+    use_blankMonitor = false;
+exit:
+    UNLOCK_INT(&frameBufferOwners_lock);
+}
+
+ELOS_Error getDefaultMonitor(PageTable* userPageTable, MON_FrameBuffer* monitor) {
+    ELOS_Error returnValue = ELOS_GENERIC_ERROR;
+    LOCK_INT(&frameBufferOwners_lock);
+
+    if (frameBufferOwners_len + 1 >= frameBufferOwners_max) {
+        returnValue = ELOS_GENERIC_ERROR;
+        goto exit_default_monitor;
+    }
+
+    MonitorDevice devices[1];
+    int count = ARRAY_LENGTH(devices);
+    MON_scan_devices(devices, &count);
+
+    if (count <= 0) {
+        returnValue = ELOS_GENERIC_ERROR;
+        goto exit_default_monitor;
+    } 
+
+    bool yes = MON_get_frame_buffer(devices[0], monitor);
+    if (!yes) {
+        returnValue = ELOS_GENERIC_ERROR;
+        goto exit_default_monitor;
+    }
+
+    void* physAddress = monitor->phys_address;
+    if (use_blankMonitor) {
+        physAddress = blankFrameBuffer.phys_address;
+    }
+
+    // @TODO Make it writethrough? Fully cached might be a bad idea?
+    bool mapped = PMEM_map_memory(userPageTable, monitor->phys_address, physAddress, monitor->size, PMEM_FLAG_USER_SPACE);
+    if (!mapped) {
+        returnValue = ELOS_GENERIC_ERROR;
+        goto exit_default_monitor;
+    } else {
+        FrameBufferOwner* frameBufferOwner = &frameBufferOwners[frameBufferOwners_len];
+        frameBufferOwners_len++;
+        frameBufferOwner->userPageTable = userPageTable;
+        frameBufferOwner->monitor = *monitor;
+
+        returnValue = ELOS_OK;
+    }
+
+exit_default_monitor:
+    UNLOCK_INT(&frameBufferOwners_lock);
+    return returnValue;
+}
+
 u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 arg5) {
     u64 returnValue = ELOS_GENERIC_ERROR;
     u64 syscall_id;
@@ -273,34 +411,18 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             write_cr3((u64)g_kernelPageTable);
 
-            MonitorDevice devices[1];
-            int count = ARRAY_LENGTH(devices);
-            MON_scan_devices(devices, &count);
-
-            if (count <= 0) {
-                returnValue = ELOS_GENERIC_ERROR;
-            } else {
-                MON_FrameBuffer mon_frameBuffer;
-                bool yes = MON_get_frame_buffer(devices[0], &mon_frameBuffer);
-                if (!yes) {
-                    returnValue = ELOS_GENERIC_ERROR;
-                } else {
-                    // @TODO Make it writethrough? Fully cached might be a bad idea?
-                    bool mapped = PMEM_map_memory(userPageTable, mon_frameBuffer.phys_address, mon_frameBuffer.phys_address, mon_frameBuffer.size, PMEM_FLAG_USER_SPACE);
-                    if (!mapped) {
-                        returnValue = ELOS_GENERIC_ERROR;
-                    } else {
-                        frameBuffer->width = mon_frameBuffer.width;
-                        frameBuffer->height = mon_frameBuffer.height;
-                        frameBuffer->size = mon_frameBuffer.size;
-                        frameBuffer->pixels_per_scan_line = mon_frameBuffer.pixels_per_scan_line;
-                        frameBuffer->pixels = mon_frameBuffer.phys_address;
-                        returnValue = ELOS_OK;
-                    }
-                }
-            }
+            MON_FrameBuffer mon_frameBuffer;
+            returnValue = getDefaultMonitor(userPageTable, &mon_frameBuffer);
 
             write_cr3((u64)userPageTable); // @TODO Add PCID
+            if (returnValue == ELOS_OK) {
+                frameBuffer->width = mon_frameBuffer.width;
+                frameBuffer->height = mon_frameBuffer.height;
+                frameBuffer->size = mon_frameBuffer.size;
+                frameBuffer->pixels_per_scan_line = mon_frameBuffer.pixels_per_scan_line;
+                frameBuffer->pixels = mon_frameBuffer.phys_address;
+            }
+            
         } break;
         case _SYS_TICKS_PER_SECOND: {
             u64* tps = (void*)arg0;
@@ -312,11 +434,19 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             returnValue = ELOS_OK;
         } break;
         case _SYS_SLEEP_NS: {
-            u64* tps = (void*)arg0;
+            u64 sleepTime_ns = arg0;
 
             // @TODO Check capability
 
-            // @TODO Implement sleep.
+            u64 nowTick = rdtsc();
+            u64 sleepTick = nowTick + (sleepTime_ns * CPU_tsc_per_sec()/100) / 10000000;
+
+            int coreIndex = CPU_get_core_index();
+            EXEC_Core* core = &cores[coreIndex];
+            EXEC_Thread* activeThread = &core->threads[core->active_thread];
+            activeThread->sleepUntilTick = sleepTick;
+
+            core->rescheduleSyscall = true;
 
             returnValue = ELOS_OK;
         } break;

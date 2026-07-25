@@ -19,7 +19,8 @@ typedef enum {
     KEY_PAGE_DOWN,
     KEY_PAGE_UP,
     KEY_NUM_LOCK,
-    KEY_SUPER,
+    KEY_LEFT_SUPER,
+    KEY_RIGHT_SUPER,
     KEY_CAPS_LOCK,
 
     KEY_SPACE,

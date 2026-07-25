@@ -9,6 +9,7 @@
 #include "elos/common/intrinsics.h"
 
 #include "elos/user_event.h"
+#include "elos/system_console.h"
 #include "elos/cpu.h"
 
 
@@ -27,8 +28,8 @@ void KBD_init(BootAPI* boot_api) {
 
 // Unfortunately timing in QEMU differs from hardware.
 // Values below are nice in QEMU. Might be too slow/fast for real hardware.
-u64 repeatDelay_ms = 300;
-u64 repeatInterval_ms = 100;
+u64 repeatDelay_ms = 280;
+u64 repeatInterval_ms = 60;
 bool useSoftwareRepeat = true;
 
 typedef struct {
@@ -118,7 +119,8 @@ static void push_key_event(int scancode, int pressed) {
                 keyboard_mods &= ~KEY_MOD_ALT;
             }
         } break;
-        case KEY_SUPER: {
+        case KEY_LEFT_SUPER:
+        case KEY_RIGHT_SUPER: {
             if (pressed) {
                 keyboard_mods |= KEY_MOD_SUPER;
             } else {
@@ -138,6 +140,12 @@ static void push_key_event(int scancode, int pressed) {
 
     keyEvents[keyEvents_head] = keyEvent;
     keyEvents_head = (keyEvents_head + 1) % MAX_KEY_EVENTS;
+
+    if (SCON_is_enabled()) {
+        // System console is layered above all other applications.
+        // Keys are therefore only sent to it.
+        return;
+    }
 
     ELOS_UserEvent event = {
         .type = ELOS_USER_EVENT_KEY,

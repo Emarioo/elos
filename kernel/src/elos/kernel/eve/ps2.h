@@ -141,6 +141,8 @@ typedef enum PS2_ScanCode {
     PS2_SC_LEFT            = 0x016B,
     PS2_SC_RIGHT           = 0x0174,
 
+    PS2_SC_LEFT_GUI        = 0x11F,
+    PS2_SC_RIGHT_GUI       = 0x127,
 
     /* Print screen / special */
 

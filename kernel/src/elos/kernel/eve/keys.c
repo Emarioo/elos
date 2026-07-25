@@ -22,8 +22,9 @@ const char* key_name(ELOS_Keycode keycode) {
         case KEY_PAGE_DOWN:         return "PageUp";
         case KEY_PAGE_UP:           return "PageDown";
         case KEY_NUM_LOCK:          return "NumLock";
-        case KEY_SUPER:             return "Super";
-        case KEY_CAPS_LOCK:          return "CapsLock";
+        case KEY_LEFT_SUPER:        return "LeftSuper";
+        case KEY_RIGHT_SUPER:       return "RightSuper";
+        case KEY_CAPS_LOCK:         return "CapsLock";
         case KEY_SPACE:             return "Space";
         case KEY_LEFT_PAREN:        return "(";
         case KEY_RIGHT_PAREN:       return ")";

@@ -582,39 +582,40 @@ ELOS_Error SYS_ticks_per_second(u64* tps) {
 
 
 void SYS_sleep_ns(u64 nanoseconds) {
-    static u64 tps;
-    if (tps == 0) {
-        ELOS_Error error = SYS_ticks_per_second(&tps);
-        if (error != ELOS_OK) {
-            tps = 2900000000;
-        }
-    }
-    // ELOS_Error rax;
-    // SYSCALL1(_SYS_SLEEP_NS, nanoseconds);
+    ELOS_Error rax;
+    SYSCALL1(_SYS_SLEEP_NS, nanoseconds);
+
+    // static u64 tps;
+    // if (tps == 0) {
+    //     ELOS_Error error = SYS_ticks_per_second(&tps);
+    //     if (error != ELOS_OK) {
+    //         tps = 2900000000;
+    //     }
+    // }
     
-    // CPU burning implementation for now
-    u64 start;
-    asm(
-        "rdtsc\n"
-        "shl $32, %%rdx\n"
-        "or %%rdx, %%rax\n"
-        : "=a" (start)
-        :
-    );
-    while (1) {
-        u64 now;
-        asm(
-            "rdtsc\n"
-            "shl $32, %%rdx\n"
-            "or %%rdx, %%rax\n"
-            : "=a" (now)
-            :
-        );
-        u64 now_ns = (1000000000 * (now - start)) / tps;
-        if (now_ns > nanoseconds) {
-            return;
-        }
-    }
+    // // CPU burning implementation for now
+    // u64 start;
+    // asm(
+    //     "rdtsc\n"
+    //     "shl $32, %%rdx\n"
+    //     "or %%rdx, %%rax\n"
+    //     : "=a" (start)
+    //     :
+    // );
+    // while (1) {
+    //     u64 now;
+    //     asm(
+    //         "rdtsc\n"
+    //         "shl $32, %%rdx\n"
+    //         "or %%rdx, %%rax\n"
+    //         : "=a" (now)
+    //         :
+    //     );
+    //     u64 now_ns = (1000000000 * (now - start)) / tps;
+    //     if (now_ns > nanoseconds) {
+    //         return;
+    //     }
+    // }
 }
 
 ELOS_Error SYS_service_create(const char* name, ELOS_ServiceEndpoint* endpoint, u64 queueSize) {

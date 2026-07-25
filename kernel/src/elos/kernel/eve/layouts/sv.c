@@ -55,6 +55,9 @@ Keymap sv_keymap = {
         [PS2_SC_SEMICOLON] = KEY_SEMICOLON,
         [PS2_SC_APOSTROPHE] = KEY_APOSTROPHE,
 
+        [PS2_SC_LEFT_GUI] = KEY_LEFT_SUPER,
+        [PS2_SC_RIGHT_GUI] = KEY_RIGHT_SUPER,
+
         [PS2_SC_COMMA] = KEY_COMMA,
         [PS2_SC_PERIOD] = KEY_PERIOD,
         [PS2_SC_SLASH] = KEY_SLASH,

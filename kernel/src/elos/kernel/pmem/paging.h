@@ -11,9 +11,12 @@
 #define PAGE_BIT_PCD       (1LU << 4)
 #define PAGE_BIT_ACCESSED  (1LU << 5)
 #define PAGE_BIT_DIRTY     (1LU << 6)
+// PAT only for page entry
 #define PAGE_BIT_PAT       (1LU << 7)
+// Huge only for page directory table
 #define PAGE_BIT_HUGE_PAGE (1LU << 7)
 #define PAGE_BIT_GLOBAL    (1LU << 8)
+#define PAGE_BIT_XD        (1LU << 63)
 
 
 typedef enum MapPageFlag {
@@ -21,7 +24,8 @@ typedef enum MapPageFlag {
     PAGING_FLAG_READONLY           = 0x2,
     PAGING_FLAG_NOT_CACHED         = 0x4,
     PAGING_FLAG_USER_SPACE         = 0x8,
-    PAGING_FLAG_GLOBAL_PAGE        = 0x10,
+    PAGING_FLAG_EXECUTABLE         = 0x10,
+    PAGING_FLAG_GLOBAL_PAGE        = 0x20,
 } MapPageFlag;
 
 typedef struct Page {

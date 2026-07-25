@@ -61,12 +61,18 @@ void send_command(cstring text);
 void edit_text(char* text_ptr, int text_max, int* inout_text_len, ELOS_Keycode keycode, int character, int mods, int* cursor);
 
 void SCON_enable(bool enabled) {
+    if (enabled) {
+        disableDefaultMonitorForUsers();
+    } else {
+        enableDefaultMonitorForUsers();
+    }
     g_systemConsole_is_enabled = enabled;
+}
+bool SCON_is_enabled() {
+    return g_systemConsole_is_enabled;
 }
 
 
-ELOS_Keycode g_superKey = KEY_LEFT_ALT;
-bool g_superKeyIsDown = false;
 
 /*
     Entry point of the system console.
@@ -95,22 +101,9 @@ void SCON_main() {
         KeyEvent keyEvent;
         bool hasKeyEvent = KBD_poll_key_event(&keyEvent);
 
-        if (hasKeyEvent) {
-            if (keyEvent.keycode == g_superKey) {
-                g_superKeyIsDown = keyEvent.pressed;
-            }
-            // printf("%d=%d %d %d %d scan=%d\n", keyEvent.keycode, g_superKey, keyEvent.pressed, keyEvent.mods, g_superKeyIsDown, keyEvent.scancode);
-            if (keyEvent.keycode == KEY_T && keyEvent.pressed && g_superKeyIsDown) {
-                SCON_enable(!g_systemConsole_is_enabled);
-                continue;
-            }
-        }
-
-
         if (!g_systemConsole_is_enabled) {
             // Yield process. until next frame.
-            // pause();
-            CPU_sleep(REFRESH_RATE);
+            EXEC_sleep(REFRESH_RATE);
             continue;
         }
         
@@ -128,7 +121,15 @@ void SCON_main() {
             hasKeyEvent = KBD_poll_key_event(&keyEvent);
         }
 
-        
+        /*
+            Rendering to monitor frame buffer requires special care.
+            If you draw two different colors on the same area then flicker will occur
+            because it is displayed as soon you write to memory (as soon as it can).
+            We could write to a temporary buffer then memcpy it to the monitors buffer.
+            Since this is slightly slower we don't at the moment.
+        */
+
+
         int maxLines = g_terminal_height / fontHeight;
         int lineIndex = (lineStart + lineScroll) % LINE_LIMIT;
         while (lineIndex < lines_len) {
@@ -143,17 +144,21 @@ void SCON_main() {
         
         cstring lineText = { inputBuffer.text, inputBuffer_len };
         // printf("lineText %x %d\n", lineText.ptr, lineText.len);
-        draw_rect(g_terminal_x, text_y, fontHeight * 150, fontHeight, backColor);
         cstring pretext = PTR_CSTR("> ");
         int pretextWidth = draw_text_width(pretext, fontHeight, g_default_font);
 
 
-        draw_glyphs_from_text_bcolor(g_terminal_x, text_y, fontHeight, pretext, g_default_font, textColor, 0);
+        draw_glyphs_from_text_bcolor(g_terminal_x, text_y, fontHeight, pretext, g_default_font, textColor, backColor);
 
         int text_x = g_terminal_x + pretextWidth;
+        
+        int lineTextWidth = draw_text_width(lineText, fontHeight, g_default_font);
+        draw_glyphs_from_text_bcolor(text_x, text_y, fontHeight, lineText, g_default_font, textColor, backColor);
 
-        draw_glyphs_from_text_bcolor(text_x, text_y, fontHeight, lineText, g_default_font, textColor, 0);
-
+        // We cover right part of input text box with background but
+        // this means flickering of green and white when we draw cursor on top later.
+        int remainingWidth = screenWidth - text_x - lineTextWidth;
+        draw_rect(text_x + lineTextWidth, text_y,  remainingWidth, fontHeight, backColor);
         
         cstring temp;
         temp.ptr = inputBuffer.text;
@@ -161,9 +166,7 @@ void SCON_main() {
         int width = draw_text_width(temp, fontHeight, g_default_font);
         draw_rect(text_x + width, text_y, 2, fontHeight, WHITE);
 
-        // @TODO We should yield process instead.
-        //    We have setup scheduling to run system console loop 60 times per second.
-        CPU_sleep(REFRESH_RATE);
+        EXEC_sleep(REFRESH_RATE);
     }
 
 }

@@ -195,7 +195,7 @@ void editor_loop() {
             
             apply_numpad(&event.key.keycode, event.key.mods);
 
-            // printf("code=%d chr=%c pressed=%d scan=0x%x\n", event.key.keycode, event.key.character, event.key.value, event.key.scancode);
+            // printf("scan=0x%x code=%d chr=%c pressed=%d\n", event.key.scancode, event.key.keycode, event.key.character, event.key.value);
 
             ELOS_UserEvent_Key key = event.key;
             

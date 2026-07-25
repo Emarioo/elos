@@ -15,6 +15,7 @@ The console is rendered ontop of everything and has schedule priority.
     Enable or disable the system console.
 */
 void SCON_enable(bool enabled);
+bool SCON_is_enabled();
 
 /*
     Entry point of the system console.

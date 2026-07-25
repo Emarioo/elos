@@ -6,6 +6,7 @@
 #include "elos/common/intrinsics.h"
 
 #include "elos/kernel_console.h"
+#include "elos/system_console.h"
 
 #include "elos/kernel/driver/acpi.h"
 
@@ -49,6 +50,9 @@
 #define MSR_GS_BASE        0xC0000101
 #define MSR_KERNEL_GS_BASE 0xC0000102
 
+#define MSR_IA32_EFER 0xC0000080
+
+
 void ap_trampoline(); // defined in assembly
 
 
@@ -86,7 +90,7 @@ void CPU_init(BootAPI* boot_api) {
     init_gdt();
     init_idt();
 
-    // Disable PIT (gives out some stray IRQ2 in the beginning which inteferes with HPET interrupt)
+    // Disable PIT (gives out some stray IRQ2 in the beginning which interfers with HPET interrupt)
     disable_pit();
 
     acpi_init(boot_api);
@@ -245,6 +249,10 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
 
 extern Keymap* g_currentKeymap;
 
+
+ELOS_Keycode g_superKey = KEY_LEFT_SUPER;
+bool g_superKeyIsDown = false;
+
 void keyboard_handler(int isr_number, KeyboardInterruptFrame* frame, u64 extra) {
     // printf("Interrupt #%d\n", isr_number);
 
@@ -256,12 +264,21 @@ void keyboard_handler(int isr_number, KeyboardInterruptFrame* frame, u64 extra) 
         int pressed;
         int scancode = ps2_poll_scancode(&pressed);
         if (scancode == 0)
-        break;
+            break;
         
         // @TODO Reboot key is nice but it should not be here.
         int keycode = scancode_to_keycode(g_currentKeymap, scancode);
         if (keycode == KEY_F1) {
             CPU_reset();
+        }
+
+        if (keycode == g_superKey) {
+            g_superKeyIsDown = pressed;
+        }
+        // printf("%d=%d %d %d %d scan=%d\n", keyEvent.keycode, g_superKey, keyEvent.pressed, keyEvent.mods, g_superKeyIsDown, keyEvent.scancode);
+        if (keycode == KEY_T && pressed && g_superKeyIsDown) {
+            SCON_enable(!SCON_is_enabled());
+            continue;
         }
         
         KBD_push_key_event(scancode, pressed);
@@ -466,7 +483,6 @@ void init_syscall() {
     wrmsr(MSR_LSTAR,  lstar);
     wrmsr(MSR_SFMASK, sfmask);
 
-    #define MSR_IA32_EFER 0xC0000080
     u64 efer = rdmsr(MSR_IA32_EFER);
     efer |= 1; // SYSCALL ENABLE (for 64-bit intel)
     wrmsr(MSR_IA32_EFER, efer);
@@ -827,7 +843,7 @@ void CPU_enable_extensions() {
     //   Need to properly save it when context switching.
     //   I can't get avx to work in QEMU. Maybe some Windows -> WSL -> KVM -> QEMU issues (understandable).
 
-    // u32 eax, ebx, ecx, edx;
+    u32 eax, ebx, ecx, edx;
     // cpuid(7, 0, &eax, &ebx, &ecx, &edx);
     // bool has_fsgsbase = ebx & (1 << 0);
     // printf("Has fs %d, %d\n", has_fsgsbase, ebx);
@@ -839,6 +855,24 @@ void CPU_enable_extensions() {
     // } else {
     //     printf("AVX support?\n");
     // }
+
+    // cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+    // printf("0x1 0x0 -> eax=%x ebx=%x ecx=%x edx=%x\n", eax, ebx, ecx, edx);
+    // cpuid(7, 0, &eax, &ebx, &ecx, &edx);
+    // printf("0x7 0x0 -> eax=%x ebx=%x ecx=%x edx=%x\n", eax, ebx, ecx, edx);
+    
+    cpuid(0x80000001, 0, &eax, &ebx, &ecx, &edx);
+    // printf("0x80000001 0x0 -> eax=%x ebx=%x ecx=%x edx=%x\n", eax, ebx, ecx, edx);
+    if (0 == (edx & 0x100000)) { // bit 20 NX feature, execute disable
+        printf("WAAAH, NX execute disable feature not present!?\n");
+    }
+
+    // cpuid(0x80000008, 0, &eax, &ebx, &ecx, &edx);
+    // printf("0x80000008 0x0 -> eax=%x ebx=%x ecx=%x edx=%x\n", eax, ebx, ecx, edx);
+    
+    u64 efer = rdmsr(MSR_IA32_EFER);
+    efer |= 1LU<<11; // NXE execute disable bit (for 64-bit intel)
+    wrmsr(MSR_IA32_EFER, efer);
 
     asm (
         "mov %cr0, %rax\n"

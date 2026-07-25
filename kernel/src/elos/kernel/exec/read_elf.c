@@ -157,7 +157,7 @@ bool parse_elf(ParseContext* ctx) {
     // Map kernel into user page table (needed when we do syscall)
 
     // @TODO parse_elf should not be mapping in kernel to user page table...
-    PMEM_map_memory(pageTable, __kernel_start, __kernel_start, __kernel_end - __kernel_start, PMEM_FLAG_NONE);
+    PMEM_map_memory(pageTable, __kernel_start, __kernel_start, __kernel_end - __kernel_start, PMEM_FLAG_EXECUTABLE);
     PMEM_map_memory(pageTable, __stack_start, __stack_start, __stack_end - __stack_start, PMEM_FLAG_NONE);
     PMEM_map_memory(pageTable, g_frame_buffer.base, g_frame_buffer.base, g_frame_buffer.size, PMEM_FLAG_NOT_CACHED);
     for (int ci=0;ci<ARRAY_LENGTH(cores);ci++) {
@@ -188,10 +188,10 @@ bool parse_elf(ParseContext* ctx) {
         //    Issues with exec/read only flags otherwise.
 
         if (!strcmp(name, ".text")) {
-            PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_EXECUTABLE|PMEM_FLAG_READ_ONLY|PMEM_FLAG_USER_SPACE);
+            PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE|PMEM_FLAG_READ_ONLY|PMEM_FLAG_EXECUTABLE);
             memcpy(vaddr, src, section->sh_size);
         } else if (!strcmp(name, ".rodata")) {
-            PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_READ_ONLY|PMEM_FLAG_USER_SPACE);
+            PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE|PMEM_FLAG_READ_ONLY);
             memcpy(vaddr, src, section->sh_size);
         } else if (!strcmp(name, ".data")) {
             PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE);

@@ -230,6 +230,36 @@ syscall_reschedule:
 
     iretq
 
+.global kernel_thread_reschedule
+kernel_thread_reschedule:
+    push rbp # Ensure 16-byte alignment
+
+    # interrupt would have pushed
+    #   rip
+    #   cs
+    #   rflags
+    #   rsp
+    #   ss
+
+    lea r8,  [rsp + 16]   # Stack address minus the return address
+    mov rcx, [rsp + 8]    # Return address (rip)
+
+    push 0x10  # ss
+    push r8    # rsp
+    pushfq
+    push 0x8  # cs
+    push rcx   # rip
+
+    SAVE_CONTEXT
+
+    mov rdi, rsp
+
+    call EXEC_timer_handler
+
+    RESTORE_CONTEXT
+
+    iretq
+
 
 .global EXEC_terminate_self_end
 .global EXEC_terminate_self

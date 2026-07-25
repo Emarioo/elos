@@ -59,6 +59,8 @@ void CPU_disable_interrupt();
 
 void CPU_reset();
 
+// Implemented with a spin loop. Use this function in early booting.
+// Use EXEC_sleep when scheduler is initialized.
 void CPU_sleep(u64 nanoseconds);
 
 int CPU_get_core_index();

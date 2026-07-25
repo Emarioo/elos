@@ -54,16 +54,23 @@ void EXEC_timer_handler(InterruptFrame* frame) {
         currentThread->used = false;
     }
 
+    u64 nowTick = rdtsc();
+
     while (1) {
         core->active_thread = (core->active_thread + 1) % THREAD_LIMIT;
+        EXEC_Thread* thread = &core->threads[core->active_thread];
+        // if (thread->sleepUntilTick) {
+        //     printf("Try reschedule %d io=%d now=%d sleep=%d\n", core->active_thread, thread->waitingForIO, (int)(nowTick/1000), (int)(thread->sleepUntilTick/1000));
+        // }
         if (currentThread_index == core->active_thread && !currentThread->used) {
             // Did not find any. Use idle thread.
             // @TODO Idle thread is not initialized.
             printf("AHH, can't use idle thread\n");
             nextThread = &core->idleThread;
             break;
-        } else if (core->threads[core->active_thread].used && !core->threads[core->active_thread].waitingForIO) {
-            nextThread = &core->threads[core->active_thread];
+        } else if (thread->used && !thread->waitingForIO && nowTick > thread->sleepUntilTick) {
+            nextThread = thread;
+            thread->sleepUntilTick = 0;
             break;
         }
     }
@@ -248,3 +255,27 @@ void thread_bootstrap(FN_ThreadEntry entry) {
     EXEC_terminate_self();
 }
 
+
+void EXEC_sleep(u64 sleepTime_ns) {
+    CPU_disable_interrupt();
+
+    u64 nowTick = rdtsc();
+    u64 sleepTick = nowTick + (sleepTime_ns * CPU_tsc_per_sec()/100) / 10000000;
+
+    int coreIndex = CPU_get_core_index();
+    EXEC_Core* core = &cores[coreIndex];
+    EXEC_Thread* activeThread = &core->threads[core->active_thread];
+    activeThread->sleepUntilTick = sleepTick;
+
+    kernel_thread_reschedule();
+
+    u64 endTick = rdtsc();
+    u64 ms = (endTick - nowTick) / (CPU_tsc_per_sec()/1000);
+    // In QEMU on my laptop with power cable in if we sleep for 16.66 ms we seem to
+    // sleep for about 18-20ms.
+    // @TODO Investigate on real hardware how we can make sleep more precise.
+    //   We need more user applications to put load on the system when testing.
+    // printf("Sleeped for %d ms (%d us)\n", ms, sleepTime_ns/1000);
+
+    CPU_enable_interrupt();
+}

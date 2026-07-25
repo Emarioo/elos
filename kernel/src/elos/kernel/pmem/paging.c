@@ -72,7 +72,7 @@ void init_paging(BootAPI* boot_api) {
     dynamicTable_base = (u64)PMEM_alloc_phys(dynamicTable_size, PMEM_FLAG_NONE);
 
     map_memory(rootTable, (void*)dynamicTable_base, (void*)dynamicTable_base, dynamicTable_size, PAGING_FLAG_USE_RESERVED_TABLE);
-    map_memory(rootTable, __kernel_start, __kernel_start, (u64)__kernel_end - (u64)__kernel_start, PAGING_FLAG_USE_RESERVED_TABLE);
+    map_memory(rootTable, __kernel_start, __kernel_start, (u64)__kernel_end - (u64)__kernel_start, PAGING_FLAG_USE_RESERVED_TABLE | PAGING_FLAG_EXECUTABLE);
     map_memory(rootTable, __stack_start, __stack_start, (u64)__stack_end - (u64)__stack_start, PAGING_FLAG_USE_RESERVED_TABLE);
 
     write_cr3((u64)rootTable); // Will fully flush TLB
@@ -89,10 +89,10 @@ void init_paging(BootAPI* boot_api) {
 }
 
 bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 size, MapPageFlag flags) {
-    // u64 user_bit = PAGE_BIT_USER;
     u64 user_bit = 0;
     u64 write_bit = PAGE_BIT_WRITE;
     u64 cache_bit = 0;
+    u64 exec_bit = PAGE_BIT_XD;
     if (flags & PAGING_FLAG_READONLY) {
         write_bit = 0;
     }
@@ -101,6 +101,9 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
     }
     if (flags & PAGING_FLAG_USER_SPACE) {
         user_bit = PAGE_BIT_USER;
+    }
+    if (flags & PAGING_FLAG_EXECUTABLE) {
+        exec_bit = 0;
     }
 
     u64 voff = (u64)virtual_address & 0xFFF;
@@ -132,10 +135,10 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
             if (!page) {
                 return false;
             }
-            entry4 = PAGE_BIT_PRESENT | PAGE_BIT_WRITE | user_bit | ((u64)page & MASK_48_4KB_ADDRESS);
+            entry4 = PAGE_BIT_PRESENT | write_bit | user_bit | ((u64)page & MASK_48_4KB_ADDRESS);
             root->entries[lvl4] = entry4;
         } else {
-            root->entries[lvl4] = (entry4 & ~PAGE_BIT_USER) | user_bit;
+            root->entries[lvl4] = entry4 | write_bit | user_bit;
         }
 
         Page* page_table_3 = (Page*)(entry4 & MASK_48_4KB_ADDRESS);
@@ -151,7 +154,7 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
             
             // We are leaking page table here when we ovewrite the entry.
 
-            entry3 = PAGE_BIT_PRESENT | cache_bit | write_bit | user_bit | PAGE_BIT_HUGE_PAGE | (MASK_48_1GB_ADDRESS & phys);
+            entry3 = PAGE_BIT_PRESENT | cache_bit | exec_bit | write_bit | user_bit | PAGE_BIT_HUGE_PAGE | (MASK_48_1GB_ADDRESS & phys);
             page_table_3->entries[lvl3] = entry3;
             
             flush_tlb_entry((void*)virt);
@@ -161,7 +164,7 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
             continue;
         }
 
-        if ((entry3 & PAGE_BIT_PRESENT) == 0) {
+        if ((entry3 & PAGE_BIT_PRESENT) == 0 || (entry3 & PAGE_BIT_HUGE_PAGE)) {
             // Get physical page and map it in.
             Page* page = get_table();
             if (!page) {
@@ -170,7 +173,7 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
             entry3 = PAGE_BIT_PRESENT | PAGE_BIT_WRITE | user_bit | ((u64)page & MASK_48_4KB_ADDRESS);
             page_table_3->entries[lvl3] = entry3;
         } else {
-            page_table_3->entries[lvl3] = (entry3 & ~PAGE_BIT_USER) | user_bit;
+            page_table_3->entries[lvl3] = entry3 | write_bit | user_bit;
         }
         
         Page* page_table_2 = (Page*)(entry3 & MASK_48_4KB_ADDRESS);
@@ -183,7 +186,7 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
             
             // We are leaking page table here when we ovewrite the entry.
 
-            entry2 = PAGE_BIT_PRESENT | cache_bit | write_bit | user_bit | PAGE_BIT_HUGE_PAGE | (MASK_48_2MB_ADDRESS & phys);
+            entry2 = PAGE_BIT_PRESENT | cache_bit | exec_bit | write_bit | user_bit | PAGE_BIT_HUGE_PAGE | (MASK_48_2MB_ADDRESS & phys);
             page_table_2->entries[lvl2] = entry2;
             
             flush_tlb_entry((void*)virt);
@@ -193,7 +196,7 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
             continue;
         }
 
-        if ((entry2 & PAGE_BIT_PRESENT) == 0) {
+        if ((entry2 & PAGE_BIT_PRESENT) == 0 || (entry2 & PAGE_BIT_HUGE_PAGE)) {
             // Get physical page and map it in.
             Page* page = get_table();
             if (!page) {
@@ -202,13 +205,13 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
             entry2 = PAGE_BIT_PRESENT | PAGE_BIT_WRITE | user_bit | ((u64)page & MASK_48_4KB_ADDRESS);
             page_table_2->entries[lvl2] = entry2;
         } else {
-            page_table_2->entries[lvl2] = (entry2 & ~PAGE_BIT_USER) | user_bit;
+            page_table_2->entries[lvl2] = entry2 | write_bit | user_bit;
         }
 
         Page* page_table_1 = (Page*)(entry2 & MASK_48_4KB_ADDRESS);
         u64 entry1 = page_table_1->entries[lvl1];
 
-        entry1 = PAGE_BIT_PRESENT | cache_bit | write_bit | user_bit | (phys & MASK_48_4KB_ADDRESS);
+        entry1 = PAGE_BIT_PRESENT | cache_bit | exec_bit | write_bit | user_bit | (phys & MASK_48_4KB_ADDRESS);
 
         page_table_1->entries[lvl1] = entry1;
 

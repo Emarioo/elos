@@ -15,6 +15,7 @@ typedef struct {
     bool            used;
     bool            userSpace;
     bool            waitingForIO;
+    u64             sleepUntilTick;
 
     u16             pcid;
 
@@ -55,8 +56,16 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex);
 
 void EXEC_terminate_self();
 
+void EXEC_sleep(u64 ns);
+
 void EXEC_timer_handler(InterruptFrame* frame);
 
 u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 arg5);
 
 void syscall_handler(); // defined in exec_support.s
+
+void kernel_thread_reschedule(); // defined in exec_support.s
+
+// @TODO Move elsewhere. Process resource manager perhaps.
+void disableDefaultMonitorForUsers();
+void enableDefaultMonitorForUsers();

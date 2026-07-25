@@ -241,9 +241,7 @@ void kernel_entry(BootAPI* in_boot_api) {
     EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
     EXEC_create_user_thread("/pkg/slate/slate.elf", 0);
 
-    // ps2_ask_keymap();
-
-    // EXEC_create_kernel_thread(SCON_main, 0);
+    EXEC_create_kernel_thread(SCON_main, 0);
 
 
     while (1) {

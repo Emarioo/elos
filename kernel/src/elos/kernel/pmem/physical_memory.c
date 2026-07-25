@@ -564,6 +564,10 @@ bool PMEM_map_memory(PageTable* table, void* virtual_address, void* physical_add
     if (flags & PMEM_FLAG_USER_SPACE) {
         pflags |= PAGING_FLAG_USER_SPACE;
     }
+    if (flags & PMEM_FLAG_EXECUTABLE) {
+        pflags |= PAGING_FLAG_EXECUTABLE;
+    }
+    // @TODO PMEM_FLAG_EXECUTABLE
     return map_memory(table, virtual_address, physical_address, size, pflags);
 }
 
