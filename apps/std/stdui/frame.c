@@ -2,7 +2,7 @@
     Basic graphics
 */
 
-#include "slate/frame.h"
+#include "stdui/frame.h"
 #include "elos/common/types.h"
 #include "elos/common/string.h"
 #include "stdlib.h"
@@ -33,8 +33,8 @@
 
 // void draw_frame_info(int* width, int* height) {
 //     // TODO: Validate user addresses
-//     *width = g_surfaceInfo.width;
-//     *height = g_surfaceInfo.height;
+//     *width = g_stdui_surfaceInfo->width;
+//     *height = g_stdui_surfaceInfo->height;
 // }
 
 // void draw_text(int x, int y, int h, string text) {
@@ -60,10 +60,10 @@
 //         h += y;
 //         y = 0;
 //     }
-//     if (x + w > g_surfaceInfo.width)
-//         w = g_surfaceInfo.width - x;
-//     if (y + h > g_surfaceInfo.height)
-//         h = g_surfaceInfo.height - y;
+//     if (x + w > g_stdui_surfaceInfo->width)
+//         w = g_stdui_surfaceInfo->width - x;
+//     if (y + h > g_stdui_surfaceInfo->height)
+//         h = g_stdui_surfaceInfo->height - y;
 
 //     const int FACTOR = ((7+height) / 8);
 
@@ -77,8 +77,8 @@
 //         // fallthrough
 //         case PixelBlueGreenRedReserved8BitPerColor: {
 //             // TODO: SIMD
-//             u32* const pixels           = (u32*)g_surfaceInfo.buffer;
-//             u32  const pixels_per_line  = g_surfaceInfo.stride;
+//             u32* const pixels           = (u32*)g_stdui_surfaceInfo->buffer;
+//             u32  const pixels_per_line  = g_stdui_surfaceInfo->stride;
 //             const int dst_offset = x + y * pixels_per_line;
 //             const int src_offset = c * 8*8; // each character is 8x8 pixels
 //             for (int iy = 0; iy < h; iy++) {
@@ -104,7 +104,12 @@
 //     }
 // }
 
-extern PrismSurfaceInfo g_surfaceInfo;
+
+PrismSurfaceInfo* g_stdui_surfaceInfo;
+
+void stdui_set_surface(PrismSurfaceInfo* surfaceInfo) {
+    g_stdui_surfaceInfo = surfaceInfo;
+}
 
 int draw_text_width(cstring text, int height, Font* font) {
     return (text.len * font->glyphWidth * height) / font->glyphHeight;
@@ -127,10 +132,10 @@ void draw_rect(int x, int y, int w, int h, u32 rgba) {
         h += y;
         y = 0;
     }
-    if (x + w > g_surfaceInfo.width)
-        w = g_surfaceInfo.width - x;
-    if (y + h > g_surfaceInfo.height)
-        h = g_surfaceInfo.height - y;
+    if (x + w > g_stdui_surfaceInfo->width)
+        w = g_stdui_surfaceInfo->width - x;
+    if (y + h > g_stdui_surfaceInfo->height)
+        h = g_stdui_surfaceInfo->height - y;
 
     u32 color = rgba;
     switch(0) {
@@ -143,8 +148,8 @@ void draw_rect(int x, int y, int w, int h, u32 rgba) {
         // fallthrough
         case PixelBlueGreenRedReserved8BitPerColor: {
             // TODO: SIMD
-            u32* const pixels           = (u32*)g_surfaceInfo.buffer;
-            u32  const pixels_per_line  = g_surfaceInfo.stride;
+            u32* const pixels           = (u32*)g_stdui_surfaceInfo->buffer;
+            u32  const pixels_per_line  = g_stdui_surfaceInfo->stride;
             for (int iy = y; iy < y + h; iy++) {
                 for (int ix = x; ix < x + w; ix++) {
                     pixels[ix + iy * pixels_per_line] = color;
@@ -169,20 +174,20 @@ void draw_refresh() {
 
 // void draw_shift_frame(int x, int y, u32 fill_color) {
 //     // EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE* const mode = kernel__core_data->graphics_output->Mode;
-//     u32* const pixels           = (u32*)g_surfaceInfo.buffer;
-//     u32  const pixels_per_line  = g_surfaceInfo.stride;
+//     u32* const pixels           = (u32*)g_stdui_surfaceInfo->buffer;
+//     u32  const pixels_per_line  = g_stdui_surfaceInfo->stride;
 
 //     // NOTE: Horizontal shift not implemented. This function is mainly for simple scrolling where pixels are lost.
 
 //     int abs_y = (y < 0 ? -y : y);
 
-//     int total_size = 4 * pixels_per_line * g_surfaceInfo.height;
+//     int total_size = 4 * pixels_per_line * g_stdui_surfaceInfo->height;
 //     int shift_size = total_size - 4 * pixels_per_line * abs_y;
 
 //     if (y < 0) {
 //         memmove(pixels, pixels + pixels_per_line * abs_y, shift_size);
 //         if (fill_color & 0xFF000000) {
-//             draw_rect(0, g_surfaceInfo.height - abs_y, pixels_per_line, abs_y, fill_color);
+//             draw_rect(0, g_stdui_surfaceInfo->height - abs_y, pixels_per_line, abs_y, fill_color);
 //         }
 //     } else {
 //         memmove(pixels + pixels_per_line * abs_y, pixels, shift_size);
@@ -195,7 +200,7 @@ void draw_refresh() {
 extern void serial_write(const char* buffer, int size);
 
 void draw_glyphs_from_text_bcolor(int x, int y, int height, const cstring text, const Font* font, u32 color, u32 back_color) {
-    const int pixel_count = g_surfaceInfo.stride * g_surfaceInfo.height;
+    const int pixel_count = g_stdui_surfaceInfo->stride * g_stdui_surfaceInfo->height;
     int monospace_width  = 1; // determines aspect ratio, we use width and height to avoid floats
     int monospace_height = 2;
 
@@ -223,8 +228,8 @@ void draw_glyphs_from_text_bcolor(int x, int y, int height, const cstring text, 
             case PixelBlueGreenRedReserved8BitPerColor: {
                 // TODO: SIMD
                 
-                u32* const pixels           = (u32*)g_surfaceInfo.buffer;
-                u32  const pixels_per_line  = g_surfaceInfo.stride;
+                u32* const pixels           = (u32*)g_stdui_surfaceInfo->buffer;
+                u32  const pixels_per_line  = g_stdui_surfaceInfo->stride;
 
                 // HA, good luck understanding this math future me!
                 //  It's integer math where we keep precision and are wary of integer division.
@@ -335,13 +340,13 @@ void draw_texture(int x, int y, int w, int h, int sub_x, int sub_y, int sub_w, i
         sub_h += (y * sub_h) / h;
         sub_y += (-y * sub_h) / h;
     }
-    if (x + w > g_surfaceInfo.width) {
-        w += -w + g_surfaceInfo.width - x;
-        sub_w += ((-w + g_surfaceInfo.width - x) * sub_w) / w;
+    if (x + w > g_stdui_surfaceInfo->width) {
+        w += -w + g_stdui_surfaceInfo->width - x;
+        sub_w += ((-w + g_stdui_surfaceInfo->width - x) * sub_w) / w;
     }
-    if (y + h > g_surfaceInfo.height) {
-        h += -h + g_surfaceInfo.height - y;
-        sub_h += ((-h + g_surfaceInfo.height - y) * sub_h) / h;
+    if (y + h > g_stdui_surfaceInfo->height) {
+        h += -h + g_stdui_surfaceInfo->height - y;
+        sub_h += ((-h + g_stdui_surfaceInfo->height - y) * sub_h) / h;
     }
 
     switch(0) {
@@ -354,8 +359,8 @@ void draw_texture(int x, int y, int w, int h, int sub_x, int sub_y, int sub_w, i
         // fallthrough
         case PixelBlueGreenRedReserved8BitPerColor: {
             // TODO: SIMD
-            u32* const pixels           = (u32*)g_surfaceInfo.buffer;
-            u32  const pixels_per_line  = g_surfaceInfo.stride;
+            u32* const pixels           = (u32*)g_stdui_surfaceInfo->buffer;
+            u32  const pixels_per_line  = g_stdui_surfaceInfo->stride;
             for (int iy = y; iy < y + h; iy++) {
                 for (int ix = x; ix < x + w; ix++) {
                     int sx = ((ix - x) * sub_w) / w;

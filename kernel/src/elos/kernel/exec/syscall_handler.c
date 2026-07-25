@@ -225,9 +225,12 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             
             if (address) {
                 update_heap_entry(oldAddress, address, size);
+                PMEM_map_memory(userPageTable, address, address, size, PMEM_FLAG_USER_SPACE);
                 write_cr3((u64)userPageTable);
                 memcpy(address, oldAddress, oldSize);
                 memset(address + oldSize, 0x9A, size - oldSize);
+                // @TODO Unmap the old memory
+                //    Free might do it already?
                 PMEM_free(oldAddress);
                 *newAddress = address;
                 returnValue = ELOS_OK;

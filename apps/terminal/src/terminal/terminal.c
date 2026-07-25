@@ -24,6 +24,8 @@
 
 #include "elos/common/intrinsics.h"
 
+#include "stdui.h"
+
 
 // From apps/std/stdio.c (uses SYS_debug_log)
 void printf(const char* format, ...);
@@ -34,8 +36,7 @@ void terminal_loop();
 
 void draw_rect(int x, int y, int w, int h, uint32_t rgba);
 
-#define BLACK 0xFF000000
-#define RED 0xFFD91938
+#define TERM_RED 0xFFD91938
 
 PrismInstance* g_instance;
 PrismSurface* g_surface;
@@ -85,6 +86,8 @@ void _start() {
         exit(1);
     }
 
+    stdui_set_surface(&g_surfaceInfo);
+
 
     terminal_loop();
 }
@@ -109,7 +112,7 @@ void terminal_loop() {
         }
 
         draw_rect(x, y, size, size, BLACK);
-        draw_rect(x+padding, y+padding, size-2*padding, size-2*padding, RED);
+        draw_rect(x+padding, y+padding, size-2*padding, size-2*padding, TERM_RED);
 
         x += velx;
         y += vely;
@@ -134,27 +137,27 @@ void terminal_loop() {
 
 
 
-void draw_rect(int x, int y, int w, int h, uint32_t rgba) {
-    if (x < 0) {
-        w += x;
-        x = 0;
-    }
-    if (y < 0) {
-        h += y;
-        y = 0;
-    }
-    if (x + w > g_surfaceInfo.width)
-        w = g_surfaceInfo.width - x;
-    if (y + h > g_surfaceInfo.height)
-        h = g_surfaceInfo.height - y;
+// void draw_rect(int x, int y, int w, int h, uint32_t rgba) {
+//     if (x < 0) {
+//         w += x;
+//         x = 0;
+//     }
+//     if (y < 0) {
+//         h += y;
+//         y = 0;
+//     }
+//     if (x + w > g_surfaceInfo.width)
+//         w = g_surfaceInfo.width - x;
+//     if (y + h > g_surfaceInfo.height)
+//         h = g_surfaceInfo.height - y;
 
-    uint32_t* const pixels           = g_surfaceInfo.buffer;
-    uint32_t  const pixels_per_line  = g_surfaceInfo.stride;
-    for (int iy = y; iy < y + h; iy++) {
-        for (int ix = x; ix < x + w; ix++) {
-            pixels[ix + iy * pixels_per_line] = rgba;
-        }
-    }
-}
+//     uint32_t* const pixels           = g_surfaceInfo.buffer;
+//     uint32_t  const pixels_per_line  = g_surfaceInfo.stride;
+//     for (int iy = y; iy < y + h; iy++) {
+//         for (int ix = x; ix < x + w; ix++) {
+//             pixels[ix + iy * pixels_per_line] = rgba;
+//         }
+//     }
+// }
 
 

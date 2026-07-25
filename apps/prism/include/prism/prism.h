@@ -15,13 +15,14 @@
 
 typedef struct PrismInstance PrismInstance;
 typedef struct PrismSurface PrismSurface;
+typedef struct PrismSurfaceInfo PrismSurfaceInfo;
 
-typedef struct {
+struct PrismSurfaceInfo {
     int       width;
     int       height;
     int       stride;
     uint32_t* buffer;
-} PrismSurfaceInfo;
+};
 
 /*
     Initialize Prism client and connect to server.

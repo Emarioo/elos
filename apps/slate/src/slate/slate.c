@@ -1,22 +1,3 @@
-/*
-    @TODO
-
-    Consider memory allocation for line text. Current approach is frail.
-        Realloc or allocate more text buffer memory.
-        Since the memory is used in lines we can't realloc because it would
-        invalidate the memory.
-        We would need to allocate new memory, go through all lines and copy text
-        to new buffer then free old buffer.
-        Or we can have a linked list of memory chunks we can allocate from.
-        A heap allocator implementation in user land that is optimized
-        for small strings may be a good idea.
-        Or some other good idea for small strings.
-
-    Opening big files. How large files do we want to support. 512MB?
-        1GB but special optimizations for memory with read-only limitation?
-
-
-*/
 
 #include "slate/slate.h"
 
@@ -29,80 +10,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "slate/frame.h"
+#include "stdui.h"
 
 
-#define ASSERT(expression) ((expression) ? true : (printf("[Assert] %s (%s:%u)\n",#expression,__FILE__,__LINE__), *((char*)0) = 0))
+extern SlateSession slateSession;
 
-// From apps/std/stdio.c (uses SYS_debug_log)
-int printf(const char* format, ...);
-void sleep(u64 ns);
-
-void editor_loop();
-
-void line_init(Line* line, char* ptr, int len);
-
-
-void slate_move(ELOS_Keycode direction);
-void slate_insert(char c);
-void slate_deletion(ELOS_Keycode direction);
-
-
-#define BACKGROUND        0xFF0F172A
-#define BACKGROUND_CMD    0xFF051120
-
-PrismInstance* g_instance;
-PrismSurface* g_surface;
-
-PrismSurfaceInfo g_surfaceInfo;
-
-u64 ticks_per_second;
-
-ELOS_UserEventBuffer* userEvents;
-
-SlateSession slateSession;
-
-bool get_event(ELOS_UserEvent* event) {
-    // @TODO Not thread or context switch safe.
-    u64 tail = userEvents->tail % userEvents->maxEvents;
-    u64 head = userEvents->head % userEvents->maxEvents;
-    if (tail == head) {
-        return false;
-    }
-    *event = userEvents->events[tail];
-    userEvents->tail++;
-    return true;
-}
-
-void _start() {
-
-    SYS_ticks_per_second(&ticks_per_second);
-
-    g_instance = prism_init();
-    if (!g_instance) {
-        printf("slate: Could not init PRISM client\n");
-        exit(1);
-    }
-
-    g_surface = prism_createSurface(g_instance, 800, 600);
-    if (!g_surface) {
-        printf("slate: Could not create surface\n");
-        exit(1);
-    }
-
-    prism_surfaceInfo(g_surface, &g_surfaceInfo);
-
-    prism_moveSurface(g_surface, 200, 200);
-
-    ELOS_Error error;
-    error = SYS_request_user_event_buffer(100, &userEvents);
-    if (error != ELOS_OK) {
-        printf("slate: Could not create user event buffer\n");
-        exit(1);
-    }
-
-    editor_loop();
-}
 
 
 void* slate_font_allocator(Allocator* allocator, u64 size, void* old_ptr) {
@@ -138,236 +50,15 @@ bool slate_load_font() {
     return res;
 }
 
-#define LINE_LENGTH(LINE) ((LINE)->text.len)
+typedef struct {
+    char* ptr;
+    int   len;
+    int   max;
+} Chunk;
 
-
-void apply_numpad(ELOS_Keycode* keycode, int mod) {
-    if (!(!(mod & KEY_MOD_NUM_LOCK) ^ !(mod & KEY_MOD_SHIFT))) {
-        switch ((int)*keycode) {
-            case KEY_NUMPAD_0: *keycode = KEY_INSERT; return;
-            case KEY_NUMPAD_1: *keycode = KEY_END; return;
-            case KEY_NUMPAD_2: *keycode = KEY_DOWN_ARROW; return;
-            case KEY_NUMPAD_3: *keycode = KEY_PAGE_DOWN; return;
-            case KEY_NUMPAD_4: *keycode = KEY_LEFT_ARROW; return;
-            case KEY_NUMPAD_6: *keycode = KEY_RIGHT_ARROW; return;
-            case KEY_NUMPAD_7: *keycode = KEY_HOME; return;
-            case KEY_NUMPAD_8: *keycode = KEY_UP_ARROW; return;
-            case KEY_NUMPAD_9: *keycode = KEY_PAGE_UP; return;
-            case KEY_NUMPAD_COMMA: *keycode = KEY_DELETE; return;
-        }
-    }
-}
-
-void editor_loop() {
-    SlateSession* session = &slateSession;
-
-    bool res = slate_load_font();
-    if (!res) {
-        exit(1);
-    }
-
-    const char* defaultPath = "/boot/TEMPLATE.CFG";
-
-    slate_open(session, defaultPath);
-
-    session->lines[1].text.len = snprintf(session->lines[1].text.ptr, 200, "HELLO THERE");
-
-    slate_save(session, defaultPath);
-
-    slate_open(session, defaultPath);
-
-    session->commandBuffer_len = strlen(defaultPath);
-    memcpy(session->commandBuffer, defaultPath, session->commandBuffer_len);
-    session->commandBuffer[session->commandBuffer_len] = 0;
-
-    ASSERT(session->lines_len != 0);
-
-
-    int text_height = 20;
-    int text_color = WHITE;
-
-    int characterWidth;
-    {
-        cstring temp = PTR_CSTR("hello");
-        int tempWidth = draw_text_width(temp, text_height, g_default_font);
-        characterWidth = tempWidth / temp.len;
-    }
-
-    
-    while (1) {
-        if (session->lines_len == 0) {
-            session->cursor_y = 0;
-        } else if (session->cursor_y >= session->lines_len) {
-            session->cursor_y = session->lines_len-1;
-        }
-        Line* cursorLine = &session->lines[session->cursor_y];
-        if (session->cursor_x > LINE_LENGTH(cursorLine)) {
-            session->cursor_x = LINE_LENGTH(cursorLine);
-        }
-
-        ELOS_UserEvent event;
-        bool has = get_event(&event);
-        if (has && event.type == ELOS_USER_EVENT_KEY && event.key.value == 1) {
-            
-            apply_numpad(&event.key.keycode, event.key.mods);
-
-            // printf("code=%d chr=%c pressed=%d scan=0x%x\n", event.key.keycode, event.key.character, event.key.value, event.key.scancode);
-
-            ELOS_UserEvent_Key key = event.key;
-            
-            if (key.keycode == KEY_O && (key.mods & KEY_MOD_CTRL)) {
-                // printf("Open file\n");
-                session->command = CMD_OPEN_FILE;
-            } else if (key.keycode == KEY_S && (key.mods & KEY_MOD_CTRL)) {
-                // printf("Save file\n");
-                session->command = CMD_SAVE_FILE;
-            } else {
-                if (session->command == CMD_OPEN_FILE || session->command == CMD_SAVE_FILE) {
-                    if (key.keycode == KEY_LEFT_ARROW) {
-                        if (session->commandCursor_x > 0) {
-                            session->commandCursor_x--;
-                        }
-                    } else if (key.keycode == KEY_RIGHT_ARROW) {
-                        if (session->commandCursor_x < session->commandBuffer_len) {
-                            session->commandCursor_x++;
-                        }
-                    } else if (key.keycode == KEY_HOME) {
-                        session->commandCursor_x = 0;
-                    } else if (key.keycode == KEY_END) {
-                        session->commandCursor_x = session->commandBuffer_len;
-                    } else if (key.keycode == KEY_BACKSPACE) {
-                        if (session->commandCursor_x > 0) {
-                            memmove(session->commandBuffer + session->commandCursor_x - 1,
-                                session->commandBuffer + session->commandCursor_x,
-                                session->commandBuffer_len - (session->commandCursor_x+1));
-                            session->commandCursor_x--;
-                            session->commandBuffer_len--;
-                            session->commandBuffer[session->commandBuffer_len] = '\0';
-                        }
-                    } else if (key.keycode == KEY_DELETE) {
-                        if (session->commandCursor_x < session->commandBuffer_len) {
-                            memmove(session->commandBuffer + session->commandCursor_x,
-                                session->commandBuffer + session->commandCursor_x + 1,
-                                session->commandBuffer_len - (session->commandCursor_x+1));
-                            session->commandBuffer_len--;
-                            session->commandBuffer[session->commandBuffer_len] = '\0';
-                        }
-                    } else if (key.keycode == KEY_ESCAPE) {
-                        session->command = CMD_NONE;
-                    } else if (key.keycode == KEY_ENTER) {
-                        if (session->command == CMD_OPEN_FILE) {
-                            // Open file
-                            // printf("Open %s\n", session->commandBuffer);
-                            slate_open(session, session->commandBuffer);
-                        } else if (session->command == CMD_SAVE_FILE) {
-                            // Save file
-                            // printf("Save %s\n", session->commandBuffer);
-                            slate_save(session, session->commandBuffer);
-                        }
-                        session->command = CMD_NONE;
-                    } else if(key.character != 0) {
-                        if (session->commandBuffer_len < sizeof(session->commandBuffer)-1) {
-                            memmove(session->commandBuffer + session->commandCursor_x + 1,
-                                    session->commandBuffer + session->commandCursor_x,
-                                    session->commandBuffer_len - session->commandCursor_x);
-                            session->commandBuffer[session->commandCursor_x] = key.character;
-                            session->commandBuffer_len++;
-                            session->commandCursor_x++;
-                            session->commandBuffer[session->commandBuffer_len] = '\0';
-                        }
-                    }
-                } else {
-                    if (key.keycode == KEY_LEFT_ARROW) {
-                        slate_move(key.keycode);
-                    } else if (key.keycode == KEY_RIGHT_ARROW) {
-                        slate_move(key.keycode);
-                    } else if (key.keycode == KEY_DOWN_ARROW) {
-                        slate_move(key.keycode);
-                    } else if (key.keycode == KEY_UP_ARROW) {
-                        slate_move(key.keycode);
-                    } else if (key.keycode == KEY_HOME) {
-                        slate_move(key.keycode);
-                    } else if (key.keycode == KEY_END) {
-                        slate_move(key.keycode);
-                    } else if (key.keycode == KEY_PAGE_UP) {
-                        slate_move(key.keycode);
-                    } else if (key.keycode == KEY_PAGE_DOWN) {
-                        slate_move(key.keycode);
-                    } else if (key.keycode == KEY_BACKSPACE) {
-                        slate_deletion(key.keycode);
-                    } else if (key.keycode == KEY_DELETE) {
-                        slate_deletion(KEY_DELETE);
-                    } else if(key.character != 0) {
-                        slate_insert(key.character);
-                    }
-                }
-            }
-        }
-
-        draw_rect(0, 0, g_surfaceInfo.width, g_surfaceInfo.height, BACKGROUND);
-
-        int maxLinesOnScreen = g_surfaceInfo.height / text_height;
-        if (session->cursor_y >= maxLinesOnScreen/2) {
-            session->scroll_y = session->cursor_y - maxLinesOnScreen/2;
-        } else {
-            session->scroll_y = 0;
-        }
-
-        
-        for (int li=session->scroll_y;li<slateSession.lines_len && li < session->scroll_y + maxLinesOnScreen;li++) {
-            Line* line = &slateSession.lines[li];
-
-            if (LINE_LENGTH(line) == 0)
-                continue;
-
-            cstring text = { .ptr = line->text.ptr, .len = LINE_LENGTH(line) };
-            
-            int textWidth = draw_text_width(text, text_height, g_default_font);
-            
-            if (textWidth > g_surfaceInfo.width ) {
-                text.len = (g_surfaceInfo.width) / characterWidth;
-            }
-
-            int text_y = text_height * (li - session->scroll_y);
-            
-            draw_glyphs_from_text_bcolor(0, text_y, text_height, text, g_default_font, text_color, 0);
-        }
-        
-        // We require monospace font here
-        
-        if (session->command == CMD_NONE) {
-            draw_rect(characterWidth * session->cursor_x, text_height * (session->cursor_y - session->scroll_y), 3, text_height, WHITE);
-        } else {
-            int command_x = 2;
-            int command_y = g_surfaceInfo.height - text_height - 2;
-
-            cstring prompt;
-            if (session->command == CMD_OPEN_FILE) {
-                prompt = PTR_CSTR("Open file");
-            } else if (session->command == CMD_SAVE_FILE) {
-                prompt = PTR_CSTR("Save file");
-            }
-            draw_glyphs_from_text_bcolor(command_x, command_y - text_height, text_height, prompt, g_default_font, text_color, BACKGROUND_CMD);
-            
-            cstring text = { session->commandBuffer, session->commandBuffer_len };
-            draw_rect(command_x, command_y, characterWidth * 20, text_height, BACKGROUND_CMD);
-            draw_glyphs_from_text_bcolor(command_x, command_y, text_height, text, g_default_font, text_color, BACKGROUND_CMD);
-
-            draw_rect(command_x + characterWidth * session->commandCursor_x, command_y, 3, text_height, WHITE);
-        }
-
-        prism_presentSurface(g_surface);
-
-        sleep((1000/60)*1000000);
-    }
-
-}
-
-
-
-// #####################
-//    EDITOR SPECIFICS
-// #####################
+Chunk* chunks;
+int    chunks_len;
+int    chunks_max;
 
 char* textBuffer;
 int   textBuffer_len;
@@ -401,8 +92,8 @@ void slate_open(SlateSession* session, const char* path) {
     }
     buffer[fileSize] = '\0';
 
-    // Reset line buffer.
-    textBuffer_len = 0;
+    // Reset buffer that store line data
+    reset_chunks();
 
     session->cursor_x = 0;
     session->cursor_y = 0;
@@ -497,13 +188,48 @@ exit:
     }
 }
 
-
-
-
-void reserve_text_buffer(int max) {
-    textBuffer = realloc(textBuffer, max);
-    textBuffer_max = max;
+void reset_chunks() {
+    chunks_len = 0;
 }
+
+void reserve_chunk(int bytes) {
+    if (textBuffer_len + bytes <= textBuffer_max) {
+        return;
+    }
+
+    // printf("Chunk reserve %d+%d >= %d\n", textBuffer_len, bytes, textBuffer_max);
+
+    if (chunks_len >= chunks_max) {
+        int newMax = 4 + 2*chunks_max;
+        chunks = realloc(chunks, newMax * sizeof(Chunk));
+        ASSERT(chunks);
+        chunks_max = newMax;
+    }
+    
+    Chunk* prevChunk = chunks_len > 0 ? &chunks[chunks_len-1] : NULL;
+    Chunk* chunk = &chunks[chunks_len];
+    chunks_len++;
+
+    // Allocate in page sizes for memory efficiency
+    const int PAGE_SIZE = 0x1000;
+    int bufferMax = 3 * PAGE_SIZE;
+    if (prevChunk) {
+        prevChunk->len = textBuffer_len;
+        bufferMax = PAGE_SIZE + prevChunk->max * 2;
+    }
+
+    chunk->ptr = malloc(bufferMax);
+    chunk->max = bufferMax;
+    chunk->len = 0;
+
+    textBuffer = chunk->ptr;
+    textBuffer_len = chunk->len;
+    textBuffer_max = chunk->max;
+
+    ASSERT(textBuffer_len + bytes <= textBuffer_max);
+}
+
+
 
 void line_init(Line* line, char* ptr, int len) {
     line->text.ptr = ptr;
@@ -521,10 +247,16 @@ void slate_move(ELOS_Keycode direction) {
     if (direction == KEY_LEFT_ARROW) {
         if (session->cursor_x > 0) {
             session->cursor_x--;
+        } else if (session->cursor_y > 0) {
+            session->cursor_y--;
+            session->cursor_x = session->lines[session->cursor_y].text.len;
         }
     } else if (direction == KEY_RIGHT_ARROW) {
-        if (session->cursor_x < LINE_LENGTH(cursorLine)) {
+        if (session->cursor_x < cursorLine->text.len) {
             session->cursor_x++;
+        } else if (session->cursor_y+1 < session->lines_len) {
+            session->cursor_x = 0;
+            session->cursor_y++;
         }
     } else if (direction == KEY_DOWN_ARROW) {
         if (session->cursor_y+1 < session->lines_len) {
@@ -537,7 +269,7 @@ void slate_move(ELOS_Keycode direction) {
     } else if (direction == KEY_HOME) {
         session->cursor_x = 0;
     } else if (direction == KEY_END) {
-        session->cursor_x = LINE_LENGTH(cursorLine);
+        session->cursor_x = cursorLine->text.len;
     } else if (direction == KEY_PAGE_UP) {
         if (session->cursor_y >= lines_per_pageJump) {
             session->cursor_y -= lines_per_pageJump;
@@ -560,10 +292,6 @@ void slate_insert(char c) {
     SlateSession* session = &slateSession;
     session->modified = true;
 
-    if (!textBuffer) {
-        reserve_text_buffer(10000);
-    }
-
     Line* line = &session->lines[session->cursor_y];
 
 
@@ -576,23 +304,35 @@ void slate_insert(char c) {
         Line* splitLine = &session->lines[session->cursor_y+1];
         line_init(splitLine, line->text.ptr + session->cursor_x, line->text.len - session->cursor_x);
 
-        // @TODO What if we split at beginning, end or middle?
         line->text.len = session->cursor_x;
         session->cursor_x = 0;
         session->cursor_y++;
     } else {
-        ASSERT(textBuffer_len + line->text.len + 4 <= textBuffer_max);
+        if (session->cursor_x == line->text.len && line->text.ptr + line->text.len == textBuffer + textBuffer_len) {
+            reserve_chunk(1);
+            ASSERT(textBuffer_len + 1 <= textBuffer_max);
+            
+            textBuffer[textBuffer_len] = c;
+            line->text.len += 1;
+            line->text.max += 1;
+            textBuffer_len += 1;
+            session->cursor_x++;
+        } else {
+            reserve_chunk(line->text.len + 1);
 
-        memcpy(textBuffer + textBuffer_len, line->text.ptr, session->cursor_x);
-        if (session->cursor_x != line->text.len) {
-            memcpy(textBuffer + textBuffer_len + session->cursor_x + 1, line->text.ptr + session->cursor_x, line->text.len - session->cursor_x);
+            ASSERT(textBuffer_len + line->text.len + 1 <= textBuffer_max);
+
+            memcpy(textBuffer + textBuffer_len, line->text.ptr, session->cursor_x);
+            if (session->cursor_x != line->text.len) {
+                memcpy(textBuffer + textBuffer_len + session->cursor_x + 1, line->text.ptr + session->cursor_x, line->text.len - session->cursor_x);
+            }
+            textBuffer[textBuffer_len + session->cursor_x] = c;
+            line->text.ptr = textBuffer + textBuffer_len;
+            line->text.len += 1;
+            line->text.max = line->text.len;
+            textBuffer_len += line->text.len;
+            session->cursor_x++;
         }
-        textBuffer[textBuffer_len + session->cursor_x] = c;
-        line->text.ptr = textBuffer + textBuffer_len;
-        line->text.len += 1;
-        line->text.max = line->text.len;
-        textBuffer_len += line->text.len;
-        session->cursor_x++;
     }
 
 }
@@ -600,10 +340,6 @@ void slate_insert(char c) {
 void slate_deletion(ELOS_Keycode direction) {
     SlateSession* session = &slateSession;
     session->modified = true;
-
-    if (!textBuffer) {
-        reserve_text_buffer(10000);
-    }
 
     if (direction == KEY_BACKSPACE) {
         if (session->cursor_x > 0) {
@@ -614,6 +350,8 @@ void slate_deletion(ELOS_Keycode direction) {
         } else if (session->cursor_y > 0) {
             Line* prevLine = &session->lines[session->cursor_y-1];
             Line* line = &session->lines[session->cursor_y];
+
+            reserve_chunk(prevLine->text.len + line->text.len);
             
             ASSERT(textBuffer_len + prevLine->text.len + line->text.len <= textBuffer_max);
             
@@ -638,6 +376,8 @@ void slate_deletion(ELOS_Keycode direction) {
             Line* line = &session->lines[session->cursor_y];
             Line* nextLine = &session->lines[session->cursor_y+1];
             
+            reserve_chunk(line->text.len + nextLine->text.len);
+
             ASSERT(textBuffer_len + line->text.len + nextLine->text.len <= textBuffer_max);
 
             memcpy(textBuffer + textBuffer_len, line->text.ptr, line->text.len);

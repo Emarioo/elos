@@ -1,7 +1,10 @@
 #pragma once
 
 #include "elos/common/types.h"
-#include "slate/font/font.h"
+#include "stdui/font/font.h"
+
+typedef struct PrismSurfaceInfo PrismSurfaceInfo;
+
 
 // ARGB in big endian (hexidecimal literal)
 // BGRA in little endian
@@ -46,4 +49,4 @@ Texture* load_texture(const char* path);
 
 void draw_texture(int x, int y, int w, int h, int sub_x, int sub_y, int sub_w, int sub_h, Texture* texture);
 
-
+void stdui_set_surface(PrismSurfaceInfo* surfaceInfo);

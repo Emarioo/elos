@@ -1,6 +1,6 @@
-#include "slate/font/font.h"
+#include "stdui/font/font.h"
 
-#include "slate/font/psf.h"
+#include "stdui/font/psf.h"
 
 #define be16(X) __builtin_bswap16(X)
 #define be32(X) __builtin_bswap32(X)

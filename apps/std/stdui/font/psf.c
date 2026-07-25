@@ -1,13 +1,13 @@
 
 
-#include "slate/font/psf.h"
+#include "stdui/font/psf.h"
 
 #include "elos/common/string.h"
 
 #include "stdlib.h"
 #include "stdio.h"
 
-#include "slate/frame.h"
+#include "stdui/frame.h"
 
 #define PMEM_allocate(SIZE, bad) malloc(SIZE)
 
