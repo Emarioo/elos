@@ -14,6 +14,7 @@
 #include "elos/physical_memory.h"
 
 #include "elos/cpu.h"
+#include "elos/keyboard.h"
 
 
 
@@ -29,6 +30,13 @@ void thread_bootstrap(FN_ThreadEntry entry);
 
 void EXEC_timer_handler(InterruptFrame* frame) {
     int coreIndex = CPU_get_core_index();
+
+    if (coreIndex == 0) {
+        // @TODO Our intention is to do this on one core.
+        //   The platform does not guarrante that core 0 is available.
+        //   It may be defective where core 1 is the boot core instead.
+        KBD_tick_handler();
+    }
 
     if (!scheduling_enabled)
         return;

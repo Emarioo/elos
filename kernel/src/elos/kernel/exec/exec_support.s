@@ -61,10 +61,13 @@
     shl rdx, 32
     or rax, rdx
     push rax
+
+    push 0 # push reserved to align struct
 .endm
 
 
 .macro RESTORE_CONTEXT
+    pop rax # pop reserved to align struct
 
     pop rax
     mov rdx, rax

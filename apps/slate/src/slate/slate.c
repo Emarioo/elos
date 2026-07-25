@@ -64,6 +64,15 @@ char* textBuffer;
 int   textBuffer_len;
 int   textBuffer_max;
 
+
+void reserve_lines(SlateSession* session, int lines) {
+    if (session->lines_len + lines >= session->lines_max) {
+        int newMax = 200 + 2*session->lines_max;
+        session->lines = realloc(session->lines, newMax * sizeof(Line));
+        session->lines_max = newMax;
+    }
+}
+
 void slate_open(SlateSession* session, const char* path) {
     FILE* file;
     char* buffer;
@@ -99,12 +108,9 @@ void slate_open(SlateSession* session, const char* path) {
     session->cursor_y = 0;
     session->modified = false;
     strncpy(session->currentFile, path, sizeof(session->currentFile));
+    session->lines = NULL;
+    session->lines_max = 0;
     session->lines_len = 0;
-
-    if (!session->lines) {
-        session->lines_max = 100;
-        session->lines = malloc(sizeof(Line) * session->lines_max);
-    }
 
     int head = 0;
     int lineStart = 0;
@@ -120,6 +126,11 @@ void slate_open(SlateSession* session, const char* path) {
             if (chr == '\r') {
                 head++;
             }
+
+            if (session->lines_len + 1 > session->lines_max) {
+                reserve_lines(session, 1);
+            }
+
             Line* nextLine = &session->lines[session->lines_len];
             session->lines_len++;
 
@@ -128,11 +139,23 @@ void slate_open(SlateSession* session, const char* path) {
         }
     }
     {
+        if (session->lines_len + 1 > session->lines_max) {
+            reserve_lines(session, 1);
+        }
+
         int len = head - lineStart;
         Line* nextLine = &session->lines[session->lines_len];
         session->lines_len++;
         line_init(nextLine, buffer + lineStart, len);
         lineStart = head;
+    }
+
+    if (session->cursor_y >= session->lines_len) {
+        session->cursor_y = session->lines_len-1;
+    }
+    Line* cursorLine = &session->lines[session->cursor_y];
+    if (session->cursor_x > cursorLine->text.len) {
+        session->cursor_x = cursorLine->text.len;
     }
 
     // We use buffer memory in line parts so we can't free this.
@@ -229,8 +252,6 @@ void reserve_chunk(int bytes) {
     ASSERT(textBuffer_len + bytes <= textBuffer_max);
 }
 
-
-
 void line_init(Line* line, char* ptr, int len) {
     line->text.ptr = ptr;
     line->text.max = 0;
@@ -261,10 +282,18 @@ void slate_move(ELOS_Keycode direction) {
     } else if (direction == KEY_DOWN_ARROW) {
         if (session->cursor_y+1 < session->lines_len) {
             session->cursor_y++;
+            Line* cursorLine = &session->lines[session->cursor_y];
+            if (session->cursor_x > cursorLine->text.len) {
+                session->cursor_x = cursorLine->text.len;
+            }
         }
     } else if (direction == KEY_UP_ARROW) {
         if (session->cursor_y > 0) {
             session->cursor_y--;
+            Line* cursorLine = &session->lines[session->cursor_y];
+            if (session->cursor_x > cursorLine->text.len) {
+                session->cursor_x = cursorLine->text.len;
+            }
         }
     } else if (direction == KEY_HOME) {
         session->cursor_x = 0;
@@ -276,11 +305,19 @@ void slate_move(ELOS_Keycode direction) {
         } else {
             session->cursor_y = 0;
         }
+        Line* cursorLine = &session->lines[session->cursor_y];
+        if (session->cursor_x > cursorLine->text.len) {
+            session->cursor_x = cursorLine->text.len;
+        }
     } else if (direction == KEY_PAGE_DOWN) {
         if (session->cursor_y + lines_per_pageJump < session->lines_len) {
             session->cursor_y += lines_per_pageJump;
         } else {
             session->cursor_y = session->lines_len-1;
+        }
+        Line* cursorLine = &session->lines[session->cursor_y];
+        if (session->cursor_x > cursorLine->text.len) {
+            session->cursor_x = cursorLine->text.len;
         }
     } else {
         printf("slate_move: Unhandled keycode %d\n", direction);
@@ -292,12 +329,13 @@ void slate_insert(char c) {
     SlateSession* session = &slateSession;
     session->modified = true;
 
-    Line* line = &session->lines[session->cursor_y];
-
-
     if (c == '\n') {
         // split line
-        ASSERT(session->lines_len < session->lines_max);
+        if (session->lines_len + 1 > session->lines_max) {
+            reserve_lines(session, 1);
+        }
+
+        Line* line = &session->lines[session->cursor_y];
         memmove(&session->lines[session->cursor_y+2], &session->lines[session->cursor_y+1], sizeof(Line) * (session->lines_len - (session->cursor_y+1)));
         session->lines_len++;
 
@@ -308,6 +346,7 @@ void slate_insert(char c) {
         session->cursor_x = 0;
         session->cursor_y++;
     } else {
+        Line* line = &session->lines[session->cursor_y];
         if (session->cursor_x == line->text.len && line->text.ptr + line->text.len == textBuffer + textBuffer_len) {
             reserve_chunk(1);
             ASSERT(textBuffer_len + 1 <= textBuffer_max);

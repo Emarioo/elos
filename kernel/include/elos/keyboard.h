@@ -20,5 +20,6 @@ typedef struct {
 
 bool KBD_set_layout(const char* layout);
 
+void KBD_tick_handler();
 void KBD_push_key_event(int scancode, int pressed);
 bool KBD_poll_key_event(KeyEvent* keyEvent);

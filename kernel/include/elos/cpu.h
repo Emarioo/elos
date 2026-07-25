@@ -16,6 +16,8 @@
 // task state takes up two slots
 
 typedef struct {
+    u64 reserved; // here to align struct
+
     // @TODO GS,FS base
     u64 fs;
     u64 gs;

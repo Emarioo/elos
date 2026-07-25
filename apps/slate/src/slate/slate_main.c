@@ -180,21 +180,18 @@ void editor_loop() {
 
     
     while (1) {
-        if (session->lines_len == 0) {
-            session->cursor_y = 0;
-        } else if (session->cursor_y >= session->lines_len) {
-            session->cursor_y = session->lines_len-1;
-        }
-        Line* cursorLine = &session->lines[session->cursor_y];
-        if (session->cursor_x > LINE_LENGTH(cursorLine)) {
-            session->cursor_x = LINE_LENGTH(cursorLine);
-        }
         
         int textContent_width = g_surfaceInfo.width - textContent_x;
         
         ELOS_UserEvent event;
-        bool has = get_event(&event);
-        if (has && event.type == ELOS_USER_EVENT_KEY && event.key.value == 1) {
+        while (1) {
+            bool has = get_event(&event);
+            if (!has) {
+                break;
+            }
+            if (event.type != ELOS_USER_EVENT_KEY || event.key.value == 0) {
+                continue;
+            }
             
             apply_numpad(&event.key.keycode, event.key.mods);
 

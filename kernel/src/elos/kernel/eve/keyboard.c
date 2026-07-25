@@ -6,8 +6,10 @@
 
 #include "elos/kernel_console.h"
 #include "elos/common/string.h"
+#include "elos/common/intrinsics.h"
 
 #include "elos/user_event.h"
+#include "elos/cpu.h"
 
 
 #define printf(...) KCON_printf(__VA_ARGS__)
@@ -23,12 +25,63 @@ void KBD_init(BootAPI* boot_api) {
 
 #define MAX_KEY_EVENTS 256
 
+// Unfortunately timing in QEMU differs from hardware.
+// Values below are nice in QEMU. Might be too slow/fast for real hardware.
+u64 repeatDelay_ms = 300;
+u64 repeatInterval_ms = 100;
+bool useSoftwareRepeat = true;
+
+typedef struct {
+    u32  scancode;
+    u64  nextRepeatTick;
+} KeyState;
+
+bool heldKeyTable[512];
+
+KeyState keyStates[64];
+u64      keyStates_len;
+
 KeyEvent keyEvents[MAX_KEY_EVENTS];
 volatile u32 keyEvents_head;
 volatile u32 keyEvents_tail;
 u32 keyboard_mods;
 
+static void push_key_event(int scancode, int pressed);
+
 void KBD_push_key_event(int scancode, int pressed) {
+    if (scancode >= sizeof(heldKeyTable)) {
+        // HUH?
+        return;
+    }
+    if (useSoftwareRepeat) {
+        if (heldKeyTable[scancode] == (pressed != 0)) {
+            // Ignore repeat event since we implement it in software.
+            return;
+        }
+        if (pressed != 0) {
+            KeyState* state = &keyStates[keyStates_len];
+            state->scancode = scancode;
+            state->nextRepeatTick = rdtsc() + repeatDelay_ms * (CPU_tsc_per_sec()/1000);
+            keyStates_len++;
+        } else {
+            for (int i=0;i<keyStates_len;i++) {
+                KeyState* state = &keyStates[i];
+                if (state->scancode == scancode) {
+                    memcpy(&keyStates[i], &keyStates[i+1], sizeof(KeyState) * (keyStates_len - i - 1));
+                    keyStates_len--;
+                    break;
+                }
+            }
+        }
+    }
+    
+    // If keyboard is unplugged we should clear all held keys.
+    // and keystates.
+    heldKeyTable[scancode] = pressed != 0;
+
+    push_key_event(scancode, pressed);
+}
+static void push_key_event(int scancode, int pressed) {
     if (scancode == 0)
         return;
     
@@ -134,3 +187,22 @@ bool KBD_set_layout(const char* layout) {
     return false;
 }
 
+
+void KBD_tick_handler() {
+    u64 nowTick = rdtsc();
+
+    for (int i=0;i<keyStates_len;i++) {
+        KeyState* state = &keyStates[i];
+
+        // int presses = 0;
+        while (nowTick > state->nextRepeatTick) {
+            push_key_event(state->scancode, 1);
+            state->nextRepeatTick += repeatInterval_ms * (CPU_tsc_per_sec()/1000);
+            // pressed++;
+        }
+        // if (presses) {
+        //     push_key_event(state->scancode, presses);
+        // }
+    }
+
+}
