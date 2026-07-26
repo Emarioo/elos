@@ -18,6 +18,8 @@
 #include "elos/kernel/video/frame.h"
 #include "elos/cpu.h"
 #include "elos/execution.h"
+#include "elos/vfs.h"
+#include "elos/physical_memory.h"
 
 #include "elos/common/string.h"
 #include "elos/common/intrinsics.h"
@@ -226,13 +228,35 @@ void edit_text(char* text_ptr, int text_max, int* inout_text_len, ELOS_Keycode k
 }
 
 void respond_message(cstring text) {
-    Line* nextLine = &lines[lines_len];
-    lines_len++;
-    int cap = text.len < sizeof(nextLine->text)-1 ? text.len : sizeof(nextLine->text)-1;
-    // @TODO Split newlines in text
-    memcpy(nextLine->text, text.ptr, cap);
+    int head = 0;
+    int startHead = 0;
+    while (head < text.len) {
+        char chr = text.ptr[head];
+        head++;
+
+        if (chr == '\n' || head == text.len) {
+            Line* nextLine = &lines[lines_len];
+            lines_len++;
+            
+            int len;
+            if (chr == '\n')
+                len = head-1 - startHead;
+            else
+                len = head - startHead;
+
+            int cap = len < sizeof(nextLine->text)-1 ? len : sizeof(nextLine->text)-1;
+            memcpy(nextLine->text, text.ptr, cap);
+        }
+    }
 }
 
+void printCallback(const char* buffer, size_t size, void* userData) {
+    cstring text = { .ptr = buffer, .len = size };
+    respond_message(text);
+}
+
+ELOS_DirectoryEntry* dirEntries;
+int                 dirEntries_cap;
 
 void send_command(cstring text) {
 
@@ -242,6 +266,40 @@ void send_command(cstring text) {
         respond_message(PTR_CSTR("No file system\n"));
     } else if (!strcmp(text.ptr, "ls")) {
         respond_message(PTR_CSTR("No file system\n"));
+
+        // @TODO Implement proper LS
+
+        if (!dirEntries) {
+            // @TODO One entry to test the function, don't forget to increase.
+            dirEntries_cap = 1;
+            dirEntries = PMEM_alloc(dirEntries_cap * sizeof(*dirEntries));
+        }
+
+        u64 cookie;
+        u64 entryCount;
+        
+        while (1) {
+            entryCount = dirEntries_cap;
+            bool yes = VFS_readdir("/", &cookie, &entryCount, dirEntries);
+            if (!yes) {
+                printf("VFS_readdir: returned false, error\n");
+                break;
+            }
+            char msg[256];
+            for (int i=0;i<entryCount;i++) {
+                ELOS_DirectoryEntry* entry = &dirEntries[i];
+                int len = snprintf(msg, sizeof(msg), "%s\n", entry->name);
+                respond_message((cstring){ msg, len });
+            }
+            if (entryCount != dirEntries_cap) {
+                // The end
+                break;
+            }
+
+        }
+
+    } else if (!strcmp(text.ptr, "mount")) {
+        VFS_dump_mounts(printCallback, NULL);
     } else {
         respond_message(PTR_CSTR("Unknown command\n"));
     }

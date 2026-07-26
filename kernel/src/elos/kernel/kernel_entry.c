@@ -47,6 +47,56 @@ BootAPI* boot_api;
 
 
 
+void dumpdir(const char* path, int depth) {
+
+    u64 cookie = 0;
+    u64 entryCount;
+
+    ELOS_DirectoryEntry dirEntries[3]; // uneven number to encounter edge cases
+    int dirEntries_cap = ARRAY_LENGTH(dirEntries);
+
+    #define INDENT() for (int j=0;j<depth;j++) { printf("  "); }
+
+    INDENT()
+    const char* firstSlash = strrchr(path, '/');
+    if (!firstSlash)
+        firstSlash = path;
+    printf("%s\n", firstSlash);
+    
+    while (1) {
+        entryCount = dirEntries_cap;
+        bool yes = VFS_readdir(path, &cookie, &entryCount, dirEntries);
+        if (!yes) {
+            printf("VFS_readdir: returned false, error\n");
+            break;
+        }
+        char fullpath[256];
+        for (int i=0;i<entryCount;i++) {
+            ELOS_DirectoryEntry* entry = &dirEntries[i];
+
+            if (entry->isDirectory) {
+                if (path[strlen(path)-1] == '/')
+                    snprintf(fullpath, sizeof(fullpath), "%s%s", path, entry->name);
+                else
+                    snprintf(fullpath, sizeof(fullpath), "%s/%s", path, entry->name);
+                dumpdir(fullpath, depth+1);
+                // INDENT()
+                // printf("  %s\n", entry->name);
+            } else {
+                INDENT()
+                printf("  %s\n", entry->name);
+            }
+        }
+
+        if (entryCount != dirEntries_cap) {
+            // The end
+            break;
+        }
+    }
+
+}
+
+
 void kernel_entry(BootAPI* in_boot_api) {
 
     // Put BootAPI in kernel's memory space. in_boot_api will become invalid when
@@ -229,9 +279,15 @@ void kernel_entry(BootAPI* in_boot_api) {
     EXEC_init();
 
 
+    // dumpdir("/", 0);
+    // dumpdir("/boot", 0);
+
+
+
+
     EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
-    // EXEC_create_user_thread("/pkg/slate/slate.elf", 0);
-    EXEC_create_user_thread("/pkg/doom/doom.elf", 0);
+    EXEC_create_user_thread("/pkg/slate/slate.elf", 0);
+    // EXEC_create_user_thread("/pkg/doom/doom.elf", 0);
 
     EXEC_create_kernel_thread(SCON_main, 0);
 

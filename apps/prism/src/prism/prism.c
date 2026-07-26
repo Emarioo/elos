@@ -8,6 +8,7 @@
 #include "elos/common/string.h"
 
 #include "stdlib.h"
+#include "stdio.h"
 
 
 typedef struct {
@@ -23,11 +24,6 @@ typedef struct {
 
     ELOS_ServiceEndpoint ownerEndpoint; // @TODO This assumes endpoints can't be reused.
 } Surface;
-
-
-
-void printf(const char* fmt, ...);
-
 
 
 void prism_loop();

@@ -129,18 +129,21 @@ bool fat_mkdir(VFS_Mount* mount, const cstring path) {
 
 
 VFS_FileObject fileObjects[1000];
+// int            fileObjects_len;
+int            fileObjects_cap = ARRAY_LENGTH(fileObjects);
 
 
 VFS_FileObject* find_file_object(VFS_Mount* mount, u32 clusterIndex) {
     // @TODO Use hash map of some sort. Maybe binary search.
     VFS_FileObject* free_obj = NULL;
-    for (int i = 0; i < ARRAY_LENGTH(fileObjects); i++) {
+    for (int i = 0; i < fileObjects_cap; i++) {
         VFS_FileObject* obj = &fileObjects[i];
         if (obj->clusterIndex == clusterIndex && obj->mount->diskDevice == mount->diskDevice && obj->mount->start_lba == mount->start_lba) {
             return obj;
         }
         if (fileObjects[i].clusterIndex == 0) {
             free_obj = obj;
+            break;
         }
     }
     if (free_obj) {
@@ -148,6 +151,73 @@ VFS_FileObject* find_file_object(VFS_Mount* mount, u32 clusterIndex) {
         free_obj->mount = mount;
     }
     return free_obj;
+}
+
+bool iter_fat(VFS_Mount* mount, VFS_FileObject* fileObject, u64* cookie, u64* entryCount, ELOS_DirectoryEntry* entries) {
+    int res;
+
+    FATContext _ctx = {0};
+    FATContext* context = &_ctx;
+    
+    init_context(context, mount);
+
+    char stackBuffer[512];
+    int buffer_head = 0;
+    int sectorSize = context->sector_size;
+
+    FAT_ID currentDir;
+    if (fileObject->isRootDirectory) {
+        currentDir = get_root_directory(context);
+    } else {
+        fat__DirectoryEntry* direntryBlock = (fat__DirectoryEntry*)(stackBuffer + buffer_head);
+        buffer_head += sectorSize;
+        
+        res = DISK_read(fileObject->mount->diskDevice, (fileObject->mount->start_lba + fileObject->direntrySector) * sectorSize, sectorSize, direntryBlock);
+        if (!res) return false;
+
+        fat__DirectoryEntry* entry = &direntryBlock[fileObject->direntryIndex];
+
+        u32 currentCluster = (u32)entry->cluster_low | (u32)entry->cluster_high << 16;
+        currentDir = make_fat_id(context, currentCluster);
+    }
+
+    // @TODO Validate that cookie is valid to some degree. If it's 78
+    //    by mistake or accident by user then that may be fine
+    //    if we have that many entries in the directory.
+    //    If it's beyond directory then it's the end, but still valid i suppose.
+
+    u32 entryIndex = (u32)*cookie;
+    char longName[256];
+
+    u32 maxEntries = *entryCount;
+    u32 numEntries = 0;
+    
+    while (numEntries < maxEntries) {
+        fat__DirectoryEntry* entry = fat_next_entry(context, currentDir, &entryIndex, longName);
+
+        cstring entryName = {
+            .ptr = longName,
+            .len = strlen(longName),
+        };
+
+        if (!entry) {
+            // No more entries
+            break;
+        }
+
+        ELOS_DirectoryEntry* vfsEntry = &entries[numEntries];
+        numEntries++;
+
+        vfsEntry->fileSize = entry->file_size;
+        vfsEntry->isDirectory = entry->attributes & fat__DIRECTORY;
+        vfsEntry->isReadOnly = entry->attributes & fat__READ_ONLY;
+        vfsEntry->name_len = snprintf(vfsEntry->name, sizeof(vfsEntry->name), "%s", entryName.ptr);
+        vfsEntry->lastWriteTime_us = 0; // @TODO Last write time
+    }
+    *entryCount = numEntries;
+    *cookie = entryIndex;
+
+    return true;
 }
 
 
@@ -162,7 +232,13 @@ VFS_FileObject* search_fat(VFS_Mount* mount, const cstring path) {
     
     init_context(context, mount);
 
-
+    if (path.len == 0 || (path.len == 1 && path.ptr[0] == '/')) {
+        // 1 is an invalid clusterIndex, 0 means unused file object.
+        // All code for FAT could use some refactoring.
+        VFS_FileObject* fileObject = find_file_object(mount, 1);
+        fileObject->isRootDirectory = true;
+        return fileObject;
+    }
 
     int current_cluster;
     int sector_start;
@@ -1286,25 +1362,20 @@ bool fat_delete_entry(FATContext* context, FAT_ID currentDir, int entryIndex);
 
 bool delete_entry(FATContext* context, FAT_ID currentDir, const cstring subname) {
     int res;
-    int current_cluster;
-    int sector_start;
-    int sector_end;
-    int sector_index = 0;
-    extract_fat_id(context, currentDir, &current_cluster, &sector_start, &sector_end);
+    // int current_cluster;
+    // int sector_start;
+    // int sector_end;
+    // int sector_index = 0;
+    // extract_fat_id(context, currentDir, &current_cluster, &sector_start, &sector_end);
 
     char tempSector[512];
 
-    int entryIndex = 0;
+    u32 entryIndex = 0;
     char longName[256];
 
-    // char longName_buffer[256];
-    // const int longName_lastIndex = sizeof(longName_buffer)-1;
-    // int longName_startIndex = longName_lastIndex;
-    // longName_buffer[longName_lastIndex] = '\0';
     
-    int prevIndex = entryIndex;
     while (1) {
-        prevIndex = entryIndex;
+        u32 prevIndex = entryIndex;
 
         fat__DirectoryEntry* entry = fat_next_entry(context, currentDir, &entryIndex, longName);
 
@@ -1445,7 +1516,7 @@ int get_free_cluster(FATContext* context) {
 }
 
 
-fat__DirectoryEntry* fat_next_entry(FATContext* context, FAT_ID currentDir, int* inout_entryIndex, char* longName) {
+fat__DirectoryEntry* fat_next_entry(FATContext* context, FAT_ID currentDir, u32* inout_entryIndex, char* longName) {
     int res;
     if (currentDir != context->currentDir) {
         extract_fat_id(context, currentDir, &context->current_cluster, &context->sector_start, &context->sector_end);
@@ -1522,7 +1593,7 @@ fat__DirectoryEntry* fat_next_entry(FATContext* context, FAT_ID currentDir, int*
             }
             if (entry->file_name[0] == 0) {
                 // No more entries in directory
-                context->sector_index = context->sector_end - context->sector_start - 1;
+                context->sector_index = context->sector_end - context->sector_start;
                 break;
             }
 
@@ -1544,8 +1615,10 @@ fat__DirectoryEntry* fat_next_entry(FATContext* context, FAT_ID currentDir, int*
 
             if (sub_entryIndex+1 == entriesPerSector) {
                 context->sector_index++;
+                sub_entryIndex = 0;
+            } else {
+                sub_entryIndex++;
             }
-
             *inout_entryIndex = sub_entryIndex + context->sector_index * entriesPerSector;
 
             return entry;

@@ -19,12 +19,12 @@
 static volatile u32 g_vfs_lock;
 
 static VFS_Mount* g_mounts;
-static int g_mounts_cap;
-static int g_next_mountIndex;
+static int        g_mounts_cap;
+static int        g_mounts_len;
 
 static VFS_Handle_impl* g_handles;
-static int g_handles_cap;
-static int g_next_handleIndex;
+static int              g_handles_cap;
+static int              g_handles_len;
 
 bool find_partition(DiskDevice device, int partitionIndex, u64* start_lba, u64* end_lba);
 
@@ -41,12 +41,12 @@ VFS_Mount* reserve_mount() {
         }
     }
 
-    if (g_next_mountIndex >= g_mounts_cap) {
+    if (g_mounts_len >= g_mounts_cap) {
         goto exit;
     }
 
-    VFS_Mount* node = &g_mounts[g_next_mountIndex];
-    g_next_mountIndex++;
+    VFS_Mount* node = &g_mounts[g_mounts_len];
+    g_mounts_len++;
     memset(node, 0, sizeof(*node));
 
     returnValue = node;
@@ -57,13 +57,13 @@ exit:
 
 
 void unreserve_mount(VFS_Mount* mount) {
-    VFS_Mount* lastMount = &g_mounts[g_next_mountIndex];
+    VFS_Mount* lastMount = &g_mounts[g_mounts_len];
     if (lastMount != mount) {
         printf("CAN'T UNRESERVE NODE THAT WASNT LAST\n");
         kernel_bug();
         return;
     }
-    g_next_mountIndex--;
+    g_mounts_len--;
 }
 
 
@@ -78,12 +78,12 @@ VFS_Handle_impl* reserve_handle() {
         }
     }
 
-    if (g_next_handleIndex >= g_handles_cap) {
+    if (g_handles_len >= g_handles_cap) {
         goto exit;
     }
 
-    VFS_Handle_impl* handle = &g_handles[g_next_handleIndex];
-    g_next_handleIndex++;
+    VFS_Handle_impl* handle = &g_handles[g_handles_len];
+    g_handles_len++;
     memset(handle, 0, sizeof(*handle));
 
     returnValue = handle;
@@ -94,13 +94,13 @@ exit:
 
 
 void unreserve_handle(VFS_Handle_impl* handle) {
-    VFS_Handle_impl* lastHandle = &g_handles[g_next_handleIndex];
+    VFS_Handle_impl* lastHandle = &g_handles[g_handles_len];
     if (lastHandle != handle) {
         printf("CAN'T UNRESERVE HANDLE THAT WASNT LAST\n");
         kernel_bug();
         return;
     }
-    g_next_handleIndex--;
+    g_handles_len--;
 }
 
 
@@ -130,11 +130,6 @@ bool VFS_mkdir(const char* cpath) {
     if (!mount) {
         goto exit;
     }
-    
-    // Search mounted device.
-    // DiskInfo info = {0};
-    // DISK_get_info(currentNode->mounted_diskDevice, &info);
-    // printf("Searching mounted device %s (%d MB)\n", info.name, info.diskSize/0x100000);
     
     cstring subpath = PTR_CSTR(cpath + subIndex);
 
@@ -264,6 +259,8 @@ u64 VFS_write(VFS_Handle _handle, u64 offset, u64 size, const void* buffer) {
 
 void VFS_close(VFS_Handle _handle) {
     VFS_Handle_impl* handle = (VFS_Handle)_handle;
+
+    // This should update lastModified timestamp.
     // handle->node = NULL;
     // @TODO Free handle
 }
@@ -274,16 +271,17 @@ VFS_Mount* resolveMount(const char* cpath, int* sub_index) {
     int        largestFit_length = 0;
 
     // @TODO Optimize by sorting mounts by name length.
-    for (int i=0;i<g_next_mountIndex;i++) {
+    for (int i=0;i<g_mounts_len;i++) {
         VFS_Mount* mount = &g_mounts[i];
         
         bool eq = !strncmp(mount->name, cpath, mount->name_len);
+        if (!eq)  continue;
         bool delimiter = (cpath[mount->name_len] == '\0' || cpath[mount->name_len] == '/' || mount->name[mount->name_len-1] == '/');
-        if (eq && delimiter) {
-            if (mount->name_len > largestFit_length) {
-                largestFit = mount;
-                largestFit_length = mount->name_len;
-            }
+        if (!delimiter)  continue;
+        
+        if (mount->name_len > largestFit_length) {
+            largestFit = mount;
+            largestFit_length = mount->name_len;
         }
     }
 
@@ -321,171 +319,117 @@ exit:
 }
 
 
-// bool VFS_remove(const char* cpath) {
-//     bool returnValue = false;
-//     UNLOCK_INT(&g_vfs_lock);
+bool VFS_readdir(const char* path, u64* cookie, u64* entryCount, ELOS_DirectoryEntry* buffer) {
+    bool returnValue = false;
+    UNLOCK_INT(&g_vfs_lock);
 
+    /*
+    @TODO If directory has mounts then we won't get those since they
+       exist above file system on disk. We need to inject mounted directories.
+       Cookie also has to represent this now. Maybe we have a layered cookie.
+       Do we iterate mounts first or last?
+
+     We need to match look for mounts. If we have /media/usb0 and /media/usb1 then
+      we need special handling for /media which is neither a file system directory nor mount.
+      we need to prefix match other mounts. /media/extra/usb8 should also match giving us extra from /media.
+
+    We use layered cookies where iterator has it's own cookie numbering and here we add another layer.
+    For example if 63 bit is cleared we iterate mounts. If it is set we iterate entries in the directory.
+
+    We do this instead of adding directory entries for each mount. This keeps mount system separate from file system,
+    a path prefix resolution system.
+    */
+
+    VFS_FileObject* obj = resolveFileObject(path);
+    if (!obj) {
+        goto exit;
+    }
+
+    returnValue = iter_fat(obj->mount, obj, cookie, entryCount, buffer);
+
+exit:
+    UNLOCK_INT(&g_vfs_lock);
+    return returnValue;
+
+}
+
+bool VFS_remove(const char* cpath) {
+    bool returnValue = false;
+    UNLOCK_INT(&g_vfs_lock);
+
+    int subIndex;
+    VFS_Mount* mount = resolveMount(cpath, &subIndex);
+    if (!mount) {
+        goto exit;
+    }
     
-    
-//     VFS_VirtualNode* currentNode = g_vfs_root;
-
-//     int path_index = 0;
-
-//     cstring path = PTR_CSTR(cpath);
-
-//     while (currentNode) {
-
-//         // We do not allow multiple slashes to force consistency.
-//         // Neither do we allow .. or .
-//         if (path.ptr[path_index] != '/') {
-//             // Corrupt path
-//             goto exit;
-//         }
-        
-//         if (currentNode->mounted_diskDevice != DISK_NULL_DEVICE) {
-//             // Search mounted device.
-//             DiskInfo info = {0};
-//             DISK_get_info(currentNode->mounted_diskDevice, &info);
-//             printf("Searching mounted device %s (%d MB)\n", info.name, info.diskSize/0x100000);
+    cstring subpath = PTR_CSTR(cpath + subIndex);
             
-//             cstring subpath = PTR_CSTR(path.ptr + path_index);
-            
-//             u64 start_lba;
-//             u64 end_lba;
-//             bool foundPart = find_partition(currentNode->mounted_diskDevice, currentNode->mounted_partitionIndex, &start_lba, &end_lba);
-//             if (!foundPart) {
-//                 goto exit;
-//             }
-            
-//             returnValue = fat_remove(currentNode->mounted_diskDevice, start_lba, end_lba, subpath);
-//             goto exit;
-//         }
+    returnValue = fat_remove(mount, subpath);
 
-//         path_index++;
+exit:
+    UNLOCK_INT(&g_vfs_lock);
+    return returnValue;
+}
 
-//         cstring nodeName = {0};
+bool VFS_rename(const char* old_path, const char* new_path) {
+    bool returnValue = false;
+    UNLOCK_INT(&g_vfs_lock);
 
-//         int slash_pos = find_slash(path, path_index);
-//         if (slash_pos == -1) {
-//             // No slash
-//             nodeName.ptr = path.ptr + path_index;
-//             nodeName.len = path.len - path_index;
-//             path_index = path.len;
-//         } else {
-//             nodeName.ptr = path.ptr + path_index;
-//             nodeName.len = slash_pos - path_index;
-//             path_index = slash_pos;
-//         }
+    int subIndex;
+    VFS_Mount* oldMount = resolveMount(old_path, &subIndex);
+    if (!oldMount) {
+        goto exit;
+    }
 
+    int subIndex2;
+    VFS_Mount* newMount = resolveMount(new_path, &subIndex);
+    if (!newMount) {
+        goto exit;
+    }
 
+    if (oldMount != newMount) {
+        // @TODO Handle different mounts?
+        // Copy operation first?
+        // Then delete operation?
+        goto exit;
+    }
 
-//         if (slash_pos != -1) {
-//             VFS_VirtualNode* child = find_child_node(currentNode, nodeName);
-//             currentNode = child;
-//         } else {
-//             returnValue = remove_child_node(currentNode, nodeName);
-//             goto exit;
-//         }
-//     }
+    // @TODO Move file?
 
-// exit:
-//     UNLOCK_INT(&g_vfs_lock);
-//     return returnValue;
-// }
-
-// bool VFS_rename(const char* old_path, const char* new_path) {
- 
-//     bool returnValue = false;
-//     UNLOCK_INT(&g_vfs_lock);
+exit:
+    UNLOCK_INT(&g_vfs_lock);
+    return returnValue;
+}
 
 
-//     VFS_VirtualNode* old_node = find_node(old_path);
-    
-//     VFS_VirtualNode* new_node = find_node(new_path);
+bool VFS_copy(const char* old_path, const char* new_path) {
+    bool returnValue = false;
+    UNLOCK_INT(&g_vfs_lock);
 
-//     // If nodes on same file system then special thing.
+    int subIndex;
+    VFS_Mount* oldMount = resolveMount(old_path, &subIndex);
+    if (!oldMount) {
+        goto exit;
+    }
 
-//     // Otherwise copy data from one to the other.
+    int subIndex2;
+    VFS_Mount* newMount = resolveMount(new_path, &subIndex);
+    if (!newMount) {
+        goto exit;
+    }
 
-//     if (SameFileSystem(old_node, new_node) && IsFatSystem(old_node)) {
+    if (oldMount != newMount) {
+        // @TODO Handle different mounts.
+        goto exit;
+    }
 
-//     } else {
-//         VFS_remove(new_path);
-//         // Remove new path.
-//         char buffer[512];
-//         FileSize();
-//         ReadData();
-//     }
+    // @TODO Copy data?
 
-
-
-//     VFS_VirtualNode* currentNode = g_vfs_root;
-
-//     int path_index = 0;
-
-//     // @TODO Code copied from remove, need's cleanup.
-//     cstring path = PTR_CSTR(cpath);
-
-//     while (currentNode) {
-
-//         // We do not allow multiple slashes to force consistency.
-//         // Neither do we allow .. or .
-//         if (path.ptr[path_index] != '/') {
-//             // Corrupt path
-//             goto exit;
-//         }
-        
-//         if (currentNode->mounted_diskDevice != DISK_NULL_DEVICE) {
-//             // Search mounted device.
-//             DiskInfo info = {0};
-//             DISK_get_info(currentNode->mounted_diskDevice, &info);
-//             printf("Searching mounted device %s (%d MB)\n", info.name, info.diskSize/0x100000);
-            
-//             cstring subpath = PTR_CSTR(path.ptr + path_index);
-            
-//             u64 start_lba;
-//             u64 end_lba;
-//             bool foundPart = find_partition(currentNode->mounted_diskDevice, currentNode->mounted_partitionIndex, &start_lba, &end_lba);
-//             if (!foundPart) {
-//                 goto exit;
-//             }
-            
-//             returnValue = fat_remove(currentNode->mounted_diskDevice, start_lba, end_lba, subpath);
-//             goto exit;
-//         }
-
-//         path_index++;
-
-//         cstring nodeName = {0};
-
-//         int slash_pos = find_slash(path, path_index);
-//         if (slash_pos == -1) {
-//             // No slash
-//             nodeName.ptr = path.ptr + path_index;
-//             nodeName.len = path.len - path_index;
-//             path_index = path.len;
-//         } else {
-//             nodeName.ptr = path.ptr + path_index;
-//             nodeName.len = slash_pos - path_index;
-//             path_index = slash_pos;
-//         }
-
-
-
-//         if (slash_pos != -1) {
-//             VFS_VirtualNode* child = find_child_node(currentNode, nodeName);
-//             currentNode = child;
-//         } else {
-//             returnValue = remove_child_node(currentNode, nodeName);
-//             goto exit;
-//         }
-//     }
-
-// exit:
-//     UNLOCK_INT(&g_vfs_lock);
-//     return returnValue;
-// }
-
+exit:
+    UNLOCK_INT(&g_vfs_lock);
+    return returnValue;
+}
 
 
 bool find_partition(DiskDevice device, int partitionIndex, u64* start_lba, u64* end_lba) {
@@ -573,5 +517,33 @@ bool find_partition(DiskDevice device, int partitionIndex, u64* start_lba, u64* 
         printf("Found GPT Partition '%s' (#%d) at LBA %d - %d\n", partitionName, partitionIndex, *start_lba, *end_lba);
         return true;
     }
+}
+
+
+//######################
+//    Debug functions
+//######################
+
+
+void VFS_dump_mounts(FN_VFS_print printCallback, void* userData) {
+    LOCK_INT(&g_vfs_lock);
+
+    char tempBuffer[256];
+    for (int i=0;i<g_mounts_len;i++) {
+        VFS_Mount* mount = &g_mounts[i];
+
+        DiskInfo info;
+        DISK_get_info(mount->diskDevice, &info);
+        
+        int length = snprintf(tempBuffer, sizeof(tempBuffer),
+            "%d: '%s' disk='%s' partIdx=%d [%zx : %zx]\n", i, mount->name,
+            info.name, mount->partitionIndex, mount->start_lba, mount->end_lba);
+
+        // A little dangerous to have a callback inside lock interrupt section.
+        // Callback may itself lock VFS if it writes to a log file.
+        printCallback(tempBuffer, length, userData);
+    }
+
+    UNLOCK_INT(&g_vfs_lock);
 }
 

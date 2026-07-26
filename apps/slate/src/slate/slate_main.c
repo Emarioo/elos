@@ -81,14 +81,15 @@ bool get_event(ELOS_UserEvent* event) {
     userEvents->tail++;
     return true;
 }
-const char* prompts[] = {
-    "Hello",
-    "World",
-};
+
+
+void dumpdir(const char* path, int depth);
 
 void _start() {
 
-    printf("%s %s\n", prompts[0], prompts[1]);
+    // @NOCHECKIN Temporary
+    dumpdir("/", 0);
+    
 
     SYS_ticks_per_second(&ticks_per_second);
 
@@ -355,3 +356,53 @@ void editor_loop() {
 
 }
 
+
+
+void dumpdir(const char* path, int depth) {
+
+    u64 cookie = 0;
+    u64 entryCount;
+
+    ELOS_DirectoryEntry dirEntries[3]; // uneven number to encounter edge cases
+    int dirEntries_cap = ARRAY_LENGTH(dirEntries);
+
+    #define INDENT() for (int j=0;j<depth;j++) { printf("  "); }
+
+    INDENT()
+    const char* firstSlash = strrchr(path, '/');
+    if (!firstSlash)
+        firstSlash = path;
+    printf("%s\n", firstSlash);
+    
+    while (1) {
+        entryCount = dirEntries_cap;
+        ELOS_Error err = elos_readdir(path, &cookie, &entryCount, dirEntries);
+        if (err != ELOS_OK) {
+            printf("elos_readdir: returned false, error\n");
+            break;
+        }
+        char fullpath[256];
+        for (int i=0;i<entryCount;i++) {
+            ELOS_DirectoryEntry* entry = &dirEntries[i];
+
+            if (entry->isDirectory) {
+                if (path[strlen(path)-1] == '/')
+                    snprintf(fullpath, sizeof(fullpath), "%s%s", path, entry->name);
+                else
+                    snprintf(fullpath, sizeof(fullpath), "%s/%s", path, entry->name);
+                dumpdir(fullpath, depth+1);
+                // INDENT()
+                // printf("  %s\n", entry->name);
+            } else {
+                INDENT()
+                printf("  %s\n", entry->name);
+            }
+        }
+
+        if (entryCount != dirEntries_cap) {
+            // The end
+            break;
+        }
+    }
+
+}

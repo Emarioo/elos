@@ -46,6 +46,7 @@ typedef struct {
     // Below must be updated when we rename/move file.
     u32 direntrySector; // Relative to start of partition (start_lba + direntrySector is relative to whole disk).
     u32 direntryIndex;
+    bool isRootDirectory;
 
     // VFS_VirtualNode* node;
     VFS_Mount*  mount;

@@ -21,6 +21,7 @@ typedef enum {
     ELOS_CAP_DENIED,
     ELOS_INVALID_PARAM,
     ELOS_INVALID_SYSCALL,
+    ELOS_INVALID_OPERATION,
     ELOS_IPC_FULL,
 } ELOS_Error;
 
@@ -329,6 +330,14 @@ typedef struct {
     u64  lastWriteTime_us;
 } ELOS_FileInfo;
 
+typedef struct {
+    char name[63];
+    u8   name_len;
+    bool isDirectory;
+    bool isReadOnly;
+    u64  fileSize;
+    u64  lastWriteTime_us;
+} ELOS_DirectoryEntry;
 
 typedef struct {
     ELOS_AsyncOperation operation;
@@ -361,10 +370,24 @@ typedef struct {
             ELOS_FileInfo* fileInfo;
         } info;
         struct {
-            ELOS_File file;
-            u64       entryIndex;
-            u64*      entryCount;
-            void*     buffer;
+            const char* path;
+        } remove;
+        struct {
+            const char* oldPath;
+            const char* newPath;
+        } rename;
+        struct {
+            const char* srcPath;
+            const char* dstPath;
+        } copy;
+        struct {
+            const char* path;
+        } mkdir;
+        struct {
+            const char*          path;
+            u64                  cookie;
+            u64                  maxEntries;
+            ELOS_DirectoryEntry* buffer;
         } readdir;
     };
 } ELOS_AsyncRequest;
@@ -384,6 +407,10 @@ typedef struct {
         struct {
             u64 writtenBytes;
         } write;
+        struct {
+            u64 cookie;
+            u64 entryCount;
+        } readdir;
     };
 } ELOS_AsyncCompletion;
 

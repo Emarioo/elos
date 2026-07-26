@@ -180,6 +180,10 @@ bool parse_elf(ParseContext* ctx) {
 
     Elf64_Shdr* relSection = NULL;
 
+
+    #define MAPPED
+    // #define MAPPED printf("ELFLOAD %zx:%zx\n", vaddr, vaddr + section->sh_size);
+
     // first section is NULL
     for (int si = 1; si < elfHeader->e_shnum; si++) {
         Elf64_Shdr* section = &sections[si];
@@ -195,18 +199,23 @@ bool parse_elf(ParseContext* ctx) {
         //    Issues with exec/read only flags otherwise.
 
         if (!strcmp(name, ".text")) {
+            MAPPED
             PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE|PMEM_FLAG_READ_ONLY|PMEM_FLAG_EXECUTABLE);
             memcpy(vaddr, src, section->sh_size);
         } else if (!strcmp(name, ".rodata")) {
+            MAPPED
             PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE|PMEM_FLAG_READ_ONLY);
             memcpy(vaddr, src, section->sh_size);
         } else if (!strcmp(name, ".data")) {
+            MAPPED
             PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE);
             memcpy(vaddr, src, section->sh_size);
         } else if (!strcmp(name, ".data.rel.ro")) {
+            MAPPED
             PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE|PMEM_FLAG_READ_ONLY);
             memcpy(vaddr, src, section->sh_size);
         } else if (!strcmp(name, ".bss")) {
+            MAPPED
             PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE);
             memset(vaddr, 0, section->sh_size);
         } else if (strstr(name, ".rela")) {

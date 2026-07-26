@@ -68,7 +68,7 @@ FAT_ID create_directory(FATContext* context, FAT_ID currentDir, const cstring su
 bool delete_entry(FATContext* context, FAT_ID currentDir, const cstring subname);
 
 
-fat__DirectoryEntry* fat_next_entry(FATContext* context, FAT_ID currentDir, int* entryIndex, char* longName);
+fat__DirectoryEntry* fat_next_entry(FATContext* context, FAT_ID currentDir, u32* entryIndex, char* longName);
 
 int get_free_cluster(FATContext* context);
 
@@ -100,6 +100,7 @@ int fat__get_fat(FATContext* context, int cluster);
 int fat__set_fat(FATContext* context, int cluster, uint32_t value);
 
 VFS_FileObject* search_fat(VFS_Mount* mount, const cstring path);
+bool iter_fat(VFS_Mount* mount, VFS_FileObject* obj, u64* cookie, u64* entryCount, ELOS_DirectoryEntry* entries);
 u64 read_fat(VFS_Handle_impl* handle, u64 offset, u64 size, void* buffer);
 u64 write_fat(VFS_Handle_impl* handle, u64 offset, u64 size, const void* buffer);
 

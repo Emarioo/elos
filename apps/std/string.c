@@ -21,39 +21,39 @@ char *strdup(const char *s)
     return out;
 }
 
-char *strrchr(const char *s, int c)
-{
-    char *last = NULL;
+// char *strrchr(const char *s, int c)
+// {
+//     char *last = NULL;
 
-    while (*s)
-    {
-        if (*s == (char)c)
-            last = (char *)s;
+//     while (*s)
+//     {
+//         if (*s == (char)c)
+//             last = (char *)s;
 
-        s++;
-    }
+//         s++;
+//     }
 
-    if (c == 0)
-        return (char *)s;
+//     if (c == 0)
+//         return (char *)s;
 
-    return last;
-}
+//     return last;
+// }
 
-char *strchr(const char *s, int c)
-{
-    while (*s)
-    {
-        if (*s == (char)c)
-            return (char *)s;
+// char *strchr(const char *s, int c)
+// {
+//     while (*s)
+//     {
+//         if (*s == (char)c)
+//             return (char *)s;
 
-        s++;
-    }
+//         s++;
+//     }
 
-    if (c == 0)
-        return (char *)s;
+//     if (c == 0)
+//         return (char *)s;
 
-    return NULL;
-}
+//     return NULL;
+// }
 
 // char *strstr(const char *haystack, const char *needle)
 // {

@@ -299,11 +299,13 @@ bool map_user_buffer(PageTable* userTable, const void* buffer, size_t size) {
     uintptr_t virtAddressEnd = ((uintptr_t)buffer + size + PAGE_SIZE-1) & ~(uintptr_t)(PAGE_SIZE-1);
     while (virtAddress < virtAddressEnd) {
         uintptr_t phys = (uintptr_t)PMEM_virt_to_phys(userTable, (void*)virtAddress);
-        if (phys == 0)
+        if (phys == 0) {
+            printf("map_user_buffer: Not mapped by user 0x%zx\n", virtAddress);
             return false;
+        }
         bool mapped = PMEM_map_memory(kernelPageTable, (void*)virtAddress, (void*)phys, PAGE_SIZE, PMEM_FLAG_NONE);
         if (!mapped) {
-            printf("map_user_buffer: Could not map 0x%x -> 0x%x\n", virtAddress, phys);
+            printf("map_user_buffer: Could not map 0x%zx -> 0x%zx\n", virtAddress, phys);
             return false;
         }
         virtAddress += PAGE_SIZE;
@@ -311,149 +313,227 @@ bool map_user_buffer(PageTable* userTable, const void* buffer, size_t size) {
     return true;
 }
 
+bool map_user_path(PageTable* userTable, const char* path) {
+    PageTable* kernelPageTable = (void*)read_cr3();
+
+    const char* pathPointer = path;
+    while (1) {
+        // Map first page
+        uintptr_t phys = (uintptr_t)PMEM_virt_to_phys(userTable, (void*)pathPointer);
+        if (phys == 0) {
+            printf("map_user_path: Null terminator is not mapped 0x%zx\n", pathPointer);
+            break;
+        }
+        bool mapped = PMEM_map_memory(kernelPageTable, (void*)pathPointer, (void*)phys, PAGE_SIZE, PMEM_FLAG_NONE);
+        if (!mapped) {
+            printf("map_user_path: Could not map 0x%zx -> 0x%zx\n", pathPointer, phys);
+            break;
+        }
+
+        // Find null terminator
+        const char* pathPointerEnd = (const char*)(((uintptr_t)pathPointer + PAGE_SIZE) & ~(uintptr_t)(PAGE_SIZE-1));
+        while (pathPointer != pathPointerEnd) {
+            if (*pathPointer == 0) {
+                return true;
+            }
+            pathPointer++;
+        }
+
+        // Could not find terminator try next page.
+    }
+    return false;
+}
+
 void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
-    volatile ELOS_AsyncCompletion* completion;
+    ELOS_AsyncCompletion  completion = {0};
+    completion.operation = request->operation;
+    completion.userData = request->userData;
+    completion.error = ELOS_GENERIC_ERROR;
+    completion.flags = 0;
 
-    // We assume one producer on the kernel side.
-    u32 head = ring->completionRing->head & ring->ringMask;
-    completion = &ring->completionRing->entries[head];
-    completion->flags = 0;
+    /* @TODO We need to sanitise and verify all buffers and parameters are valid.
+            We assume they are at the moment which isn't good.
+            We need to lock buffers to make sure they stay valid too.
+            This includes if a process segfaults. The memory must stay valid
+            temporarily for the async request handler to finish.
+            Or we abort the async handler but we may leave VFS in a bad state
+            so I would rather finish and do unncecessary work where buffer request by
+            now dead process is deleted when async handler is done at some point.
 
-    // @TODO Make some macros for redundant stuff so when we need to refactor
-    //   it's less manual work.
+            Check that buffer is a valid address in user address space.
+            The address itself is not enough, all pages accessed by [buffer:size]
+            needs to be checked.
 
-    #define ASYNC_COMPLETE() \
-        completion->operation = request->operation;   \
-        completion->userData = request->userData;     \
-        completion->flags = 0;                        \
-        __atomic_thread_fence(__ATOMIC_ACQUIRE);      \
-        __atomic_fetch_add(&ring->completionRing->head, 1, __ATOMIC_SEQ_CST); \
-        __atomic_thread_fence(__ATOMIC_RELEASE);      \
-        ring->thread->waitingForIO = false;
+            Next we need to write file data into the buffer.
+            We can't simply take virtual to physical address and pass
+            that because the whole buffer may not access pages contiguously.
+    */
+    bool _temp_mapped;
 
+    const char* safePath;
+    void*       safeBuffer;
+    const void* safeConstBuffer;
+    size_t      safeBufferSize;
+    VFS_Handle  safeVFSHandle;
+
+    #define GET_SANITIZED_PATH(out_PATH, PATH) \
+        *out_PATH = PATH; \
+        _temp_mapped = map_user_path((void*)ring->thread->frame.cr3, PATH); \
+        if (!_temp_mapped)  break;
+
+    #define GET_SANITIZED_FILE(out_FILE, FILE) \
+        *out_FILE = VFS_HANDLE_TO_ELOS_FILE(FILE);
+
+    #define GET_SANITIZED_BUFFER(out_BUFFER, out_SIZE, BUFFER, SIZE) \
+        *out_BUFFER = BUFFER; \
+        *out_SIZE = SIZE; \
+        _temp_mapped = map_user_buffer((void*)ring->thread->frame.cr3, BUFFER, SIZE); \
+        if (!_temp_mapped)  break;
+
+    #define GET_SANITIZED_STRUCT(out_STRUCT_PTR, STRUCT_PTR) \
+        *(void**)out_STRUCT_PTR = STRUCT_PTR; \
+        _temp_mapped = map_user_buffer((void*)ring->thread->frame.cr3, STRUCT_PTR, sizeof(*STRUCT_PTR)); \
+        if (!_temp_mapped)  break;
 
     switch (request->operation) {
         case ELOS_ASYNC_FILE_OPEN: {
-
-            VFS_Handle handle = VFS_open(request->open.path, 0);
-
-            completion->open.file = NULL;
-            if (handle) {
-                completion->error = ELOS_OK;
-                completion->open.file = VFS_HANDLE_TO_ELOS_FILE(handle);
-            } else {
-                completion->error = ELOS_GENERIC_ERROR;
+            GET_SANITIZED_PATH(&safePath, request->open.path);
+            
+            VFS_Handle handle = VFS_open(safePath, request->open.flags);
+            if (!handle) {
+                break;
             }
 
-            ASYNC_COMPLETE();
-
-            // @TODO Notify threads that called 'wait_async_ring'
-            
+            completion.open.file = VFS_HANDLE_TO_ELOS_FILE(handle);
+            completion.error = ELOS_OK;
         } break;
         case ELOS_ASYNC_FILE_READ: {
 
-            // @TODO Check that buffer is a valid address in user address space.
-            //    The address itself is not enough, all pages accessed by [buffer:size]
-            //    needs to be checked.
+            GET_SANITIZED_BUFFER(&safeBuffer, &safeBufferSize, request->read.buffer, request->read.size);
+            GET_SANITIZED_FILE(&safeVFSHandle, request->read.file);
 
-            // @TODO Next we need to write file data into the buffer.
-            //   We can't simply take virtual to physical address and pass
-            //   that because the whole buffer may not access pages contiguously.
+            u64 result = VFS_read(safeVFSHandle, request->read.offset, safeBufferSize, safeBuffer);
 
-            //   We can map the buffer into kernel space.
-            //   Utilizing paging i
-
-            bool mapped = map_user_buffer((void*)ring->thread->frame.cr3, request->read.buffer, request->read.size);
-            if (!mapped) {
-                completion->error = ELOS_GENERIC_ERROR;
-            } else {
-                // @TODO What if application frees the buffer while it's being written to?
-                u64 result = VFS_read(ELOS_FILE_TO_VFS_HANDLE(request->read.file), request->read.offset, request->read.size, request->read.buffer);
-
-                completion->read.readBytes = 0;
-                if (result == request->read.size) {
-                    completion->error = ELOS_OK;
-                    completion->read.readBytes = result;
-                } else {
-                    completion->error = ELOS_GENERIC_ERROR;
-                }
+            if (result != safeBufferSize) {
+                break;
             }
 
-            ASYNC_COMPLETE();
-
-            // @TODO Notify threads that called 'wait_async_ring'
-            
+            completion.error = ELOS_OK;
+            completion.read.readBytes = result;
         } break;
         case ELOS_ASYNC_FILE_WRITE: {
             
-            // @TODO What if application frees the buffer while it's being read from to?
+            GET_SANITIZED_BUFFER(&safeConstBuffer, &safeBufferSize, request->write.buffer, request->write.size);
+            GET_SANITIZED_FILE(&safeVFSHandle, request->write.file);
+            
+            u64 result = VFS_write(safeVFSHandle, request->write.offset, safeBufferSize, safeConstBuffer);
 
-            bool mapped = map_user_buffer((void*)ring->thread->frame.cr3, request->write.buffer, request->write.size);
-
-            if (!mapped) {
-                completion->error = ELOS_GENERIC_ERROR;
-            } else {
-                u64 result = VFS_write(ELOS_FILE_TO_VFS_HANDLE(request->write.file),
-                    request->write.offset, request->write.size, request->write.buffer);
-
-                completion->write.writtenBytes = 0;
-                if (result == request->write.size) {
-                    completion->error = ELOS_OK;
-                    completion->write.writtenBytes = result;
-                } else {
-                    completion->error = ELOS_GENERIC_ERROR;
-                }
+            if (result != request->write.size) {
+                break;
             }
-            
-            ASYNC_COMPLETE();
 
-            // @TODO Notify threads that called 'wait_async_ring'
-            
+            completion.error = ELOS_OK;
+            completion.write.writtenBytes = result;
         } break;
         case ELOS_ASYNC_FILE_CLOSE: {
+            GET_SANITIZED_FILE(&safeVFSHandle, request->write.file);
             
-            VFS_close(request->close.file);
+            VFS_close(safeVFSHandle);
 
-            completion->flags = 0;
-            completion->error = ELOS_OK;
-
-            ASYNC_COMPLETE();
-
-            // @TODO Notify threads that called 'wait_async_ring'
-            
+            completion.error = ELOS_OK;
         } break;
         case ELOS_ASYNC_FILE_INFO: {
             VFS_HandleInfo info;
+            VFS_HandleInfo* safeVFSHandleInfo;
 
-            bool mapped = map_user_buffer((void*)ring->thread->frame.cr3, request->info.fileInfo, sizeof(*request->info.fileInfo));
+            GET_SANITIZED_FILE(&safeVFSHandle, request->write.file);
+            GET_SANITIZED_STRUCT(&safeVFSHandleInfo, request->info.fileInfo);
 
-            if (!mapped) {
-                completion->error = ELOS_GENERIC_ERROR;
-            } else {
+            // @TODO Handle errors!?
+            VFS_info(safeVFSHandle, &info);
 
-                // @TODO Handle errors!?
-                VFS_info(ELOS_FILE_TO_VFS_HANDLE(request->info.file), &info);
+            safeVFSHandleInfo->fileSize          = info.fileSize;
+            safeVFSHandleInfo->blockSize         = info.blockSize;
+            safeVFSHandleInfo->isDirectory       = info.isDirectory;
+            safeVFSHandleInfo->readOnly          = info.readOnly;
+            safeVFSHandleInfo->lastWriteTime_us  = info.lastWriteTime_us;
+            
+            completion.error = ELOS_OK;
+            
+        } break;
+        case ELOS_ASYNC_FILE_REMOVE: {
+            GET_SANITIZED_PATH(&safePath, request->remove.path);
 
-                // The info struct in request must be mapped.
-                // How do we ensure that here?
-                request->info.fileInfo->fileSize          = info.fileSize;
-                request->info.fileInfo->blockSize         = info.blockSize;
-                request->info.fileInfo->isDirectory       = info.isDirectory;
-                request->info.fileInfo->readOnly          = info.readOnly;
-                request->info.fileInfo->lastWriteTime_us  = info.lastWriteTime_us;
-
-                completion->flags = 0;
-                completion->error = ELOS_OK;
+            bool yes = VFS_remove(safePath);
+            if (!yes) {
+                break;
             }
 
-            ASYNC_COMPLETE();
+            completion.error = ELOS_OK;
+        } break;
+        case ELOS_ASYNC_FILE_RENAME: {
+            const char* newPath;
+            GET_SANITIZED_PATH(&safePath, request->rename.oldPath);
+            GET_SANITIZED_PATH(&newPath, request->rename.newPath);
 
-            // @TODO Notify threads that called 'wait_async_ring'
-            
+            bool yes = VFS_rename(safePath, newPath);
+            if (!yes) {
+                break;
+            }
+
+            completion.error = ELOS_OK;
+        } break;
+        case ELOS_ASYNC_FILE_COPY: {
+            const char* dstPath;
+            GET_SANITIZED_PATH(&safePath, request->copy.srcPath);
+            GET_SANITIZED_PATH(&dstPath, request->copy.dstPath);
+
+            bool yes = VFS_copy(safePath, dstPath);
+            if (!yes) {
+                break;
+            }
+
+            completion.error = ELOS_OK;
+        } break;
+        case ELOS_ASYNC_FILE_MKDIR: {
+            GET_SANITIZED_PATH(&safePath, request->mkdir.path);
+
+            bool yes = VFS_mkdir(safePath);
+            if (!yes) {
+                break;
+            }
+
+            completion.error = ELOS_OK;
+        } break;
+        case ELOS_ASYNC_FILE_READDIR: {
+            GET_SANITIZED_PATH(&safePath, request->readdir.path);
+            GET_SANITIZED_BUFFER(&safeBuffer, &safeBufferSize, request->readdir.buffer, request->readdir.maxEntries * sizeof(*request->readdir.buffer));
+
+            u64 cookie = request->readdir.cookie;
+            u64 entryCount = request->readdir.maxEntries;
+            bool yes = VFS_readdir(safePath, &cookie, &entryCount, safeBuffer);
+            completion.readdir.cookie = cookie;
+            completion.readdir.entryCount = entryCount;
+
+            if (!yes) {
+                break;
+            }
+            completion.error = ELOS_OK;
         } break;
         default: {
             printf("ASYNC_request_handler: Unhandled operation %d (0 is invalid)\n", request->operation);
+            completion.error = ELOS_INVALID_OPERATION;
         } break;
     }
 
+    // We assume one producer on the kernel side.
+    u32 head = ring->completionRing->head & ring->ringMask;
+    ring->completionRing->entries[head] = completion;
+    __atomic_thread_fence(__ATOMIC_ACQUIRE);
+    __atomic_fetch_add(&ring->completionRing->head, 1, __ATOMIC_SEQ_CST);
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+    // @TODO Notify all threads that called 'wait_async_ring'.
+    //    We only have one thread per process at the moment.
+    //    We don't have processes yet.
+    ring->thread->waitingForIO = false;
 }

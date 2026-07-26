@@ -8,8 +8,11 @@
 #include <stddef.h>
 #include <stdarg.h>
 #include <errno.h>
-
 #include <stdio.h>
+
+#include <ctype.h>
+
+#include "async_io.h"
 // #include <sys/stat.h>
 // #include <stdlib.h>
 
@@ -85,6 +88,68 @@ int atoi(const char *s)
     return value * sign;
 }
 
+double atof(const char *str) {
+    while (isspace((unsigned char)*str))
+        str++;
+
+    int sign = 1;
+    if (*str == '-') {
+        sign = -1;
+        str++;
+    } else if (*str == '+') {
+        str++;
+    }
+
+    double value = 0.0;
+
+    while (*str >= '0' && *str <= '9') {
+        value = value * 10.0 + (*str - '0');
+        str++;
+    }
+
+    if (*str == '.') {
+        str++;
+
+        double place = 0.1;
+
+        while (*str >= '0' && *str <= '9') {
+            value += (*str - '0') * place;
+            place *= 0.1;
+            str++;
+        }
+    }
+
+    if (*str == 'e' || *str == 'E') {
+        str++;
+
+        int expSign = 1;
+        if (*str == '-') {
+            expSign = -1;
+            str++;
+        } else if (*str == '+') {
+            str++;
+        }
+
+        int exponent = 0;
+        while (*str >= '0' && *str <= '9') {
+            exponent = exponent * 10 + (*str - '0');
+            str++;
+        }
+
+        double scale = 1.0;
+        while (exponent--) {
+            scale *= 10.0;
+        }
+
+        if (expSign > 0)
+            value *= scale;
+        else
+            value /= scale;
+    }
+
+    return sign * value;
+}
+
 void exit(int code)
 {
     SYS_debug_log("EXIT\n", 5);
@@ -109,10 +174,6 @@ int putchar(int c)
     return c;
 }
 
-
-
-typedef u32 mode_t;
-
 const unsigned short int** __ctype_b_loc(void) {
     static unsigned short table[256];
     static const unsigned short* ptr = table;
@@ -121,26 +182,7 @@ const unsigned short int** __ctype_b_loc(void) {
     return &ptr;
 }
 
-int remove(const char* path) {
-    printf("remove(\"%s\")\n", path);
-    errno = ENOSYS;
-    return -1;
-    // @TODO Remove file
-    // return 0;
-}
 
-int rename(const char* oldpath, const char* newpath) {
-    printf("rename(\"%s\", \"%s\")\n", oldpath, newpath);
-    errno = ENOSYS;
-    return -1;
-    // @TODO Move file
-    // return 0;
-}
-
-int fflush(FILE* stream) {
-    (void)stream;
-    return 0;
-}
 
 int system(const char* command) {
     printf("system(\"%s\")\n", command ? command : "(null)");
@@ -149,16 +191,7 @@ int system(const char* command) {
 }
 
 
-double atof(const char* str) {
-    printf("atof(\"%s\")\n", str);
-    return 0.0;
-}
 
-int mkdir(const char* path, mode_t mode) {
-    printf("mkdir(\"%s\", %o)\n", path, (unsigned)mode);
-    errno = ENOSYS;
-    return -1;
-}
 
 int* __errno(void) {
     static int myErrno;
@@ -169,3 +202,4 @@ int* __errno_location(void) {
     static int myErrno;
     return &myErrno;
 }
+

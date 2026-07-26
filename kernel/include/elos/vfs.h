@@ -7,6 +7,7 @@
 #pragma once
 
 #include "elos/disk.h"
+#include "elos/syscalls.h" // to get ELOS_DirectoryEntry
 
 
 //###############################
@@ -28,10 +29,6 @@ typedef struct {
 } VFS_HandleInfo;
 
 
-typedef struct {
-    char name[64];
-    VFS_HandleInfo info;
-} VFS_DirectoryEntry;
 
 typedef void* VFS_Handle;
 
@@ -69,7 +66,22 @@ u64 VFS_read(VFS_Handle handle, u64 offset, u64 size, void* buffer);
 u64 VFS_write(VFS_Handle handle, u64 offset, u64 size, const void* buffer);
 
 /*
-    Only for directories
-*/
-bool VFS_next(VFS_Handle handle, VFS_DirectoryEntry* out_entry);
+    @param path        Should refer to a directory.
+    @param cookie      A pointer to a cookie which holds internal state. Set to 0 first time and do not touch on subsequent calls.
+    @param entryCount  The max entries specified by 'buffer' on input. On output how many entries was put into the buffer.
+                       If the count is less than the max entries then the function finished. True is still returned to indicate
+                       that the function didn't fail.
+    @param buffer      A buffer to directory entries to fill with information.
 
+    @return True on success, false on failure. We should provide enum for more detailed errors.
+*/
+bool VFS_readdir(const char* path, u64* cookie, u64* entryCount, ELOS_DirectoryEntry* buffer);
+
+
+//##########################
+//    Debug functions
+//##########################
+
+typedef void(*FN_VFS_print)(const char* buffer, size_t size, void* userData);
+
+void VFS_dump_mounts(FN_VFS_print printCallback, void* userData);

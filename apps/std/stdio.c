@@ -8,6 +8,9 @@
 
 #include "stdlib.h"
 #include "stdio.h"
+#include <errno.h>
+
+typedef u32 mode_t;
 
 
 struct FILE {
@@ -54,6 +57,10 @@ int vfprintf(FILE* stream, const char* format, va_list args) {
     return len;
 }
 
+int fflush(FILE* stream) {
+    (void)stream;
+    return 0;
+}
 
 FILE *fopen(const char *restrict path, const char *restrict mode) {
     ELOS_Error error;
@@ -384,3 +391,117 @@ int sscanf(const char *str, const char *fmt, ...)
     va_end(args);
     return ret;
 }
+
+
+int remove(const char* path) {
+    ELOS_Error error;
+
+    ELOS_AsyncRequest req;
+    ELOS_AsyncCompletion cqe;
+    Async_RequestID requestID;
+
+    req.operation   = ELOS_ASYNC_FILE_REMOVE;
+    req.flags       = 0;
+
+    req.remove.path  = path;
+
+    requestID = async_submit(&req);
+    bool res = async_wait(requestID, &cqe, 0);
+    if (!res) {
+        errno = ENOENT;
+        return -1;
+    }
+
+    if (cqe.error != ELOS_OK) {
+        errno = ENOENT;
+        return -1;
+    }
+
+    return 0;
+}
+
+int rename(const char* oldpath, const char* newpath) {
+    ELOS_Error error;
+
+    ELOS_AsyncRequest req;
+    ELOS_AsyncCompletion cqe;
+    Async_RequestID requestID;
+
+    req.operation   = ELOS_ASYNC_FILE_RENAME;
+    req.flags       = 0;
+
+    req.rename.oldPath = oldpath;
+    req.rename.newPath = newpath;
+
+    requestID = async_submit(&req);
+    bool res = async_wait(requestID, &cqe, 0);
+    if (!res) {
+        errno = ENOENT;
+        return -1;
+    }
+
+    if (cqe.error != ELOS_OK) {
+        errno = ENOENT;
+        return -1;
+    }
+
+    return 0;
+}
+int mkdir(const char* path, mode_t mode) {
+    ELOS_Error error;
+
+    ELOS_AsyncRequest req;
+    ELOS_AsyncCompletion cqe;
+    Async_RequestID requestID;
+
+    req.operation   = ELOS_ASYNC_FILE_MKDIR;
+    req.flags       = 0;
+
+    req.mkdir.path = path;
+
+    requestID = async_submit(&req);
+    bool res = async_wait(requestID, &cqe, 0);
+    if (!res) {
+        errno = ENOENT;
+        return -1;
+    }
+
+    if (cqe.error != ELOS_OK) {
+        errno = ENOENT;
+        return -1;
+    }
+
+    return 0;
+}
+
+
+ELOS_Error elos_readdir(const char* path, u64* cookie, u64* entryCount, ELOS_DirectoryEntry* buffer) {
+    
+    ELOS_Error error;
+
+    ELOS_AsyncRequest req;
+    ELOS_AsyncCompletion cqe;
+    Async_RequestID requestID;
+
+    req.operation   = ELOS_ASYNC_FILE_READDIR;
+    req.flags       = 0;
+
+    req.readdir.path = path;
+    req.readdir.cookie = *cookie;
+    req.readdir.maxEntries = *entryCount;
+    req.readdir.buffer = buffer;
+
+    requestID = async_submit(&req);
+    bool res = async_wait(requestID, &cqe, 0);
+    if (!res) {
+        return ELOS_GENERIC_ERROR;
+    }
+
+    *cookie = cqe.readdir.cookie;
+    *entryCount = cqe.readdir.entryCount;
+
+    return cqe.error;
+}
+
+
+

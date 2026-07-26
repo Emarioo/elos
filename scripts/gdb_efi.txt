@@ -8,7 +8,7 @@ add-symbol-file bin/boot.elf -o $base
 add-symbol-file bin/kernel.elf
 add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/doom/doom.elf -o 0xC1000000
 # add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/slate/slate.elf -o 0xC1000000
-hb exception_handler
+# hb exception_handler
 
 hb efi_entry
 c

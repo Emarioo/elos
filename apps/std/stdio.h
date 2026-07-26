@@ -18,6 +18,7 @@ int printf(const char* format, ...);
 int fprintf(FILE* stream, const char* format, ...);
 int vfprintf(FILE* stream, const char* format, va_list args);
 
+int fflush(FILE* stream);
 int sscanf(const char* str, const char* format, ...);
 
 FILE *fopen(const char *restrict path, const char *restrict mode);
@@ -28,3 +29,6 @@ long ftell(FILE *stream);
 
 size_t fread(void* ptr, size_t size, size_t n, FILE *restrict stream);
 size_t fwrite(const void* ptr, size_t size, size_t n, FILE *restrict stream);
+
+// Move elos specific elsewhere
+ELOS_Error elos_readdir(const char* path, u64* cookie, u64* entryCount, ELOS_DirectoryEntry* buffer);

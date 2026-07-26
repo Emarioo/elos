@@ -26,6 +26,9 @@ static inline cstring PTR_CSTR(const char* s) {
     cstring st = { s, strlen(s) };
     return st;
 }
+
+char *strrchr(const char *s, int c);
+char *strchr(const char *s, int c);
 char *strstr(const char *haystack, const char *needle);
 // static inline cstring sub_cstring(const cstring str, int offset) {
 //     return (cstring){ str.ptr + offset, str.len - offset };
