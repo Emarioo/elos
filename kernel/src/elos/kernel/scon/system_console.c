@@ -108,7 +108,7 @@ void SCON_main() {
         }
         
         while (hasKeyEvent) {
-            if (keyEvent.keycode == KEY_ENTER && keyEvent.pressed) {
+            if (keyEvent.keycode == ELOSKEY_ENTER && keyEvent.pressed) {
                 cstring cmd = { inputBuffer.text, inputBuffer_len };
                 send_command(cmd);
                 inputBuffer_len = 0;
@@ -176,27 +176,27 @@ void edit_text(char* text_ptr, int text_max, int* inout_text_len, ELOS_Keycode k
 
     int text_len = *inout_text_len;
 
-    if (keycode == KEY_LEFT_ARROW) {
+    if (keycode == ELOSKEY_LEFT_ARROW) {
         if (*cursor > 0) {
             (*cursor)--;
         }
         // @TODO Handle shift selection and delete.
         //   ctrl+c as well?
-    } else if (keycode == KEY_RIGHT_ARROW) {
+    } else if (keycode == ELOSKEY_RIGHT_ARROW) {
         if (*cursor < text_len) {
             (*cursor)++;
         }
-    } else if (keycode == KEY_DELETE) {
+    } else if (keycode == ELOSKEY_DELETE) {
         if (text_len <= *cursor ) {
             return;
         }
         memmove(text_ptr + *cursor, text_ptr + *cursor+1, text_len - *cursor - 1);
         text_len--;
-    } else if (keycode == KEY_HOME) {
+    } else if (keycode == ELOSKEY_HOME) {
         *cursor = 0;
-    } else if (keycode == KEY_END) {
+    } else if (keycode == ELOSKEY_END) {
         *cursor = text_len;
-    } else if (keycode == KEY_BACKSPACE) {
+    } else if (keycode == ELOSKEY_BACKSPACE) {
         if (*cursor <= 0 ) {
             return;
         } else {

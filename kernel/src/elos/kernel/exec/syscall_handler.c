@@ -282,14 +282,9 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             const char* text = (const char*)arg0;
             u32         length = arg1;
 
+            // @TODO check mapping of user application. Does it have access?
             if (length > 0 && text) {
-                // @TODO Out of bounds? check mapping of user application. Does it have access?
-                if (text[length] == '\0') {
-                    printf("%s", text);
-                } else {
-                    // @TODO Implement %.*s in printf
-                    printf("(SYS_DEBUG_LOG %d, text not null terminated)\n", length);
-                }
+                printf("%.*s", length, text);
             }
 
             returnValue = ELOS_OK;

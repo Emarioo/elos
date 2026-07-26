@@ -2,6 +2,7 @@
 
 #include "stdint.h"
 #include "stddef.h"
+#include "stdarg.h"
 
 typedef struct FILE FILE;
 
@@ -9,9 +10,13 @@ typedef struct FILE FILE;
 #define SEEK_CUR	1	/* Seek from current position.  */
 #define SEEK_END	2	/* Seek from end of file.  */
 
-int printf(const char* format, ...);
+extern FILE* stdin;
+extern FILE* stderr;
+extern FILE* stdout;
 
+int printf(const char* format, ...);
 int fprintf(FILE* stream, const char* format, ...);
+int vfprintf(FILE* stream, const char* format, va_list args);
 
 FILE *fopen(const char *restrict path, const char *restrict mode);
 int fclose(FILE *file);

@@ -5,7 +5,7 @@
 
 size_t strlen(const char* s);
 void* malloc(size_t size);
-void memcpy(void* dst, const void* src, size_t size);
+void* memcpy(void* dst, const void* src, size_t size);
 
 // static inline char tolower(char chr) {
 //     return chr >= 'A' && chr <= 'Z' ? (chr|32) : chr;

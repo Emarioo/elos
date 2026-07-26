@@ -19,19 +19,21 @@ SILENT ?= @
 
 APP_DIR_NAME := $(notdir $(APP_ROOT))
 
-CC := gcc
+TOOLCHAIN := 
+# TOOLCHAIN := x86_64-elf-
+CC := $(TOOLCHAIN)gcc
 
 CFLAGS += -g -fno-stack-protector -fno-plt
 # CFLAGS += $(OFLAG)
 CFLAGS += -O0
-CFLAGS += -Wall -Werror -fshort-wchar -Werror=implicit-function-declaration
+CFLAGS += -Wall -Werror -fshort-wchar  -nostdlib -nostartfiles -nodefaultlibs -Werror=implicit-function-declaration
 CFLAGS += -mno-red-zone
 CFLAGS += -Wno-multichar -Wno-builtin-declaration-mismatch
 CFLAGS += -Wno-unused-variable -Wno-unused-value -Wno-unused-function -Wno-unused-but-set-variable -Wno-unused-result -Wno-unused-label
 
 CFLAGS += -I$(ROOT)/kernel/include -I$(ROOT)/kernel/src -I$(APP_ROOT)/include -I$(APP_ROOT)/src -I$(ROOT)/apps/std
 
-LDFLAGS := -g $(LDFLAGS) -nostdlib -nostartfiles -Wl,--no-warn-execstack
+LDFLAGS := -g $(LDFLAGS) -nostdlib -nodefaultlibs -nostartfiles -Wl,--no-warn-execstack
 
 SRC_DIRS += \
 	$(APP_ROOT)/src/$(APP_DIR_NAME) \

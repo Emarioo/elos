@@ -139,7 +139,9 @@ bool parse_elf(ParseContext* ctx) {
     // We assume vaddr_low is 0x1000
     // u64 image_size = vaddr_high - vaddr_low;
 
-    if (image_size > 0x100000) {
+    #define VADDR_STRIDE 0x1000000
+
+    if (image_size > VADDR_STRIDE) {
         printf("REFUSE TO LOAD 1MB LARGE IMAGE (%d MB)\n", image_size/0x100000);
         goto exit;
     }
@@ -147,7 +149,7 @@ bool parse_elf(ParseContext* ctx) {
     static int elf_count = 0;
     // We give each ELF a different offset so we have a better idea
     // which ELF a page fault address belongs too.
-    void* virt_image_base = (void*)(u64)0xC0000000 + elf_count * 0x100000;
+    void* virt_image_base = (void*)(u64)0xC0000000 + elf_count * VADDR_STRIDE;
     void* phys_image_base = PMEM_alloc_phys(image_size, PMEM_FLAG_NONE);
     elf_count++;
     
@@ -173,6 +175,8 @@ bool parse_elf(ParseContext* ctx) {
     // Map whole image into kernel page tables so we can copy memory from ELF there.
     PMEM_map_memory(g_kernelPageTable, virt_image_base, phys_image_base, image_size, PMEM_FLAG_NONE);
 
+    Elf64_Shdr* relSection = NULL;
+
     // first section is NULL
     for (int si = 1; si < elfHeader->e_shnum; si++) {
         Elf64_Shdr* section = &sections[si];
@@ -196,11 +200,35 @@ bool parse_elf(ParseContext* ctx) {
         } else if (!strcmp(name, ".data")) {
             PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE);
             memcpy(vaddr, src, section->sh_size);
+        } else if (!strcmp(name, ".data.rel.ro")) {
+            PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE|PMEM_FLAG_READ_ONLY);
+            memcpy(vaddr, src, section->sh_size);
         } else if (!strcmp(name, ".bss")) {
             PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE);
             memset(vaddr, 0, section->sh_size);
+        } else if (strstr(name, ".rela")) {
+            relSection = section;
         }
     }
+
+    if (relSection) {
+        Elf64_Rela* relocations = (Elf64_Rela*)(ctx->fileData + relSection->sh_offset);
+        int relCount = relSection->sh_size / relSection->sh_entsize;
+        for (int i=0;i<relCount;i++) {
+            Elf64_Rela* rela = (Elf64_Rela*)((char*)relocations + relSection->sh_entsize * i);
+            int sym = ELF64_R_SYM(rela->r_info);
+            int type = ELF64_R_TYPE(rela->r_info);
+            
+
+            if (type == R_X86_64_RELATIVE) {
+                u64* pos = (u64*)((u8*)virt_image_base + rela->r_offset);
+                *pos = (u64)((u8*)virt_image_base + rela->r_addend);
+            } else {
+                printf("WARNING: Unhandled relocation sym=%d type=%d addend=%x off=%x\n", sym, type, (int)rela->r_addend, (int)rela->r_offset);
+            }
+        }
+    }
+
 
     ctx->object->virt_image_base = virt_image_base;
     ctx->object->phys_image_base = phys_image_base;

@@ -6,7 +6,7 @@
 
 size_t strlen(const char* s);
 void* malloc(size_t size);
-void memcpy(void* dst, const void* src, size_t size);
+void* memcpy(void* dst, const void* src, size_t size);
 
 
 char *strdup(const char *s)
@@ -55,30 +55,30 @@ char *strchr(const char *s, int c)
     return NULL;
 }
 
-char *strstr(const char *haystack, const char *needle)
-{
-    if (*needle == 0)
-        return (char *)haystack;
+// char *strstr(const char *haystack, const char *needle)
+// {
+//     if (*needle == 0)
+//         return (char *)haystack;
 
-    while (*haystack)
-    {
-        const char *h = haystack;
-        const char *n = needle;
+//     while (*haystack)
+//     {
+//         const char *h = haystack;
+//         const char *n = needle;
 
-        while (*h && *n && *h == *n)
-        {
-            h++;
-            n++;
-        }
+//         while (*h && *n && *h == *n)
+//         {
+//             h++;
+//             n++;
+//         }
 
-        if (*n == 0)
-            return (char *)haystack;
+//         if (*n == 0)
+//             return (char *)haystack;
 
-        haystack++;
-    }
+//         haystack++;
+//     }
 
-    return NULL;
-}
+//     return NULL;
+// }
 
 char *strncpy(char *dst, const char *src, size_t n)
 {

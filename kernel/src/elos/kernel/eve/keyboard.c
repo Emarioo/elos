@@ -24,7 +24,7 @@ void KBD_init(BootAPI* boot_api) {
     KBD_set_layout("sv");
 }
 
-#define MAX_KEY_EVENTS 256
+#define MAX_ELOSKEY_EVENTS 256
 
 // Unfortunately timing in QEMU differs from hardware.
 // Values below are nice in QEMU. Might be too slow/fast for real hardware.
@@ -42,7 +42,7 @@ bool heldKeyTable[512];
 KeyState keyStates[64];
 u64      keyStates_len;
 
-KeyEvent keyEvents[MAX_KEY_EVENTS];
+KeyEvent keyEvents[MAX_ELOSKEY_EVENTS];
 volatile u32 keyEvents_head;
 volatile u32 keyEvents_tail;
 u32 keyboard_mods;
@@ -93,43 +93,43 @@ static void push_key_event(int scancode, int pressed) {
     };
 
     switch ((int)keyEvent.keycode) {
-        case KEY_LEFT_SHIFT:
-        case KEY_RIGHT_SHIFT: {
+        case ELOSKEY_LEFT_SHIFT:
+        case ELOSKEY_RIGHT_SHIFT: {
             if (pressed)
-                keyboard_mods |= KEY_MOD_SHIFT;
+                keyboard_mods |= ELOSKEY_MOD_SHIFT;
             else
-                keyboard_mods &= ~KEY_MOD_SHIFT;
+                keyboard_mods &= ~ELOSKEY_MOD_SHIFT;
         } break;
-        case KEY_LEFT_CTRL:
-        case KEY_RIGHT_CTRL: {
+        case ELOSKEY_LEFT_CTRL:
+        case ELOSKEY_RIGHT_CTRL: {
             if (pressed)
-                keyboard_mods |= KEY_MOD_CTRL;
+                keyboard_mods |= ELOSKEY_MOD_CTRL;
             else
-                keyboard_mods &= ~KEY_MOD_CTRL;
+                keyboard_mods &= ~ELOSKEY_MOD_CTRL;
         } break;
-        case KEY_CAPS_LOCK: {
+        case ELOSKEY_CAPS_LOCK: {
             if (pressed) {
-                keyboard_mods ^= KEY_MOD_CAPS_LOCK;
+                keyboard_mods ^= ELOSKEY_MOD_CAPS_LOCK;
             }
         } break;
-        case KEY_RIGHT_ALT: {
+        case ELOSKEY_RIGHT_ALT: {
             if (pressed) {
-                keyboard_mods |= KEY_MOD_ALT;
+                keyboard_mods |= ELOSKEY_MOD_ALT;
             } else {
-                keyboard_mods &= ~KEY_MOD_ALT;
+                keyboard_mods &= ~ELOSKEY_MOD_ALT;
             }
         } break;
-        case KEY_LEFT_SUPER:
-        case KEY_RIGHT_SUPER: {
+        case ELOSKEY_LEFT_SUPER:
+        case ELOSKEY_RIGHT_SUPER: {
             if (pressed) {
-                keyboard_mods |= KEY_MOD_SUPER;
+                keyboard_mods |= ELOSKEY_MOD_SUPER;
             } else {
-                keyboard_mods &= ~KEY_MOD_SUPER;
+                keyboard_mods &= ~ELOSKEY_MOD_SUPER;
             }
         } break;
-        case KEY_NUM_LOCK: {
+        case ELOSKEY_NUM_LOCK: {
             if (pressed) {
-                keyboard_mods ^= KEY_MOD_NUM_LOCK;
+                keyboard_mods ^= ELOSKEY_MOD_NUM_LOCK;
             }
         } break;
     }
@@ -139,7 +139,7 @@ static void push_key_event(int scancode, int pressed) {
     keyEvent.character = chr;
 
     keyEvents[keyEvents_head] = keyEvent;
-    keyEvents_head = (keyEvents_head + 1) % MAX_KEY_EVENTS;
+    keyEvents_head = (keyEvents_head + 1) % MAX_ELOSKEY_EVENTS;
 
     if (SCON_is_enabled()) {
         // System console is layered above all other applications.
@@ -177,7 +177,7 @@ bool KBD_poll_key_event(KeyEvent* keyEvent) {
         // We need to rethink this.
         *keyEvent = keyEvents[keyEvents_tail];
         keyEvents[keyEvents_tail].scancode = 0; // consumed
-        keyEvents_tail = (keyEvents_tail + 1) % MAX_KEY_EVENTS;
+        keyEvents_tail = (keyEvents_tail + 1) % MAX_ELOSKEY_EVENTS;
         return true;
     }
     return false;

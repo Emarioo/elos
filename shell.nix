@@ -6,9 +6,13 @@
 pkgs.mkShell {
   hardeningDisable = [ "fortify" ];
 
-  buildInputs = [
-    pkgs.pkgsCross.mingwW64.buildPackages.gcc
-    pkgs.pkgsCross.mingwW64.buildPackages.binutils
+  buildInputs = with pkgs; [
+    pkgsCross.mingwW64.buildPackages.gcc
+    pkgsCross.mingwW64.buildPackages.binutils
+    # It seems like NixOS has to build these, takes about 20-30 min
+    # on my laptop which isn't great. Any alternative approach?
+    # pkgsCross.x86_64-embedded.buildPackages.gcc
+    # pkgsCross.x86_64-embedded.buildPackages.binutils
     
   ];
   # for some reason mkgpt puts the executable in

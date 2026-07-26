@@ -2,9 +2,9 @@
 #include "elos/common/string.h"
 
 
-void __memset_chk() { }
+// void* __memset_chk() { }
 
-static int output_int(char* buffer, size_t size, int value) {
+static int output_int(char* buffer, size_t size, int value, int width, int zeroPadding) {
     if (!buffer || !size)
         return 0;
 
@@ -33,6 +33,12 @@ static int output_int(char* buffer, size_t size, int value) {
         acc = -value;
     } else {
         acc = value;
+    }
+
+    for (int i=0;i<zeroPadding - digits;i++) {
+        buffer[head] = '0';
+        head++;
+        CHECK
     }
     
     do {
@@ -112,20 +118,35 @@ int vsnprintf(char* buffer, size_t _size, const char* format, va_list va) {
             break;        
 
         int width = 0;
+        int hasStringLength = 0;
+        int stringLength = 0;
+        int zeroPadding = 0;
 
-        if (format[i] >= '0' && format[i] <= '9') {
+        if (format[i] == '*') {
+            width = va_arg(va, int);
+            i++;
+        } else if (format[i] >= '0' && format[i] <= '9') {
             width = format[i] - '0';
             i++;
+        }
+        if (i+1 < format_len && format[i] == '.' && format[i+1] >= '0' && format[i+1] <= '9') {
+            zeroPadding = format[i+1] - '0';
+            i += 2;
+        }
+        if (i+1 < format_len && format[i] == '.' && format[i+1] == '*') {
+            hasStringLength = true;
+            i += 2;
+            stringLength = va_arg(va, int);
         }
 
         if (i >= format_len)
             break;
 
-        if (format[i] == 'd') {
+        if (format[i] == 'd' || format[i] == 'i') {
             i++;
 
             int value = va_arg(va, int);
-            int len = output_int(buffer + head, size - head, value);
+            int len = output_int(buffer + head, size - head, value, 0, zeroPadding);
             head += len;
             CHECK
         } else if (format[i] == 'u') {
@@ -133,7 +154,7 @@ int vsnprintf(char* buffer, size_t _size, const char* format, va_list va) {
 
             u32 value = va_arg(va, u32);
             // @TODO Call uint function instead!
-            int len = output_int(buffer + head, size - head, value);
+            int len = output_int(buffer + head, size - head, value, 0, zeroPadding);
             head += len;
             CHECK
         } else if (format[i] == 'c') {
@@ -185,7 +206,7 @@ int vsnprintf(char* buffer, size_t _size, const char* format, va_list va) {
             i++;
             
             const char* value = va_arg(va, const char*);
-            int len = strlen(value);
+            int len = hasStringLength ? stringLength : strlen(value);
             
             len = len > size-head ? size-head : len;
             memcpy(buffer + head, value, len);
@@ -291,9 +312,9 @@ size_t strnlen(const char* ptr, size_t maxlen) {
 //     }
 // }
 
-void memmove(void* dst, const void* src, size_t size) {
+void* memmove(void* dst, const void* src, size_t size) {
     if (dst == src)
-        return;
+        return dst;
     
     if ((u64)dst % 8 == 0 && (u64)src % 8 == 0 && size % 8 == 0) {
         // aligned
@@ -317,6 +338,7 @@ void memmove(void* dst, const void* src, size_t size) {
             }
         }
     }
+    return dst;
 }
 
 int memcmp(const void* dst, const void* src, size_t size) {
@@ -360,10 +382,11 @@ int strncmp(const char* dst, const char* src, size_t len) {
     return 0;
 }
 
-void memset(void* dst, int val, size_t size) {
+void* memset(void* dst, int val, size_t size) {
     for(size_t i = 0; i < size; i++) {
         *((char*)dst + i) = val;
     }
+    return dst;
 }
 
 
@@ -377,4 +400,29 @@ u16* tmp_path_wstring(const char* str) {
     return wstr;
 }
 
+
+char *strstr(const char *haystack, const char *needle)
+{
+    if (*needle == 0)
+        return (char *)haystack;
+
+    while (*haystack)
+    {
+        const char *h = haystack;
+        const char *n = needle;
+
+        while (*h && *n && *h == *n)
+        {
+            h++;
+            n++;
+        }
+
+        if (*n == 0)
+            return (char *)haystack;
+
+        haystack++;
+    }
+
+    return NULL;
+}
 

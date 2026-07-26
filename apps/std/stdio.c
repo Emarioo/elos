@@ -16,7 +16,7 @@ struct FILE {
 };
 
 int printf(const char* format, ...) {
-    char buffer[256];
+    char buffer[400];
 
     va_list va;
     va_start(va, format);
@@ -28,12 +28,13 @@ int printf(const char* format, ...) {
 }
 
 
+FILE* stdin  = (FILE*)0;
 FILE* stderr = (FILE*)1;
 FILE* stdout = (FILE*)2;
 
 
 int fprintf(FILE* stream, const char* format, ...) {
-    char buffer[256];
+    char buffer[400];
 
     va_list va;
     va_start(va, format);
@@ -44,6 +45,14 @@ int fprintf(FILE* stream, const char* format, ...) {
     return len;
 }
 
+int vfprintf(FILE* stream, const char* format, va_list args) {
+    char buffer[400];
+
+    int len = vsnprintf(buffer, sizeof(buffer), format, args);
+
+    SYS_debug_log(buffer, len);
+    return len;
+}
 
 
 FILE *fopen(const char *restrict path, const char *restrict mode) {
@@ -191,6 +200,11 @@ size_t fread(void* ptr, size_t size, size_t n, FILE *restrict stream) {
     return cqe.read.readBytes;
 }
 size_t fwrite(const void* ptr, size_t size, size_t n, FILE *restrict stream) {
+    if (stream == stderr || stream == stdout) {
+        SYS_debug_log(ptr, size * n);
+        return n;
+    }
+
     ELOS_Error error;
 
     ELOS_AsyncRequest req;

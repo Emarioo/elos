@@ -81,8 +81,14 @@ bool get_event(ELOS_UserEvent* event) {
     userEvents->tail++;
     return true;
 }
+const char* prompts[] = {
+    "Hello",
+    "World",
+};
 
 void _start() {
+
+    printf("%s %s\n", prompts[0], prompts[1]);
 
     SYS_ticks_per_second(&ticks_per_second);
 
@@ -119,18 +125,18 @@ void _start() {
 
 
 void apply_numpad(ELOS_Keycode* keycode, int mod) {
-    if (!(!(mod & KEY_MOD_NUM_LOCK) ^ !(mod & KEY_MOD_SHIFT))) {
+    if (!(!(mod & ELOSKEY_MOD_NUM_LOCK) ^ !(mod & ELOSKEY_MOD_SHIFT))) {
         switch ((int)*keycode) {
-            case KEY_NUMPAD_0: *keycode = KEY_INSERT; return;
-            case KEY_NUMPAD_1: *keycode = KEY_END; return;
-            case KEY_NUMPAD_2: *keycode = KEY_DOWN_ARROW; return;
-            case KEY_NUMPAD_3: *keycode = KEY_PAGE_DOWN; return;
-            case KEY_NUMPAD_4: *keycode = KEY_LEFT_ARROW; return;
-            case KEY_NUMPAD_6: *keycode = KEY_RIGHT_ARROW; return;
-            case KEY_NUMPAD_7: *keycode = KEY_HOME; return;
-            case KEY_NUMPAD_8: *keycode = KEY_UP_ARROW; return;
-            case KEY_NUMPAD_9: *keycode = KEY_PAGE_UP; return;
-            case KEY_NUMPAD_COMMA: *keycode = KEY_DELETE; return;
+            case ELOSKEY_NUMPAD_0: *keycode = ELOSKEY_INSERT; return;
+            case ELOSKEY_NUMPAD_1: *keycode = ELOSKEY_END; return;
+            case ELOSKEY_NUMPAD_2: *keycode = ELOSKEY_DOWN_ARROW; return;
+            case ELOSKEY_NUMPAD_3: *keycode = ELOSKEY_PAGE_DOWN; return;
+            case ELOSKEY_NUMPAD_4: *keycode = ELOSKEY_LEFT_ARROW; return;
+            case ELOSKEY_NUMPAD_6: *keycode = ELOSKEY_RIGHT_ARROW; return;
+            case ELOSKEY_NUMPAD_7: *keycode = ELOSKEY_HOME; return;
+            case ELOSKEY_NUMPAD_8: *keycode = ELOSKEY_UP_ARROW; return;
+            case ELOSKEY_NUMPAD_9: *keycode = ELOSKEY_PAGE_UP; return;
+            case ELOSKEY_NUMPAD_COMMA: *keycode = ELOSKEY_DELETE; return;
         }
     }
 }
@@ -199,25 +205,25 @@ void editor_loop() {
 
             ELOS_UserEvent_Key key = event.key;
             
-            if (key.keycode == KEY_O && (key.mods & KEY_MOD_CTRL)) {
+            if (key.keycode == ELOSKEY_O && (key.mods & ELOSKEY_MOD_CTRL)) {
                 session->command = CMD_OPEN_FILE;
-            } else if (key.keycode == KEY_S && (key.mods & KEY_MOD_CTRL)) {
+            } else if (key.keycode == ELOSKEY_S && (key.mods & ELOSKEY_MOD_CTRL)) {
                 session->command = CMD_SAVE_FILE;
             } else {
                 if (session->command == CMD_OPEN_FILE || session->command == CMD_SAVE_FILE) {
-                    if (key.keycode == KEY_LEFT_ARROW) {
+                    if (key.keycode == ELOSKEY_LEFT_ARROW) {
                         if (session->commandCursor_x > 0) {
                             session->commandCursor_x--;
                         }
-                    } else if (key.keycode == KEY_RIGHT_ARROW) {
+                    } else if (key.keycode == ELOSKEY_RIGHT_ARROW) {
                         if (session->commandCursor_x < session->commandBuffer_len) {
                             session->commandCursor_x++;
                         }
-                    } else if (key.keycode == KEY_HOME) {
+                    } else if (key.keycode == ELOSKEY_HOME) {
                         session->commandCursor_x = 0;
-                    } else if (key.keycode == KEY_END) {
+                    } else if (key.keycode == ELOSKEY_END) {
                         session->commandCursor_x = session->commandBuffer_len;
-                    } else if (key.keycode == KEY_BACKSPACE) {
+                    } else if (key.keycode == ELOSKEY_BACKSPACE) {
                         if (session->commandCursor_x > 0) {
                             memmove(session->commandBuffer + session->commandCursor_x - 1,
                                 session->commandBuffer + session->commandCursor_x,
@@ -226,7 +232,7 @@ void editor_loop() {
                             session->commandBuffer_len--;
                             session->commandBuffer[session->commandBuffer_len] = '\0';
                         }
-                    } else if (key.keycode == KEY_DELETE) {
+                    } else if (key.keycode == ELOSKEY_DELETE) {
                         if (session->commandCursor_x < session->commandBuffer_len) {
                             memmove(session->commandBuffer + session->commandCursor_x,
                                 session->commandBuffer + session->commandCursor_x + 1,
@@ -234,9 +240,9 @@ void editor_loop() {
                             session->commandBuffer_len--;
                             session->commandBuffer[session->commandBuffer_len] = '\0';
                         }
-                    } else if (key.keycode == KEY_ESCAPE) {
+                    } else if (key.keycode == ELOSKEY_ESCAPE) {
                         session->command = CMD_NONE;
-                    } else if (key.keycode == KEY_ENTER) {
+                    } else if (key.keycode == ELOSKEY_ENTER) {
                         if (session->command == CMD_OPEN_FILE) {
                             slate_open(session, session->commandBuffer);
                         } else if (session->command == CMD_SAVE_FILE) {
@@ -255,26 +261,26 @@ void editor_loop() {
                         }
                     }
                 } else {
-                    if (key.keycode == KEY_LEFT_ARROW) {
+                    if (key.keycode == ELOSKEY_LEFT_ARROW) {
                         slate_move(key.keycode);
-                    } else if (key.keycode == KEY_RIGHT_ARROW) {
+                    } else if (key.keycode == ELOSKEY_RIGHT_ARROW) {
                         slate_move(key.keycode);
-                    } else if (key.keycode == KEY_DOWN_ARROW) {
+                    } else if (key.keycode == ELOSKEY_DOWN_ARROW) {
                         slate_move(key.keycode);
-                    } else if (key.keycode == KEY_UP_ARROW) {
+                    } else if (key.keycode == ELOSKEY_UP_ARROW) {
                         slate_move(key.keycode);
-                    } else if (key.keycode == KEY_HOME) {
+                    } else if (key.keycode == ELOSKEY_HOME) {
                         slate_move(key.keycode);
-                    } else if (key.keycode == KEY_END) {
+                    } else if (key.keycode == ELOSKEY_END) {
                         slate_move(key.keycode);
-                    } else if (key.keycode == KEY_PAGE_UP) {
+                    } else if (key.keycode == ELOSKEY_PAGE_UP) {
                         slate_move(key.keycode);
-                    } else if (key.keycode == KEY_PAGE_DOWN) {
+                    } else if (key.keycode == ELOSKEY_PAGE_DOWN) {
                         slate_move(key.keycode);
-                    } else if (key.keycode == KEY_BACKSPACE) {
+                    } else if (key.keycode == ELOSKEY_BACKSPACE) {
                         slate_deletion(key.keycode);
-                    } else if (key.keycode == KEY_DELETE) {
-                        slate_deletion(KEY_DELETE);
+                    } else if (key.keycode == ELOSKEY_DELETE) {
+                        slate_deletion(ELOSKEY_DELETE);
                     } else if(key.character != 0) {
                         slate_insert(key.character);
                     }

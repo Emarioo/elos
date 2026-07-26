@@ -6,7 +6,8 @@ del 1
 set $base = *(unsigned long long*)0x10008
 add-symbol-file bin/boot.elf -o $base
 add-symbol-file bin/kernel.elf
-add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/slate/slate.elf -o 0xC0100000
+add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/doom/doom.elf -o 0xC1000000
+# add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/slate/slate.elf -o 0xC1000000
 hb exception_handler
 
 hb efi_entry

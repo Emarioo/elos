@@ -219,6 +219,13 @@ def package_elos(release_dir, build_iso = False):
     prism_path      = f"{temp_folder_path}/initrd/pkg/prism/prism.elf"
     term_path       = f"{temp_folder_path}/initrd/pkg/term/term.elf"
     slate_path      = f"{temp_folder_path}/initrd/pkg/slate/slate.elf"
+    doom_path       = f"{temp_folder_path}/initrd/pkg/doom/doom.elf"
+    wad_path        = f"{temp_folder_path}/initrd/pkg/doom/doom1.wad"
+
+    DOOM_MAKEFILE   = f"{ROOT}/../doomgeneric/doomgeneric/Makefile.elos"
+    DOOM_WAD        = f"{ROOT}/../iwad/doom1.wad"
+
+    cmd(f"cp {DOOM_WAD} {wad_path}")
 
     INT_DIR         = f"{ROOT}/int"
     fat_path        = f"{INT_DIR}/fat.img"
@@ -247,12 +254,18 @@ def package_elos(release_dir, build_iso = False):
     def sync4():
         cmd(f"APP_OUTPUT={slate_path} make -f apps/slate/Makefile")
         cmd(f"objdump -S {slate_path} > slate.dis")
+
+    def sync5():
+        cmd(f"OUTPUT={doom_path} make -f {DOOM_MAKEFILE}")
+        cmd(f"objdump -S {doom_path} > doom.dis")
     
     threads.append(cmd_async(sync0))
     threads.append(cmd_async(sync1))
     threads.append(cmd_async(sync2))
     threads.append(cmd_async(sync3))
     threads.append(cmd_async(sync4))
+    if os.path.exists(DOOM_MAKEFILE):
+        threads.append(cmd_async(sync5))
 
     wait_pool(threads)
 
@@ -262,6 +275,10 @@ def package_elos(release_dir, build_iso = False):
         (term_path,  "PKG/TERM/TERM.ELF"),
         (slate_path, "PKG/SLATE/SLATE.ELF"),
     ]
+    if os.path.exists(DOOM_MAKEFILE):
+        DEPS_SPEC.append((doom_path, "PKG/DOOM/DOOM.ELF"))
+        DEPS_SPEC.append((wad_path, "PKG/DOOM/DOOM1.WAD"))
+        
     make_gpt(initrd_path, DEPS_SPEC)
     
     DEPS_SPEC: list[tuple[str,str]] = [
@@ -411,11 +428,12 @@ def parse_fault():
     if m is not None and len(m.groups()) > 0:
         rip_addr = int(m.groups()[0], base = 16)
 
-        stride = 0x100000
+        stride = 0x1000000
         app_index = math.floor((rip_addr - 0xC0000000) / stride)
         apps = [
             "prism.dis",
-            "slate.dis"
+            "doom.dis",
+            # "slate.dis",
         ]
 
         if app_index >= 0 and app_index < len(apps):

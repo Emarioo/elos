@@ -65,6 +65,7 @@ int   textBuffer_len;
 int   textBuffer_max;
 
 
+
 void reserve_lines(SlateSession* session, int lines) {
     if (session->lines_len + lines >= session->lines_max) {
         int newMax = 200 + 2*session->lines_max;
@@ -265,21 +266,21 @@ void slate_move(ELOS_Keycode direction) {
 
     Line* cursorLine = &session->lines[session->cursor_y];
 
-    if (direction == KEY_LEFT_ARROW) {
+    if (direction == ELOSKEY_LEFT_ARROW) {
         if (session->cursor_x > 0) {
             session->cursor_x--;
         } else if (session->cursor_y > 0) {
             session->cursor_y--;
             session->cursor_x = session->lines[session->cursor_y].text.len;
         }
-    } else if (direction == KEY_RIGHT_ARROW) {
+    } else if (direction == ELOSKEY_RIGHT_ARROW) {
         if (session->cursor_x < cursorLine->text.len) {
             session->cursor_x++;
         } else if (session->cursor_y+1 < session->lines_len) {
             session->cursor_x = 0;
             session->cursor_y++;
         }
-    } else if (direction == KEY_DOWN_ARROW) {
+    } else if (direction == ELOSKEY_DOWN_ARROW) {
         if (session->cursor_y+1 < session->lines_len) {
             session->cursor_y++;
             Line* cursorLine = &session->lines[session->cursor_y];
@@ -287,7 +288,7 @@ void slate_move(ELOS_Keycode direction) {
                 session->cursor_x = cursorLine->text.len;
             }
         }
-    } else if (direction == KEY_UP_ARROW) {
+    } else if (direction == ELOSKEY_UP_ARROW) {
         if (session->cursor_y > 0) {
             session->cursor_y--;
             Line* cursorLine = &session->lines[session->cursor_y];
@@ -295,11 +296,11 @@ void slate_move(ELOS_Keycode direction) {
                 session->cursor_x = cursorLine->text.len;
             }
         }
-    } else if (direction == KEY_HOME) {
+    } else if (direction == ELOSKEY_HOME) {
         session->cursor_x = 0;
-    } else if (direction == KEY_END) {
+    } else if (direction == ELOSKEY_END) {
         session->cursor_x = cursorLine->text.len;
-    } else if (direction == KEY_PAGE_UP) {
+    } else if (direction == ELOSKEY_PAGE_UP) {
         if (session->cursor_y >= lines_per_pageJump) {
             session->cursor_y -= lines_per_pageJump;
         } else {
@@ -309,7 +310,7 @@ void slate_move(ELOS_Keycode direction) {
         if (session->cursor_x > cursorLine->text.len) {
             session->cursor_x = cursorLine->text.len;
         }
-    } else if (direction == KEY_PAGE_DOWN) {
+    } else if (direction == ELOSKEY_PAGE_DOWN) {
         if (session->cursor_y + lines_per_pageJump < session->lines_len) {
             session->cursor_y += lines_per_pageJump;
         } else {
@@ -380,7 +381,7 @@ void slate_deletion(ELOS_Keycode direction) {
     SlateSession* session = &slateSession;
     session->modified = true;
 
-    if (direction == KEY_BACKSPACE) {
+    if (direction == ELOSKEY_BACKSPACE) {
         if (session->cursor_x > 0) {
             Line* line = &session->lines[session->cursor_y];
             memmove(line->text.ptr + session->cursor_x-1, line->text.ptr + session->cursor_x, line->text.len - session->cursor_x);
@@ -406,7 +407,7 @@ void slate_deletion(ELOS_Keycode direction) {
             session->lines_len--;
             session->cursor_y--;
         }
-    } else if (direction == KEY_DELETE) {
+    } else if (direction == ELOSKEY_DELETE) {
         Line* line = &session->lines[session->cursor_y];
         if (session->cursor_x < line->text.len) {
             memmove(line->text.ptr + session->cursor_x, line->text.ptr + session->cursor_x+1, line->text.len - (session->cursor_x+1));

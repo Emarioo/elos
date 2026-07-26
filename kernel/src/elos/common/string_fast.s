@@ -12,7 +12,7 @@ memcpy:
 .loop32:
     cmp     rdx, INCREMENT
     jb      .tail
-
+    mov r8, rdi
     mov rcx, [rsi]
     mov [rdi], rcx
 
@@ -41,4 +41,5 @@ memcpy:
 
 .done:
     // vzeroupper
+    mov rax, r8
     ret

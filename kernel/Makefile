@@ -14,14 +14,15 @@ SILENT       ?= @
 
 ROOT := $(abspath $(dir $(abspath $(lastword $(MAKEFILE_LIST))))..)
 
+TOOLCHAIN := 
+# TOOLCHAIN := x86_64-elf-
+CC      := $(TOOLCHAIN)gcc
+AS      := $(TOOLCHAIN)as
+LD      := $(TOOLCHAIN)ld
+OBJCOPY := $(TOOLCHAIN)objcopy
 
-CC      := gcc
-AS      := as
-LD      := ld
-OBJCOPY := objcopy
 
-
-CFLAGS += -ggdb -ffreestanding -fno-pic -fno-pie -fno-plt -mcmodel=kernel -nostartfiles -nodefaultlibs
+CFLAGS += -ggdb -ffreestanding -fno-pic -fno-pie -fno-plt -mcmodel=kernel -nostdlib -nostartfiles -nodefaultlibs
 CFLAGS += -O0 # No optimization for better debugging
 CFLAGS += -I$(ROOT)/kernel/src -I$(ROOT)/kernel/include
 CFLAGS += -fshort-wchar -Werror=implicit-function-declaration
@@ -36,7 +37,7 @@ ASFLAGS := -g
 
 KERNEL_LD_SCRIPT := $(ROOT)/kernel/sections.ld
 
-LDFLAGS := -nostdlib  -T $(KERNEL_LD_SCRIPT) --no-warn-execstack --orphan-handling=error --no-gc-sections -no-pie
+LDFLAGS :=  -nostdlib  -T $(KERNEL_LD_SCRIPT) --no-warn-execstack --orphan-handling=error --no-gc-sections -no-pie
 
 SRC_DIRS := \
 	$(ROOT)/kernel/src/elos \

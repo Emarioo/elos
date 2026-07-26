@@ -45,7 +45,10 @@ void kernel_idle();
 static BootAPI _boot_api;
 BootAPI* boot_api;
 
-void ps2_ask_keymap();
+
+void compute() {
+    printf("Soup%.3d\n", 7);
+}
 
 void kernel_entry(BootAPI* in_boot_api) {
 
@@ -224,22 +227,16 @@ void kernel_entry(BootAPI* in_boot_api) {
     //######################
     //   USER MODE TEST
     //######################
-    
+
+    compute();
+
     // Start scheduling
     EXEC_init();
 
-    // Create user terminal process
-    // EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
-    // EXEC_create_user_thread("/pkg/term/term.elf", 0);
-
-    // CPU_sleep(1500000000);
-
-    // @TODO Mount USB EFI system partition at /boot
-
-    // @TODO Copy INITRD ramdisk 
 
     EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
-    EXEC_create_user_thread("/pkg/slate/slate.elf", 0);
+    // EXEC_create_user_thread("/pkg/slate/slate.elf", 0);
+    EXEC_create_user_thread("/pkg/doom/doom.elf", 0);
 
     EXEC_create_kernel_thread(SCON_main, 0);
 
@@ -260,6 +257,7 @@ void kernel_entry(BootAPI* in_boot_api) {
     }
 
 }
+
 
 void kernel_idle() {
     while (1) pause();

@@ -250,7 +250,7 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
 extern Keymap* g_currentKeymap;
 
 
-ELOS_Keycode g_superKey = KEY_LEFT_SUPER;
+ELOS_Keycode g_superKey = ELOSKEY_LEFT_SUPER;
 bool g_superKeyIsDown = false;
 
 void keyboard_handler(int isr_number, KeyboardInterruptFrame* frame, u64 extra) {
@@ -268,7 +268,7 @@ void keyboard_handler(int isr_number, KeyboardInterruptFrame* frame, u64 extra) 
         
         // @TODO Reboot key is nice but it should not be here.
         int keycode = scancode_to_keycode(g_currentKeymap, scancode);
-        if (keycode == KEY_F1) {
+        if (keycode == ELOSKEY_F1) {
             CPU_reset();
         }
 
@@ -276,7 +276,7 @@ void keyboard_handler(int isr_number, KeyboardInterruptFrame* frame, u64 extra) 
             g_superKeyIsDown = pressed;
         }
         // printf("%d=%d %d %d %d scan=%d\n", keyEvent.keycode, g_superKey, keyEvent.pressed, keyEvent.mods, g_superKeyIsDown, keyEvent.scancode);
-        if (keycode == KEY_T && pressed && g_superKeyIsDown) {
+        if (keycode == ELOSKEY_T && pressed && g_superKeyIsDown) {
             SCON_enable(!SCON_is_enabled());
             continue;
         }
