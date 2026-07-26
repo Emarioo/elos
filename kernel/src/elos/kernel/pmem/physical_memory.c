@@ -157,7 +157,7 @@ void PMEM_init(BootAPI* boot_api) {
                 }
             }
             if (!removed) {
-                // printf(" OUT %x - %x\n", region->physicalStart, region->pageCount * PAGE_SIZE);
+                // printf(" OUT %zx - %zx\n", region->physicalStart, region->pageCount * PAGE_SIZE);
                 check_index++;
             }
         }

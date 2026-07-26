@@ -4,24 +4,25 @@
 
 // void* __memset_chk() { }
 
-static int output_int(char* buffer, size_t size, int value, int width, int zeroPadding) {
+static int output_int(char* buffer, size_t size, size_t value, bool isSigned, int width, int zeroPadding) {
     if (!buffer || !size)
         return 0;
 
     int head = 0;
-    int acc = 0;
+    size_t acc = 0;
 
     #define CHECK if (head > size) { buffer[head] = '\0'; return head; }
 
     CHECK
 
-    if (value < 0) {
+    if (isSigned && (int64_t)value < 0) {
         buffer[head] = '-';
         head++;
-        acc = -value;
+        acc = -(int64_t)value;
     } else {
         acc = value;
     }
+
     int digits = 0;
     do {
         // (accst % 10) + '0';
@@ -54,12 +55,12 @@ static int output_int(char* buffer, size_t size, int value, int width, int zeroP
     #undef CHECK
 }
 
-static int output_hex(char* buffer, size_t size, u32 value, int width) {
+static int output_hex(char* buffer, size_t size, size_t value, int width) {
     if (!buffer || !size)
         return 0;
 
     int head = 0;
-    u32 acc = value;
+    size_t acc = value;
 
     #define CHECK if (head > size) { buffer[head] = '\0'; return head; }
 
@@ -142,19 +143,28 @@ int vsnprintf(char* buffer, size_t _size, const char* format, va_list va) {
         if (i >= format_len)
             break;
 
-        if (format[i] == 'd' || format[i] == 'i') {
+        if (i+1 < format_len && format[i] == 'z' && (format[i+1] == 'd' || format[i+1] == 'i')) {
+            i+=2;
+            size_t value = va_arg(va, size_t);
+            int len = output_int(buffer + head, size - head, value, true, 0, zeroPadding);
+            head += len;
+            CHECK
+        } else if (i+1 < format_len && format[i] == 'z' && (format[i+1] == 'u')) {
+            i+=2;
+            size_t value = va_arg(va, size_t);
+            int len = output_int(buffer + head, size - head, value, false, 0, zeroPadding);
+            head += len;
+            CHECK
+        } else if (format[i] == 'd' || format[i] == 'i') {
             i++;
-
             int value = va_arg(va, int);
-            int len = output_int(buffer + head, size - head, value, 0, zeroPadding);
+            int len = output_int(buffer + head, size - head, value, true, 0, zeroPadding);
             head += len;
             CHECK
         } else if (format[i] == 'u') {
             i++;
-
             u32 value = va_arg(va, u32);
-            // @TODO Call uint function instead!
-            int len = output_int(buffer + head, size - head, value, 0, zeroPadding);
+            int len = output_int(buffer + head, size - head, value, false, 0, zeroPadding);
             head += len;
             CHECK
         } else if (format[i] == 'c') {
@@ -177,6 +187,19 @@ int vsnprintf(char* buffer, size_t _size, const char* format, va_list va) {
                 buffer[head] = value;
                 head += 1;
             }
+            CHECK
+
+        } else if (i+1 < format_len && format[i] == 'z' && (format[i+1] == 'x')) {
+            i+=2;
+            size_t value = va_arg(va, size_t);
+            int len = output_hex(buffer + head, size - head, value, width);
+            head += len;
+            CHECK
+        } else if (format[i] == 'p') {
+            i+=1;
+            size_t value = va_arg(va, size_t);
+            int len = output_hex(buffer + head, size - head, value, width);
+            head += len;
             CHECK
         } else if (format[i] == 'x') {
             i++;

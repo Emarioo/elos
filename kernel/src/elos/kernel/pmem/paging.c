@@ -48,6 +48,10 @@ Page* get_dynamic_table() {
     }
     Page* page = (Page*)(dynamicTable_base + dynamicTable_len * sizeof(Page));
     dynamicTable_len++;
+    if ((uintptr_t)page & (PAGE_SIZE-1)) {
+        kernel_bug();
+        return NULL;
+    }
     return page;
 }
 
@@ -108,15 +112,16 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
 
     u64 voff = (u64)virtual_address & 0xFFF;
     u64 poff = (u64)physical_address & 0xFFF;
+    u64 flooredSize = size;
     if (voff != 0 || poff != 0) {
         if (voff > poff) {
-            size += voff;
+            flooredSize += voff;
         } else {
-            size += poff;
+            flooredSize += poff;
         }
     }
 
-    u64 bytes_left = ((size + PAGE_SIZE-1) / PAGE_SIZE) * PAGE_SIZE;
+    u64 bytes_left = ((flooredSize + PAGE_SIZE-1) / PAGE_SIZE) * PAGE_SIZE;
     u64 virt = (u64)virtual_address & MASK_48_4KB_ADDRESS;
     u64 phys = (u64)physical_address & MASK_48_4KB_ADDRESS;
 
@@ -179,22 +184,23 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
         Page* page_table_2 = (Page*)(entry3 & MASK_48_4KB_ADDRESS);
         u64 entry2 = page_table_2->entries[lvl2];
 
-        if (bytes_left >= 2*MB && (virt & (2*MB-1)) == 0 && (phys & (2*MB-1)) == 0) {
-            // We can make 2 MB page if
-            //   - We have at least 2 MB left to map
-            //   - The next virtual and physical addresses are aligned by 2 MB
+        // @NOCHECKIN Doom runs when disabling huge pages.
+        // if (bytes_left >= 2*MB && (virt & (2*MB-1)) == 0 && (phys & (2*MB-1)) == 0) {
+        //     // We can make 2 MB page if
+        //     //   - We have at least 2 MB left to map
+        //     //   - The next virtual and physical addresses are aligned by 2 MB
             
-            // We are leaking page table here when we ovewrite the entry.
+        //     // We are leaking page table here when we ovewrite the entry.
 
-            entry2 = PAGE_BIT_PRESENT | cache_bit | exec_bit | write_bit | user_bit | PAGE_BIT_HUGE_PAGE | (MASK_48_2MB_ADDRESS & phys);
-            page_table_2->entries[lvl2] = entry2;
+        //     entry2 = PAGE_BIT_PRESENT | cache_bit | exec_bit | write_bit | user_bit | PAGE_BIT_HUGE_PAGE | (MASK_48_2MB_ADDRESS & phys);
+        //     page_table_2->entries[lvl2] = entry2;
             
-            flush_tlb_entry((void*)virt);
-            virt += 2*MB;
-            phys += 2*MB;
-            bytes_left -= 2*MB;
-            continue;
-        }
+        //     flush_tlb_entry((void*)virt);
+        //     virt += 2*MB;
+        //     phys += 2*MB;
+        //     bytes_left -= 2*MB;
+        //     continue;
+        // }
 
         if ((entry2 & PAGE_BIT_PRESENT) == 0 || (entry2 & PAGE_BIT_HUGE_PAGE)) {
             // Get physical page and map it in.

@@ -3,6 +3,12 @@ My attempt at kernel/OS development
 This project only builds on Linux (Linux has good tools for kernel development).
 Personally I use NixOS and Windows Subsystem for Linux.
 
+**DOOM in ELOS (a little buggy, work in progress)**
+![](docs/img/doom_in_elos.png)
+
+**Editor in ELOS**
+![](docs/img/editor_in_elos.png)
+
 # Dependencies
 
 These are the dependencies:

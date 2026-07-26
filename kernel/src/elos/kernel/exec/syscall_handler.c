@@ -300,7 +300,14 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 write_cr3((u64)g_kernelPageTable);
                 
                 update_heap_entry(NULL, address, size);
-                PMEM_map_memory(userPageTable, address, address, size, PMEM_FLAG_USER_SPACE);
+                bool mapped = PMEM_map_memory(userPageTable, address, address, size, PMEM_FLAG_USER_SPACE);
+                if (!mapped) {
+                    PMEM_free(address);
+                    write_cr3((u64)userPageTable);
+                    *newAddress = NULL;
+                    returnValue = ELOS_GENERIC_ERROR;
+                    break;
+                }
 
                 write_cr3((u64)userPageTable);
                 memset(address, 0x9A, size);
@@ -310,6 +317,8 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 *newAddress = NULL;
                 returnValue = ELOS_GENERIC_ERROR;
             }
+
+            // printf("MALLOC %zx:%zx (%zu KB)\n", address, address + size, size / 1024);
         } break;
         case _SYS_HEAP_FREE: {
             void* oldAddress = (void*)arg0;
@@ -322,6 +331,8 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             
             PMEM_free(oldAddress);
             returnValue = ELOS_OK;
+
+            // printf("FREE %zx\n", oldAddress);
         } break;
         case _SYS_HEAP_REALLOCATE: {
             void** newAddress = (void**)arg0;
@@ -372,6 +383,8 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 *newAddress = NULL;
                 returnValue = ELOS_GENERIC_ERROR;
             }
+
+            // printf("REALLOC %zx -> %zx:%zx (%zu KB)\n", oldAddress, address, address + size, size / 1024);
         } break;
         case _SYS_HEAP_MAP: {
             void*  virtAddress = (void*)arg0;
