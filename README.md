@@ -4,121 +4,38 @@ This project only builds on Linux (Linux has good tools for kernel development).
 Personally I use NixOS and Windows Subsystem for Linux.
 
 **DOOM in ELOS (a little buggy, work in progress)**
+
+When building ELOS run `scripts/install_doom.sh` to clone and prepare DOOM repos. `build.py` will build and include DOOM if the repos are present.
+
 ![](docs/img/doom_in_elos.png)
+
 
 **Editor in ELOS**
 ![](docs/img/editor_in_elos.png)
 
-# Dependencies
+# Building
 
-These are the dependencies:
-
-- `Python 3.11+`           (for build/test scripts)
-- `Make`                   (for build scripts)
-- `gcc-mingw-w64-x86-64`   (for EFI application)
-- `gcc`                    (for C programs on host and for OS)
-- `qemu-system-x86_64`     (Virtual Machine to run OS)
-- `Rufus`                  (To flash USB with OS, Windows)
-- `dd`                     (To flash USB with OS, Linux)
-- `mkgpt`                  (Build image with GUID Partition Table, you have to clone and compile it yourself, easy install WIP)
-
-
-
-# Installing (INCOMPLETE)
-
-## Linux
-Assuming you have cloned the repo do these steps:
-
-**Install dependencies (auto)**
-```
-sudo apt install python3
-build.py install
-```
-
-**Install dependencies (manual)**
 ```bash
-sudo apt install python3 gcc make
-sudo apt install x86_64-w64-mingw32-gcc
-sudo apt install qemu-system-x86 # (also installs qemu-system-x86_64)
-```
-<!--
-Not needed, we include these in the repo 
+git clone https://github.com/Emarioo/elos
+cd elos
+scripts/install_deps.sh
 
-sudo apt install gnu-efi
-sudo apt install ovmf
-
-**Copy headers and other junk**
-```bash
-mkdir -p extern/efi
-mkdir -p extern/ovmf
-cp /usr/share/ovmf/OVMF.fd extern/efi/OVMF.fd
-cp -r /usr/include/efi extern
-```
--->
-
-Then follow the [Generic](#generic) approach, same for Linux and Windows.
-
-## Windows
-Assuming you have cloned the repo do the following:
-- Install python (3.11+)
-- Install MinGW GNU GCC
-- Install QEMU x86_64
-
-<!-- Not needed, we include these in the repo 
-Then you need EFI headers and OVMF.
-The easiest way I've found is to use WSL (ubuntu),
-install them in WSL, then copy them to Windows.
-```bash
-sudo apt install gnu-efi
-sudo apt install ovmf
-cd /mnt/c/Users/%USER%/Desktop/elos # or where you cloned the repo
-mkdir -p extern/efi
-mkdir -p extern/ovmf
-cp /usr/share/ovmf/OVMF.fd extern/efi/OVMF.fd
-cp -r /usr/include/efi extern
+./build.py
 ```
 
-In the future I may provide the EFI headers in the repoOVMF.fd in the repo or as a git release, or somewhere else you can just download.
-For the EFI headers I could simply include them in the repo.
-(same day I wrote this I included it)
--->
+On *NixOS* you must run `nix-shell` before `build.py`.
 
+If you want network in QEMU run `scripts/maketap.sh`. build.py will add network device when starting QEMU and tap0 is found.
 
-Then follow the [Generic](#generic) approach, same for Linux and Windows.
-
-## Generic
-Now we are in the ideal world. One python script to build OS and start QEMU:
-```bash
-build.py
-# same as 
-build.py img run
-```
-
-Normally you may have to build mkgpt and install mtools but this projects
-implements what we need in C so those aren't needed (for now).
-
-
-## NixOS
-WIP
-
-Useful commands to build mkgpt:
-```bash
-git clone https://github.com/jncronin/mkgpt
-cd mkgpt
-nix-shell -p automake autoconf libtool pkg-config
-./configure
-make
-```
-
-# Running
+Some useful flags to build.py
 ```bash
 # Just run QEMU
-build.py run
+./build.py run
 
 # Run QEMU with GDB, uses port 1234 by default
-build.py gdb
+./build.py gdb
 # then start gdb
-gdb -x scripts/gdb.txt
+gdb
 ```
 
 # Flashing OS to USB drive (WIP)

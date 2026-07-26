@@ -24,6 +24,11 @@ AS = "as"
 CC = "gcc"
 LD = "ld"
 
+MKGPT = f"{ROOT}/../mkgpt/mkgpt" if os.path.exists(f"{ROOT}/../mkgpt/mkgpt") else "mkgpt"
+
+# Tap is created with 'sudo scripts/maketap.sh'
+HAS_TAP = os.path.exists("/sys/class/net/tap0")
+
 VERBOSE = False
 
 def main():
@@ -148,9 +153,6 @@ def main():
         qemu_flags = f'''
             -enable-kvm -cpu host
             -bios {OVMF_FD}
-            -netdev tap,id=net0,ifname=tap0,script=no,downscript=no
-            #-netdev user,id=net0
-            -device e1000,netdev=net0  # e1000 ~= intel 8254x
             -machine pc                # PS/2 keyboard input
             -serial file:bin/kernel.log 
             -s 
@@ -163,6 +165,13 @@ def main():
             # -device ide-hd,drive=disk1,bus=ahci.1
             # -nographic
         '''
+        if HAS_TAP:
+            qemu_flags += f'''
+            -device e1000,netdev=net0  # e1000 ~= intel 8254x
+            -netdev tap,id=net0,ifname=tap0,script=no,downscript=no
+            #-netdev user,id=net0
+            '''
+
         # @NOTE Not sure what these flags do but seems useful/important
         # Use -L if you want whole firmware package (seems to use secure boot with test keys)
         # f"-L /usr/share/ovmf/ "
@@ -225,7 +234,9 @@ def package_elos(release_dir, build_iso = False):
     DOOM_MAKEFILE   = f"{ROOT}/../doomgeneric/doomgeneric/Makefile.elos"
     DOOM_WAD        = f"{ROOT}/../iwad/doom1.wad"
 
-    cmd(f"cp {DOOM_WAD} {wad_path}")
+    if os.path.exists(DOOM_WAD):
+        os.makedirs(os.path.dirname(wad_path), exist_ok=True)
+        cmd(f"cp {DOOM_WAD} {wad_path}")
 
     INT_DIR         = f"{ROOT}/int"
     fat_path        = f"{INT_DIR}/fat.img"
@@ -305,7 +316,7 @@ def package_elos(release_dir, build_iso = False):
 
     #                       GPT header info      fat    some extra rom
     gpt_size_estimation = 2 * (2*512 + 128*128) + fat_size + (40 + 400) * 512
-    cmd(f"mkgpt -o {img_path} --image-size {gpt_size_estimation/512} --part {fat_path} --type system")
+    cmd(f"{MKGPT} -o {img_path} --image-size {gpt_size_estimation/512} --part {fat_path} --type system")
 
     # cmd(f"xorriso -as mkisofs -R -f -no-emul-boot -o {iso_path} {ISO_DIR}")
 
@@ -342,7 +353,7 @@ def make_gpt(out_path: str, deps_spec: list[tuple[str,str]]):
     fat_size, _ = make_fat(fat_path, deps_spec)
 
     gpt_size_estimation = 2 * (2*512 + 128*128) + fat_size + (40 + 400) * 512
-    cmd(f"mkgpt -o {out_path} --image-size {gpt_size_estimation/512} --part {fat_path} --type system")
+    cmd(f"{MKGPT} -o {out_path} --image-size {gpt_size_estimation/512} --part {fat_path} --type system")
 
 
 # Returns FAT size
