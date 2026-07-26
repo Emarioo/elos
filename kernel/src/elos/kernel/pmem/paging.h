@@ -11,26 +11,11 @@
 #define PAGE_BIT_PCD       (1LU << 4)
 #define PAGE_BIT_ACCESSED  (1LU << 5)
 #define PAGE_BIT_DIRTY     (1LU << 6)
-// PAT only for page entry
-#define PAGE_BIT_PAT       (1LU << 7)
-// Huge only for page directory table
+#define PAGE_BIT_ENTRY_PAT (1LU << 7)
+#define PAGE_BIT_DIR_PAT   (1LU << 12)
 #define PAGE_BIT_HUGE_PAGE (1LU << 7)
 #define PAGE_BIT_GLOBAL    (1LU << 8)
 #define PAGE_BIT_XD        (1LU << 63)
-
-
-typedef enum MapPageFlag {
-    PAGING_FLAG_USE_RESERVED_TABLE = 0x1,
-    PAGING_FLAG_READONLY           = 0x2,
-    PAGING_FLAG_NOT_CACHED         = 0x4,
-    PAGING_FLAG_USER_SPACE         = 0x8,
-    PAGING_FLAG_EXECUTABLE         = 0x10,
-    PAGING_FLAG_GLOBAL_PAGE        = 0x20,
-} MapPageFlag;
-
-typedef struct Page {
-    u64 entries[512];
-} Page;
 
 
 
@@ -41,24 +26,3 @@ typedef struct Page {
     new ones.
 */
 void init_paging(BootAPI* boot_api);
-
-/*
-    The lower 12 bits of virtual and physical address should be the exact same.
-    (it is the page offset into the pages we map)
-
-    Fails if page is already mapped.
-*/
-bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 size, MapPageFlag flags);
-
-/*
-    Returns false if address wasn't mapped
-
-    Note that if you unmap a virtual address that points to some physical page
-    then that physical page will be lost. Unless you are bookkeeping it's address or
-    have already "reclaimed" that physical page (which is done in phys_allocator).
-*/
-bool unmap_memory(Page* root, void* virtual_address, u64 size, MapPageFlag flags);
-
-
-void* retrieve_physical_address(Page* root, void* virtual_address);
-

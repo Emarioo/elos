@@ -75,38 +75,43 @@ void init_paging(BootAPI* boot_api) {
 
     dynamicTable_base = (u64)PMEM_alloc_phys(dynamicTable_size, PMEM_FLAG_NONE);
 
-    map_memory(rootTable, (void*)dynamicTable_base, (void*)dynamicTable_base, dynamicTable_size, PAGING_FLAG_USE_RESERVED_TABLE);
-    map_memory(rootTable, __kernel_start, __kernel_start, (u64)__kernel_end - (u64)__kernel_start, PAGING_FLAG_USE_RESERVED_TABLE | PAGING_FLAG_EXECUTABLE);
-    map_memory(rootTable, __stack_start, __stack_start, (u64)__stack_end - (u64)__stack_start, PAGING_FLAG_USE_RESERVED_TABLE);
+    PMEM_map_memory(rootTable, (void*)dynamicTable_base, (void*)dynamicTable_base, dynamicTable_size, PMEM_FLAG_BOOT_RESERVE);
+    PMEM_map_memory(rootTable, __kernel_start, __kernel_start, (u64)__kernel_end - (u64)__kernel_start, PMEM_FLAG_BOOT_RESERVE | PMEM_FLAG_EXECUTABLE);
+    PMEM_map_memory(rootTable, __stack_start, __stack_start, (u64)__stack_end - (u64)__stack_start, PMEM_FLAG_BOOT_RESERVE);
+
+    // May be huge but we still use reserved so print debugging keeps working.
+    if (boot_api->frame_buffer_base) {
+        PMEM_map_memory(rootTable, boot_api->frame_buffer_base, boot_api->frame_buffer_base, boot_api->frame_buffer_size, PMEM_FLAG_NOT_CACHED|PMEM_FLAG_BOOT_RESERVE);
+    }
 
     write_cr3((u64)rootTable); // Will fully flush TLB
 
     memset((void*)dynamicTable_base, 0, dynamicTable_size);
 
-    // These might be large so we don't use fixed/reserved page tables.
-    if (boot_api->frame_buffer_base) {
-        map_memory(rootTable, boot_api->frame_buffer_base, boot_api->frame_buffer_base, boot_api->frame_buffer_size, PAGING_FLAG_NOT_CACHED);
-    }
+    // May be huge so we don't use reserved page tables.
     if (boot_api->initrd) {
-        map_memory(rootTable, boot_api->initrd, boot_api->initrd, boot_api->initrd_size, 0);
+        PMEM_map_memory(rootTable, boot_api->initrd, boot_api->initrd, boot_api->initrd_size, 0);
     }
 }
 
-bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 size, MapPageFlag flags) {
+
+bool PMEM_map_memory(PageTable* root, void* virtual_address, void* physical_address, u64 size, PMEM_Flags flags) {
+    // printf("map v=0x%zx p=0x%zx s=0x%zx\n", virtual_address, physical_address, size);
+
     u64 user_bit = 0;
     u64 write_bit = PAGE_BIT_WRITE;
     u64 cache_bit = 0;
     u64 exec_bit = PAGE_BIT_XD;
-    if (flags & PAGING_FLAG_READONLY) {
+    if (flags & PMEM_FLAG_READ_ONLY) {
         write_bit = 0;
     }
-    if (flags & PAGING_FLAG_NOT_CACHED) {
+    if (flags & PMEM_FLAG_NOT_CACHED) {
         cache_bit = PAGE_BIT_PCD;
     }
-    if (flags & PAGING_FLAG_USER_SPACE) {
+    if (flags & PMEM_FLAG_USER_SPACE) {
         user_bit = PAGE_BIT_USER;
     }
-    if (flags & PAGING_FLAG_EXECUTABLE) {
+    if (flags & PMEM_FLAG_EXECUTABLE) {
         exec_bit = 0;
     }
 
@@ -125,7 +130,7 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
     u64 virt = (u64)virtual_address & MASK_48_4KB_ADDRESS;
     u64 phys = (u64)physical_address & MASK_48_4KB_ADDRESS;
 
-    #define get_table() (flags & PAGING_FLAG_USE_RESERVED_TABLE ? get_fixed_table() : get_dynamic_table())
+    #define get_table() (flags & PMEM_FLAG_BOOT_RESERVE ? get_fixed_table() : get_dynamic_table())
 
     while (bytes_left > 0) {
         int lvl4 = (virt >> 39) & 0x1FF;
@@ -184,23 +189,23 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
         Page* page_table_2 = (Page*)(entry3 & MASK_48_4KB_ADDRESS);
         u64 entry2 = page_table_2->entries[lvl2];
 
-        // @NOCHECKIN Doom runs when disabling huge pages.
-        // if (bytes_left >= 2*MB && (virt & (2*MB-1)) == 0 && (phys & (2*MB-1)) == 0) {
-        //     // We can make 2 MB page if
-        //     //   - We have at least 2 MB left to map
-        //     //   - The next virtual and physical addresses are aligned by 2 MB
+        if (bytes_left >= 2*MB && (virt & (2*MB-1)) == 0 && (phys & (2*MB-1)) == 0) {
+            // We can make 2 MB page if
+            //   - We have at least 2 MB left to map
+            //   - The next virtual and physical addresses are aligned by 2 MB
             
-        //     // We are leaking page table here when we ovewrite the entry.
+            // We are leaking page table here when we ovewrite the entry.
+            
 
-        //     entry2 = PAGE_BIT_PRESENT | cache_bit | exec_bit | write_bit | user_bit | PAGE_BIT_HUGE_PAGE | (MASK_48_2MB_ADDRESS & phys);
-        //     page_table_2->entries[lvl2] = entry2;
+            entry2 = PAGE_BIT_PRESENT | cache_bit | exec_bit | write_bit | user_bit | PAGE_BIT_HUGE_PAGE | (MASK_48_2MB_ADDRESS & phys);
+            page_table_2->entries[lvl2] = entry2;
             
-        //     flush_tlb_entry((void*)virt);
-        //     virt += 2*MB;
-        //     phys += 2*MB;
-        //     bytes_left -= 2*MB;
-        //     continue;
-        // }
+            flush_tlb_entry((void*)virt);
+            virt += 2*MB;
+            phys += 2*MB;
+            bytes_left -= 2*MB;
+            continue;
+        }
 
         if ((entry2 & PAGE_BIT_PRESENT) == 0 || (entry2 & PAGE_BIT_HUGE_PAGE)) {
             // Get physical page and map it in.
@@ -230,12 +235,13 @@ bool map_memory(Page* root, void* virtual_address, void* physical_address, u64 s
     return true;
 }
 
-bool unmap_memory(Page* root, void* virtual_address, u64 size, MapPageFlag flags) {
-    
+bool PMEM_unmap_memory(PageTable* root, void* virtual_address, u64 size) {
+
     return true;
 }
 
-void* retrieve_physical_address(Page* root, void* virtual_address) {
+
+void* PMEM_virt_to_phys(PageTable* root, void* virtual_address) {
     u64 virt = (u64)virtual_address;
     int lvl4 = (virt >> 39) & 0x1FF;
     int lvl3 = (virt >> 30) & 0x1FF;
@@ -253,7 +259,7 @@ void* retrieve_physical_address(Page* root, void* virtual_address) {
         return NULL;
     }
     if ((entry3 & PAGE_BIT_HUGE_PAGE) != 0) {
-        return (void*)(entry3 & MASK_48_1GB_ADDRESS);
+        return (void*)((entry3 & MASK_48_1GB_ADDRESS) | (virt & 0x3FFFFFFF));
     }
     
     Page* page_table_2 = (Page*)(entry3 & MASK_48_4KB_ADDRESS);
@@ -262,7 +268,7 @@ void* retrieve_physical_address(Page* root, void* virtual_address) {
         return NULL;
     }
     if ((entry2 & PAGE_BIT_HUGE_PAGE) != 0) {
-        return (void*)(entry2 & MASK_48_2MB_ADDRESS);
+        return (void*)((entry2 & MASK_48_2MB_ADDRESS) | (virt & 0x1FFFFF));
     }
     
     Page* page_table_1 = (Page*)(entry2 & MASK_48_4KB_ADDRESS);

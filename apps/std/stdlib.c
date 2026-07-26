@@ -148,11 +148,6 @@ int system(const char* command) {
     return -1;
 }
 
-int sscanf(const char* str, const char* format, ...) {
-    printf("sscanf(\"%s\", \"%s\")\n", str, format);
-    errno = ENOSYS;
-    return 0;
-}
 
 double atof(const char* str) {
     printf("atof(\"%s\")\n", str);

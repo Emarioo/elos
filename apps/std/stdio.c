@@ -234,3 +234,153 @@ size_t fwrite(const void* ptr, size_t size, size_t n, FILE *restrict stream) {
     return cqe.write.writtenBytes;
 }
 
+
+static int is_space(char c)
+{
+    return c == ' ' || c == '\t' || c == '\n' ||
+           c == '\r' || c == '\f' || c == '\v';
+}
+
+static int digit_value(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static bool parse_int(const char **str, int base, bool allow_prefix, int *out)
+{
+    const char *p = *str;
+
+    while (is_space(*p))
+        p++;
+
+    int sign = 1;
+    if (*p == '-') {
+        sign = -1;
+        p++;
+    } else if (*p == '+') {
+        p++;
+    }
+
+    if (allow_prefix) {
+        if (base == 0) {
+            if (p[0] == '0') {
+                if (p[1] == 'x' || p[1] == 'X') {
+                    base = 16;
+                    p += 2;
+                } else {
+                    base = 8;
+                    p++;
+                }
+            } else {
+                base = 10;
+            }
+        } else if (base == 16) {
+            if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X'))
+                p += 2;
+        }
+    }
+
+    unsigned value = 0;
+    bool found = false;
+
+    while (1) {
+        int d = digit_value(*p);
+        if (d < 0 || d >= base)
+            break;
+
+        value = value * base + d;
+        found = true;
+        p++;
+    }
+
+    if (!found)
+        return false;
+
+    *out = (int)(value * sign);
+    *str = p;
+    return true;
+}
+
+int vsscanf(const char *str, const char *fmt, va_list args)
+{
+    int assigned = 0;
+
+    while (*fmt) {
+
+        if (is_space(*fmt)) {
+            while (is_space(*fmt))
+                fmt++;
+
+            while (is_space(*str))
+                str++;
+
+            continue;
+        }
+
+        if (*fmt != '%') {
+            if (*fmt != *str)
+                break;
+
+            fmt++;
+            str++;
+            continue;
+        }
+
+        fmt++;
+
+        int base;
+        bool allow_prefix = false;
+
+        switch (*fmt) {
+        case 'd':
+            base = 10;
+            break;
+
+        case 'o':
+            base = 8;
+            break;
+
+        case 'x':
+            base = 16;
+            allow_prefix = true;
+            break;
+
+        case 'i':
+            base = 0;
+            allow_prefix = true;
+            break;
+
+        case '%':
+            if (*str != '%')
+                return assigned;
+            str++;
+            fmt++;
+            continue;
+
+        default:
+            return assigned;
+        }
+
+        int *out = va_arg(args, int *);
+
+        if (!parse_int(&str, base, allow_prefix, out))
+            return assigned;
+
+        assigned++;
+        fmt++;
+    }
+
+    return assigned;
+}
+
+int sscanf(const char *str, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    int ret = vsscanf(str, fmt, args);
+    va_end(args);
+    return ret;
+}

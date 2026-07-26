@@ -552,29 +552,3 @@ cleanup:
     UNLOCK_INT(&allocate_spinlock);
     return returnValue;
 }
-
-bool PMEM_map_memory(PageTable* table, void* virtual_address, void* physical_address, u64 size, PMEM_Flags flags) {
-    int pflags = 0;
-    if (flags & PMEM_FLAG_NOT_CACHED) {
-        pflags |= PAGING_FLAG_NOT_CACHED;
-    }
-    if (flags & PMEM_FLAG_READ_ONLY) {
-        pflags |= PAGING_FLAG_READONLY;
-    }
-    if (flags & PMEM_FLAG_USER_SPACE) {
-        pflags |= PAGING_FLAG_USER_SPACE;
-    }
-    if (flags & PMEM_FLAG_EXECUTABLE) {
-        pflags |= PAGING_FLAG_EXECUTABLE;
-    }
-    // @TODO PMEM_FLAG_EXECUTABLE
-    return map_memory(table, virtual_address, physical_address, size, pflags);
-}
-
-bool PMEM_unmap_memory(PageTable* table, void* virtual_address, u64 size) {
-    return unmap_memory(table, virtual_address, size, 0);
-}
-
-void* PMEM_virt_to_phys(PageTable* table, void* virtual_address) {
-    return retrieve_physical_address(table, virtual_address);
-}

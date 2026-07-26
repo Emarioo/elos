@@ -46,9 +46,6 @@ static BootAPI _boot_api;
 BootAPI* boot_api;
 
 
-void compute() {
-    printf("Soup%.3d\n", 7);
-}
 
 void kernel_entry(BootAPI* in_boot_api) {
 
@@ -227,8 +224,6 @@ void kernel_entry(BootAPI* in_boot_api) {
     //######################
     //   USER MODE TEST
     //######################
-
-    compute();
 
     // Start scheduling
     EXEC_init();

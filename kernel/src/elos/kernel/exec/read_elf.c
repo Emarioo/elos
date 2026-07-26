@@ -165,7 +165,10 @@ bool parse_elf(ParseContext* ctx) {
     for (int ci=0;ci<ARRAY_LENGTH(cores);ci++) {
         EXEC_Core* core = &cores[ci];
         u8* stack_start = (u8*)core->syscall_stack - core->syscall_stack_size;
-        PMEM_map_memory(pageTable, stack_start, stack_start, core->syscall_stack_size, PMEM_FLAG_NONE);
+        if (stack_start) {
+            // Only map if core has been initialized with a stack?
+            PMEM_map_memory(pageTable, stack_start, stack_start, core->syscall_stack_size, PMEM_FLAG_NONE);
+        }
     }
 
     

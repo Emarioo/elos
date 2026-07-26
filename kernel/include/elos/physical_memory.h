@@ -14,9 +14,15 @@ typedef enum PMEM_Flags {
     PMEM_FLAG_READ_ONLY       = 0x4,
     PMEM_FLAG_EXECUTABLE      = 0x8,
     PMEM_FLAG_USER_SPACE      = 0x10,
+    PMEM_FLAG_BOOT_RESERVE    = 0x20,
 } PMEM_Flags;
 
-typedef void PageTable;
+
+typedef struct Page {
+    u64 entries[512];
+} Page;
+
+typedef Page PageTable;
 
 extern PageTable* g_kernelPageTable;
 
@@ -41,39 +47,21 @@ void* PMEM_alloc_phys(u64 size, PMEM_Flags flags);
 PageTable* PMEM_allocPageTable();
 
 // @TODO Cacheable, prefetachable, write through flags.
+/*
+    The lower 12 bits of virtual and physical address should be the exact same.
+    (it is the page offset into the pages we map)
+
+    Fails if page is already mapped.
+*/
 bool PMEM_map_memory(PageTable* table, void* virtual_address, void* physical_address, u64 size, PMEM_Flags flags);
 
+/*
+    Returns false if address wasn't mapped
+
+    Note that if you unmap a virtual address that points to some physical page
+    then that physical page will be lost. Unless you are bookkeeping it's address or
+    have already "reclaimed" that physical page (which is done in phys_allocator).
+*/
 bool PMEM_unmap_memory(PageTable* table, void* virtual_address, u64 size);
 
 void* PMEM_virt_to_phys(PageTable* table, void* virtual_address);
-
-/*
-    TODO: Allocates contiguous pages with some optional flags
-    
-        Option to choose how memory is initialized. Zero initialized or some specific byte like 0xCD
-        (allocated pages are always initialized, we don't want to leave leftover data which a malicious program read)
-        DEBUG boundaries. Allocating 2 extra pages at start and end where page is filled with 0xCD. If they were modified
-        we'll know and can notify the user. (user might call kernel_allocated_pages_wrote_to_debug_page() to check it)
-        READ,WRITE,EXECUTE permissions. Well, you would maybe start with READ,WRITE,EXEC but then using kernel_set_flags
-        turn off write permissions or something.
-
-
-*/
-
-// void* kerneL_alloc_pages(u64 size, void* ptr, u32 flags);
-
-
-
-
-
-// /*
-//     Flags specify write/read/execute access and other flags (zero initialized or 0x9D initialized)
-//     Address and bytes must be page-aligned
-// */
-// bool kernel_vmap(void* requested_virtual_addr, u64 bytes, int flags);
-
-// /*
-//     Address and bytes must be page-aligned
-// */
-// bool kernel_vunmap(void* requested_virtual_addr, u64 bytes);
-

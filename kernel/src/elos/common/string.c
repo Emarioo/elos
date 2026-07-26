@@ -204,7 +204,7 @@ int vsnprintf(char* buffer, size_t _size, const char* format, va_list va) {
         } else if (format[i] == 'x') {
             i++;
 
-            int value = va_arg(va, int);
+            uint32_t value = va_arg(va, uint32_t);
 
             // if (width > 0) {
             //     int num_leading_zero_bits;

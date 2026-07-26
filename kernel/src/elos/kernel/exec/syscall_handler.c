@@ -318,7 +318,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 returnValue = ELOS_GENERIC_ERROR;
             }
 
-            // printf("MALLOC %zx:%zx (%zu KB)\n", address, address + size, size / 1024);
+            // printf("MALLOC 0x%zx:0x%zx (%zu KB)\n", address, address + size, size / 1024);
         } break;
         case _SYS_HEAP_FREE: {
             void* oldAddress = (void*)arg0;
