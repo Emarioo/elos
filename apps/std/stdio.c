@@ -92,13 +92,15 @@ FILE *fopen(const char *restrict _path, const char *restrict mode) {
     req.open.path   = path;
     if (mode[0] == 'r') {
         if (mode[1] == '+') {
-            req.open.flags  = ELOS_FILE_OPEN_FLAG_READ_ONLY;
-        } else {
             req.open.flags  = 0; // Reading and writing, no truncation
+        } else {
+            req.open.flags  = ELOS_FILE_OPEN_FLAG_READ_ONLY;
         }
-    } else {
-        // @TODO What if we want to open file for writing no truncation?
+    } else if(mode[0] == 'w') {
         req.open.flags  = ELOS_FILE_OPEN_FLAG_CREATE;
+    } else {
+        // Mode not supported. Append 'a' is one of them.
+        return NULL;
     }
 
     requestID = async_submit(&req);
@@ -470,8 +472,6 @@ int rename(const char* _oldpath, const char* _newpath) {
     return 0;
 }
 int mkdir(const char* _path, mode_t mode) {
-    ELOS_Error error;
-
     GET_ABS_PATH(path, _path);
 
     ELOS_AsyncRequest req;
@@ -485,13 +485,9 @@ int mkdir(const char* _path, mode_t mode) {
 
     requestID = async_submit(&req);
     bool res = async_wait(requestID, &cqe, 0);
-    if (!res) {
+    if (!res || cqe.error != ELOS_OK) {
         errno = ENOENT;
-        return -1;
-    }
-
-    if (cqe.error != ELOS_OK) {
-        errno = ENOENT;
+        printf("mkdir: Could not make %s\n", path);
         return -1;
     }
 

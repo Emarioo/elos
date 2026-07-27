@@ -64,9 +64,10 @@ FAT_ID find_directory(FATContext* context, FAT_ID currentDir, const cstring subn
 // @TODO find_directory can be optimized to cache a free entry it finds.
 // If subsequently calling create_directory then it use that entry without
 // iterating whole directory again.
-FAT_ID create_directory(FATContext* context, FAT_ID currentDir, const cstring subname);
+FAT_ID create_fat_entry(FATContext* context, FAT_ID currentDir, const cstring subname, bool isDirectory);
 bool delete_entry(FATContext* context, FAT_ID currentDir, const cstring subname);
 
+VFS_FileObject* fat_mkfile(VFS_Mount* mount, const cstring path);
 
 fat__DirectoryEntry* fat_next_entry(FATContext* context, FAT_ID currentDir, u32* entryIndex, char* longName);
 

@@ -310,23 +310,46 @@ exit:
 }
 
 
+void stap(){
+    printf("BREAK\n");
+}
+
 VFS_Handle VFS_open(const char* _cpath, VFS_OpenFlags flags) {
     VFS_Handle returnValue = VFS_NULL_HANDLE;
     LOCK_INT(&g_vfs_lock);
 
     GET_NORMALIZED_PATH(cpath, _cpath);
 
-    // From a path we get back a directory, a file, a mounting point
-    // A virtual node directory.
-    VFS_FileObject* obj = resolveFileObject(cpath);
-    if (!obj) {
-        goto exit;
-    }
+    printf("VFS_open %s\n", cpath);
 
-    VFS_Handle_impl* handle = reserve_handle();
-    handle->flags = flags;
-    handle->fileObject = obj;
-    returnValue = TO_HANDLE(handle);
+    if (flags & VFS_FLAG_CREATE) {
+        int subIndex;
+        VFS_Mount* mount = resolveMount(cpath, &subIndex);
+        if (!mount) {
+            goto exit;
+        }
+        
+        cstring subpath = PTR_CSTR(cpath + subIndex);
+
+        VFS_FileObject* obj = fat_mkfile(mount, subpath);
+
+        VFS_Handle_impl* handle = reserve_handle();
+        handle->flags = flags;
+        handle->fileObject = obj;
+        returnValue = TO_HANDLE(handle);
+    } else {
+        // From a path we get back a directory, a file, a mounting point
+        // A virtual node directory.
+        VFS_FileObject* obj = resolveFileObject(cpath);
+        if (!obj) {
+            goto exit;
+        }
+
+        VFS_Handle_impl* handle = reserve_handle();
+        handle->flags = flags;
+        handle->fileObject = obj;
+        returnValue = TO_HANDLE(handle);
+    }
 
 exit:
     UNLOCK_INT(&g_vfs_lock);

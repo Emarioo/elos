@@ -1,6 +1,8 @@
 /**
  * vsnprintf - a simple, standalone vsnprintf() implementation.
  * Note: it does not support floating point numbers (%f)
+ * 
+ * https://github.com/MrBad/vsnprintf
  *
  * ---------------------------------------------------------------------------
  * Copyright (c) 2018 MrBadNews <viorel dot irimia at gmail dot come>
@@ -157,7 +159,7 @@ static size_t slen(char *s)
 }
 
 static void fmt_str(char *buf, size_t *pos, size_t max, char *s,
-        int width, int flags)
+        int width, int flags, int precision)
 {
     int npad = 0;
     if (width > 0) npad = width - slen(s);
@@ -167,8 +169,14 @@ static void fmt_str(char *buf, size_t *pos, size_t max, char *s,
         while (npad-- > 0)
             bputc(buf, pos, max, ' ');
 
-    while (*s)
-        bputc(buf, pos, max, *s++);
+    if (precision == -1) {
+        while (*s)
+            bputc(buf, pos, max, *s++);
+    } else {
+        char* origin_s = s;
+        while (*s && s - origin_s < precision)
+            bputc(buf, pos, max, *s++);
+    }
 
     if (npad && (flags & F_LEFT))
         while (npad-- > 0)
@@ -245,8 +253,10 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
             if (c == '.') {
                 if (is_digit(*fmt))
                     precision = get_atoi(&fmt);
-                else if (*fmt == '*')
+                else if (*fmt == '*') {
+                    fmt++;
                     precision = va_arg(ap, int);
+                }
                 precision = precision < 0 ? 0 : precision;
             } else
                 fmt--;
@@ -256,6 +266,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
             switch(c) {
                 case 'h': lflags = lflags == L_CHAR ? L_SHORT : L_CHAR; break;
                 case 'l': lflags = lflags == L_LONG ? L_LLONG : L_LONG; break;
+                case 'z': lflags = lflags == L_LONG ? L_LLONG : L_LONG; break;
                 case 'L': lflags = L_DOUBLE; break;
                 default: fmt--; state = S_CONV;
             }
@@ -282,6 +293,10 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
                 } else if (c == 'b') {
                     base = 2;
                 }
+                if (precision != -1) {
+                    flags |= F_ZEROPAD;
+                    width = precision;
+                }
                 fmt_int(buf, &n, size, num, base, width, flags);
             } else if (c == 'p') {
                 num = (long long) va_arg(ap, void *);
@@ -292,7 +307,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
                 s = va_arg(ap, char *);
                 if (!s)
                     s = "(null)";
-                fmt_str(buf, &n, size, s, width, flags);
+                fmt_str(buf, &n, size, s, width, flags, precision);
             } else if (c == 'c') {
                 c = va_arg(ap, int);
                 fmt_chr(buf, &n, size, c, width, flags);

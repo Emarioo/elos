@@ -55,7 +55,7 @@ int required_long_name_entries(const cstring name) {
             return 0;
         }
     } else {
-        if (dot_index <= 8 || name.len - (dot_index+1)) {
+        if (dot_index <= 8 && name.len - (dot_index+1) <= 3) {
             return 0;
         }
     }
@@ -111,7 +111,7 @@ bool fat_mkdir(VFS_Mount* mount, const cstring path) {
         FAT_ID nextDir = find_directory(context, currentDir, subname);
 
         if (!nextDir) {
-            nextDir = create_directory(context, currentDir, subname);
+            nextDir = create_fat_entry(context, currentDir, subname, true);
             if (!nextDir) {
                 printf("Could not make directory! %s\n", subname.ptr);
                 break;
@@ -125,6 +125,85 @@ bool fat_mkdir(VFS_Mount* mount, const cstring path) {
     }
 
     return false;
+    #undef NEXT_SUBNAME
+}
+
+
+VFS_FileObject* fat_mkfile(VFS_Mount* mount, const cstring path) {
+    int res;
+
+    if (path.len == 1 && path.ptr[0] == '/') {
+        // Can't create root directory
+        return NULL;
+    }
+
+    FATContext _ctx = {0};
+    FATContext* context = &_ctx;
+    
+    init_context(context, mount);
+
+    FAT_ID rootDir = get_root_directory(context);
+
+    int path_index = 0;
+    cstring subname = { 0 };
+    int slash_pos = 0;
+
+    #define NEXT_SUBNAME                                   \
+        path_index = slash_pos;                            \
+        if (subname.ptr != path.ptr + path_index) {        \
+            if (path.ptr[path_index] != '/') {             \
+                printf("Expeting slash!\n");               \
+                return NULL;                               \
+            }                                              \
+            path_index++;                                  \
+            slash_pos = find_slash(path, path_index);      \
+            if (slash_pos == -1) {                         \
+                subname.ptr = path.ptr + path_index;       \
+                subname.len = path.len - path_index;       \
+                path_index = path.len;                     \
+            } else {                                       \
+                subname.ptr = path.ptr + path_index;       \
+                subname.len = slash_pos - path_index;      \
+                path_index = slash_pos;                    \
+            }                                              \
+        }
+
+
+    FAT_ID currentDir = rootDir;
+    
+    while (1) {
+        NEXT_SUBNAME
+        FAT_ID nextDir = find_directory(context, currentDir, subname);
+
+        if (nextDir) {
+            if (slash_pos == -1) {
+                return NULL;
+            }
+            currentDir = nextDir;
+            continue;
+        }
+
+        if (slash_pos != -1) {
+            return NULL;
+        }
+        FAT_ID fileContent = create_fat_entry(context, currentDir, subname, false);
+        if (fileContent == FAT_ID_NULL) {
+            printf("Could not make file! %s\n", subname.ptr);
+            break;
+        }
+        int clusterIndex;
+        int sector_start;
+        int sectorEnd;
+        extract_fat_id(context, fileContent, &clusterIndex, &sector_start, &sectorEnd);
+
+        VFS_FileObject* fileObject = find_file_object(mount, clusterIndex);
+        fileObject->direntryIndex = context->entries_index;
+        fileObject->direntrySector = context->sector_start + context->sector_index;
+        return fileObject;
+    }
+
+    return NULL;
+    #undef NEXT_SUBNAME
 }
 
 
@@ -1165,7 +1244,7 @@ FAT_ID find_directory(FATContext* context, FAT_ID currentDir, const cstring subn
     return FAT_ID_NULL;
 }
 
-FAT_ID create_directory(FATContext* context, FAT_ID currentDir, const cstring subname) {
+FAT_ID create_fat_entry(FATContext* context, FAT_ID currentDir, const cstring subname, bool isDirectory) {
     int res;
     int current_cluster;
     int sector_start;
@@ -1191,7 +1270,7 @@ FAT_ID create_directory(FATContext* context, FAT_ID currentDir, const cstring su
     int freeCluster = -1;
 
     while (1) {
-        
+        // printf("READ sector=0x%zx\n", (context->start_lba + sector_start + sector_index) * SECTOR_SIZE);
         res = DISK_read(context->device, (context->start_lba + sector_start + sector_index) * SECTOR_SIZE, SECTOR_SIZE, tempSector);
         if (res == 0) {
             printf("Could not read\n");
@@ -1232,13 +1311,21 @@ FAT_ID create_directory(FATContext* context, FAT_ID currentDir, const cstring su
                     }
 
                     remainingLFNEntries--;
+
+                    // @TODO When filling entries and hopping to next cluster
+                    //   We should write previous cluster.
                 } else {
                     // No more entries in directory
                     // sector_index = sector_end - sector_start - 1;
                     // break;
 
-                    entry->attributes = fat__DIRECTORY;
-                    entry->file_size = context->bpb->sectors_per_cluster * context->sector_size;
+                    if (isDirectory) {
+                        entry->attributes = fat__DIRECTORY;
+                        entry->file_size = context->bpb->sectors_per_cluster * context->sector_size;
+                    } else {
+                        entry->attributes = 0;
+                        entry->file_size = 0;
+                    }
                     // @TODO Set times
 
                     entry->cluster_low = freeCluster & 0xFFFF;
@@ -1265,7 +1352,7 @@ FAT_ID create_directory(FATContext* context, FAT_ID currentDir, const cstring su
                         if (dot_index == -1) {
                             // no extension
                         } else {
-                            for (int i = 0; i < (subname.len - dot_index + 1); i++) {
+                            for (int i = 0; i < (subname.len - (dot_index + 1)) && i < 3; i++) {
                                 entry->file_name[8 + i] = subname.ptr[dot_index + 1 + i];
                             }
                         }
@@ -1279,7 +1366,7 @@ FAT_ID create_directory(FATContext* context, FAT_ID currentDir, const cstring su
                             }
                         }
                         for (int i = 0; i < 8; i++) {
-                            if (i < subname.len) {
+                            if (i < subname.len && (dot_index == -1 || i < dot_index)) {
                                 entry->file_name[i] = subname.ptr[i];
                             } else {
                                 entry->file_name[i] = ' ';
@@ -1290,20 +1377,33 @@ FAT_ID create_directory(FATContext* context, FAT_ID currentDir, const cstring su
                             entry->file_name[9] = ' ';
                             entry->file_name[10] = ' ';
                         } else {
-                            for (int i = 0; i < (subname.len - dot_index + 1); i++) {
+                            for (int i = 0; i < (subname.len - (dot_index + 1)); i++) {
                                 entry->file_name[8 + i] = subname.ptr[dot_index + 1 + i];
                             }
                         }
                     }
-
-                    // Clear directory entries of newly made directory
-                    memset(tempSector, 0, SECTOR_SIZE);
-                    int dir_sector_start = fat__cluster_to_sector_offset(context, freeCluster);
-                    for (int i = 0; i < context->bpb->sectors_per_cluster; i++) {
-                        res = DISK_write( context->device,
-                            (context->start_lba + dir_sector_start + i) * context->sector_size,
-                            context->sector_size, tempSector);
+                    // printf("WRITE sector=0x%zx\n", (context->start_lba + sector_start + sector_index) * SECTOR_SIZE);
+                    res = DISK_write(context->device, (context->start_lba + sector_start + sector_index) * SECTOR_SIZE, SECTOR_SIZE, tempSector);
+                    if (res == 0) {
+                        printf("create_directory: Disk write failed %.*s\n", subname.len, subname.ptr);
+                        return FAT_ID_NULL;
                     }
+
+                    if (isDirectory) {
+                        // Clear directory entries of newly made directory
+                        memset(tempSector, 0, SECTOR_SIZE);
+                        int dir_sector_start = fat__cluster_to_sector_offset(context, freeCluster);
+                        for (int i = 0; i < context->bpb->sectors_per_cluster; i++) {
+                            // printf("CLEARING sector=0x%zx\n", (context->start_lba + dir_sector_start + i) * context->sector_size);
+                            res = DISK_write( context->device,
+                                (context->start_lba + dir_sector_start + i) * context->sector_size,
+                                context->sector_size, tempSector);
+                        }
+                    }
+
+                    context->sector_index = sector_index;
+                    context->sector_start = sector_start;
+                    context->entries_index = ei;
                     
                     FAT_ID fatID = make_fat_id(context, freeCluster);
                     return fatID;
@@ -1314,6 +1414,9 @@ FAT_ID create_directory(FATContext* context, FAT_ID currentDir, const cstring su
                 // @TODO Check how many consecutive ones we have. subname may fit.
                 continue;
             }
+            // We should truncate entry if we look for non directory and entry is non-directory and
+            // has same same. We need to look for an entry with that name first.
+            // Then look for free entries. Ideally remember the free entries we find when looking for named entry.
             if (entry->file_name[0] != 0) {
                 // entry is used
                 continue;
@@ -1335,6 +1438,8 @@ FAT_ID create_directory(FATContext* context, FAT_ID currentDir, const cstring su
             if (freeCluster == -1) {
                 return FAT_ID_NULL;
             }
+            res = fat__set_fat(context, freeCluster, fat__END_OF_FILE);
+            if (!res) return FAT_ID_NULL;
 
             // Loop again but this time fill in entries.
             fillMode = true;
@@ -1547,7 +1652,7 @@ fat__DirectoryEntry* fat_next_entry(FATContext* context, FAT_ID currentDir, u32*
             return NULL;
         }
 
-        
+        // printf("nextENT READ sector=0x%zx\n", (context->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE);
         res = DISK_read(context->device, (context->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE, SECTOR_SIZE, context->tempSector);
         if (res == 0) {
             printf("Could not read\n");

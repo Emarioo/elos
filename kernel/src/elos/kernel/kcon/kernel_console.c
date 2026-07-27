@@ -39,7 +39,7 @@ void KCON_add_write_hook(FN_KCON_write func) {
 }
 
 void KCON_printf(const char* format, ...) {
-    char buffer[256];
+    char buffer[512];
 
     va_list va;
     va_start(va, format);
@@ -135,4 +135,28 @@ void KCON_net_write(const char* buffer, int buffer_len) {
 
     sending--;
     
+}
+
+
+void kernel_panic(const char* format, ...) {
+    char buffer[512];
+
+    va_list va;
+    va_start(va, format);
+    int len = vsnprintf(buffer, sizeof(buffer), format, va);
+    va_end(va);
+
+    for (int i=0;i<ARRAY_LENGTH(_write_hooks);i++) {
+        if (_write_hooks[i]) {
+            _write_hooks[i](buffer, len);
+        }
+    }
+
+    // @TODO Tell other cores to halt too.
+    while (1) {
+        asm(
+            "cli\n"
+            "hlt\n"
+        );
+    }
 }

@@ -59,8 +59,10 @@ void dumpdir(const char* path, int depth) {
 
     INDENT()
     const char* firstSlash = strrchr(path, '/');
-    if (!firstSlash)
+    if (!firstSlash || (path[0] == '/' && path[1] == '\0'))
         firstSlash = path;
+    else
+        firstSlash = firstSlash + 1;
     printf("%s\n", firstSlash);
     
     while (1) {
@@ -288,20 +290,36 @@ void os_entry() {
         } \
         printf("%2d %14s <- %s\n", res,  buffer, PATH); 
 
-    CHECK(".")
-    CHECK("./")
-    CHECK("/.")
-    CHECK("/..")
-    CHECK("//")
-    CHECK("//a//b//c//")
-    CHECK("/.media")
-    CHECK("/media.")
-    CHECK("/media./usb")
-    CHECK("/media./usb/.")
-    CHECK("/media./usb/..")
-    CHECK("/media/./usb")
-    CHECK("/media/../usb/")
-    CHECK("/media//../usb/")
+    // CHECK(".")
+    // CHECK("./")
+    // CHECK("/.")
+    // CHECK("/..")
+    // CHECK("//")
+    // CHECK("//a//b//c//")
+    // CHECK("/.media")
+    // CHECK("/media.")
+    // CHECK("/media./usb")
+    // CHECK("/media./usb/.")
+    // CHECK("/media./usb/..")
+    // CHECK("/media/./usb")
+    // CHECK("/media/../usb/")
+    // CHECK("/media//../usb/")
+
+    // bool ress = VFS_mkdir("/home");
+
+    // bool ress = VFS_mkdir("/home/.savegame");
+    // // bool ress = VFS_mkdir("/home/savega");
+    // if (!ress) {
+    //     printf("Could not create home\n");
+    // }
+
+    // VFS_Handle handle = VFS_open("/home/.savegame/temp.dsg", VFS_FLAG_CREATE);
+    // if (handle == VFS_NULL_HANDLE) {
+    //     printf("Could not open temp.dsg\n");
+    // }
+
+    // dumpdir("/home", 0);
+    // dumpdir("/", 0);
 
 
     EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
