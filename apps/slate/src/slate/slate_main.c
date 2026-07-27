@@ -88,7 +88,7 @@ void dumpdir(const char* path, int depth);
 void _start() {
 
     // @NOCHECKIN Temporary
-    dumpdir("/", 0);
+    // dumpdir("/", 0);
     
 
     SYS_ticks_per_second(&ticks_per_second);

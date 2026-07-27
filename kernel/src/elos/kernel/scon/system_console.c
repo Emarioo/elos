@@ -59,6 +59,10 @@ int fontHeight = 16;
 int textColor = WHITE;
 int backColor = TERMINAL_BACK;
 
+
+char cwd[256];
+int  cwd_len;
+
 void send_command(cstring text);
 void edit_text(char* text_ptr, int text_max, int* inout_text_len, ELOS_Keycode keycode, int character, int mods, int* cursor);
 
@@ -81,6 +85,8 @@ bool SCON_is_enabled() {
     A thread should be created since it will never return.
 */
 void SCON_main() {
+    cwd_len = snprintf(cwd, sizeof(cwd), "/");
+
     int screenWidth, screenHeight;
     draw_frame_info(&screenWidth, &screenHeight);
 
@@ -112,6 +118,7 @@ void SCON_main() {
         while (hasKeyEvent) {
             if (keyEvent.keycode == ELOSKEY_ENTER && keyEvent.pressed) {
                 cstring cmd = { inputBuffer.text, inputBuffer_len };
+                inputBuffer.text[inputBuffer_len] = 0;
                 send_command(cmd);
                 inputBuffer_len = 0;
                 inputBuffer.text[inputBuffer_len] = 0;
@@ -137,7 +144,14 @@ void SCON_main() {
         while (lineIndex < lines_len) {
             Line* line = &lines[lineIndex];
             cstring lineText = PTR_CSTR(line->text);
-            draw_glyphs_from_text_bcolor(g_terminal_x, g_terminal_y + fontHeight * lineIndex, fontHeight, lineText, g_default_font, textColor, backColor);
+            int lineTextWidth = draw_text_width(lineText, fontHeight, g_default_font);
+            int text_y = g_terminal_y + fontHeight * lineIndex;
+            draw_glyphs_from_text_bcolor(g_terminal_x, text_y, fontHeight, lineText, g_default_font, textColor, backColor);
+
+            // We cover right part of input text box with background but
+            // this means flickering of green and white when we draw cursor on top later.
+            int remainingWidth = screenWidth - g_terminal_x - lineTextWidth;
+            draw_rect(g_terminal_x + lineTextWidth, text_y,  remainingWidth, fontHeight, backColor);
 
             lineIndex++;
         }
@@ -245,7 +259,9 @@ void respond_message(cstring text) {
                 len = head - startHead;
 
             int cap = len < sizeof(nextLine->text)-1 ? len : sizeof(nextLine->text)-1;
-            memcpy(nextLine->text, text.ptr, cap);
+            memcpy(nextLine->text, text.ptr + startHead, cap);
+
+            startHead = head;
         }
     }
 }
@@ -256,18 +272,53 @@ void printCallback(const char* buffer, size_t size, void* userData) {
 }
 
 ELOS_DirectoryEntry* dirEntries;
-int                 dirEntries_cap;
+int                  dirEntries_cap;
+
+
+void resolvePath(char* fullpath, int fullpathMax, const char* ls_path) {
+    if (ls_path[0] == '/') {
+        snprintf(fullpath, fullpathMax, "%s", ls_path);
+    } else if (cwd[cwd_len-1] == '/') {
+        snprintf(fullpath, fullpathMax, "%s%s", cwd, ls_path);
+    } else {
+        snprintf(fullpath, fullpathMax, "%s/%s", cwd, ls_path);
+    }
+}
 
 void send_command(cstring text) {
 
     // Shell executor
 
-    if (!strcmp(text.ptr, "cd")) {
-        respond_message(PTR_CSTR("No file system\n"));
-    } else if (!strcmp(text.ptr, "ls")) {
-        respond_message(PTR_CSTR("No file system\n"));
+    if (!strcmp(text.ptr, "cd") || !strncmp(text.ptr, "cd ", 3)) {
 
-        // @TODO Implement proper LS
+        char tempPath[256];
+        if (text.len > 3) {
+            const char* ls_path = text.ptr + 3;
+            resolvePath(tempPath, sizeof(tempPath), ls_path);
+        } else {
+            snprintf(tempPath, sizeof(tempPath), "%s", cwd);
+        }
+        strncpy(cwd, tempPath, sizeof(cwd));
+        cwd_len = strlen(cwd);
+
+        char msg[256];
+        int  msg_len = snprintf(msg, sizeof(msg), "CWD: %s\n", cwd);
+
+        respond_message((cstring){ .ptr = msg, .len = msg_len });
+
+    } else if (!strcmp(text.ptr, "ls") || !strncmp(text.ptr, "ls ", 3)) {
+
+        char fullpath[256];
+        if (text.len > 3) {
+            const char* ls_path = text.ptr + 3;
+            resolvePath(fullpath, sizeof(fullpath), ls_path);
+        } else {
+            snprintf(fullpath, sizeof(fullpath), "%s", cwd);
+        }
+
+        cstring basePath = { .ptr = fullpath, .len = strlen(fullpath) };
+        respond_message(basePath);
+
 
         if (!dirEntries) {
             // @TODO One entry to test the function, don't forget to increase.
@@ -275,12 +326,12 @@ void send_command(cstring text) {
             dirEntries = PMEM_alloc(dirEntries_cap * sizeof(*dirEntries));
         }
 
-        u64 cookie;
+        u64 cookie = 0;
         u64 entryCount;
         
         while (1) {
             entryCount = dirEntries_cap;
-            bool yes = VFS_readdir("/", &cookie, &entryCount, dirEntries);
+            bool yes = VFS_readdir(fullpath, &cookie, &entryCount, dirEntries);
             if (!yes) {
                 printf("VFS_readdir: returned false, error\n");
                 break;
@@ -289,6 +340,7 @@ void send_command(cstring text) {
             for (int i=0;i<entryCount;i++) {
                 ELOS_DirectoryEntry* entry = &dirEntries[i];
                 int len = snprintf(msg, sizeof(msg), "%s\n", entry->name);
+                printf("%s\n", entry->name);
                 respond_message((cstring){ msg, len });
             }
             if (entryCount != dirEntries_cap) {

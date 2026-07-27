@@ -826,6 +826,21 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             returnValue = ELOS_OK;
             
         } break;
+        case _SYS_EXIT: {
+            int exitCode = arg0;
+
+            int coreIndex = CPU_get_core_index();
+            EXEC_Core* core = &cores[coreIndex];
+            EXEC_Thread* activeThread = &core->threads[core->active_thread];
+
+            // @TODO Free resources.
+
+            core->rescheduleSyscall = true;
+            activeThread->used = false;
+            
+            returnValue = ELOS_OK;
+            
+        } break;
         default: {
             returnValue = ELOS_INVALID_SYSCALL;
         } break;

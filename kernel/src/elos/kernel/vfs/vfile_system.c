@@ -103,7 +103,132 @@ void unreserve_handle(VFS_Handle_impl* handle) {
     g_handles_len--;
 }
 
+// Returns -1 if buffer is too small or has invalid characters
+int normalizePath(char* buffer, int bufferSize, const char* path) {
 
+    /*  Rules
+        /media/./usb0/  -> /media/usb0/
+        /media/usb0/../ -> /media/
+        /media//usb0/   -> media/usb0/
+    */
+
+    #define CHECK(N) if (output_len + (N) > bufferSize) return -1;
+
+    if (path[0] != '/') {
+        return -1;
+    }
+
+    int output_len = 0;
+    int head = 0;
+    int prevOutput_len = 0;
+    int startHead = 0;
+    while (1) {
+        char chr = path[head];
+        if (chr != '/' && chr != '\0') {
+            head++;
+            continue;
+        }
+        
+        // Parse component
+
+        int tmpOutputLength = output_len;
+        int componentLength = head - startHead;
+        if (componentLength == 0) {
+            if (chr == '\0') {
+                break;
+            }
+            if (output_len > 0 && buffer[output_len-1] == '/') {
+                // skip consecutive /
+                // remember previous component and don't treat // as the
+                // previous component
+                tmpOutputLength = prevOutput_len;
+            } else {
+                CHECK(1)
+                buffer[output_len] = chr;
+                output_len++;
+            }
+        } else if (componentLength == 1 && path[startHead] == '.') {
+            // emit nothing
+        } else if (componentLength == 2 && path[startHead] == '.' && path[startHead+1] == '.') {
+            output_len = prevOutput_len;
+        } else {
+            CHECK(componentLength+1)
+            memcpy(buffer + output_len, path + startHead, componentLength+1);
+            output_len += componentLength+1;
+        }
+
+        if (chr == '\0') {
+            break;
+        }
+
+        head++;
+        prevOutput_len = tmpOutputLength;
+        startHead = head;
+    }
+
+    if (output_len == 0) {
+        return -1;
+    } else if (output_len > 1 && buffer[output_len-1] == '/') {
+        // remove trailing slash
+        output_len--;
+    }
+
+    buffer[output_len] = '\0';
+    return output_len;
+    #undef CHECK
+}
+
+void test_normalizePath() {
+
+    char buffer[256];
+    int res = 0;
+    #define CHECK(PATH) \
+        res = normalizePath(buffer, sizeof(buffer), PATH); \
+        if (res == -1) { \
+            buffer[0] = 0; \
+        } \
+        printf("%2d %14s <- %s\n", res,  buffer, PATH); 
+
+    CHECK(".")
+    CHECK("./")
+    CHECK("/.")
+    CHECK("/..")
+    CHECK("//")
+    CHECK("//a//b//c//")
+    CHECK("/.media")
+    CHECK("/media.")
+    CHECK("/media./usb")
+    CHECK("/media./usb/.")
+    CHECK("/media./usb/..")
+    CHECK("/media/./usb")
+    CHECK("/media/../usb/")
+    CHECK("/media//../usb/")
+    /*
+-1                 <- .
+-1                 <- ./
+ 1               / <- /.
+-1                 <- /..
+ 1               / <- //
+ 6          /a/b/c <- //a//b//c//
+ 8         /.media <- /.media
+ 8         /media. <- /media.
+12     /media./usb <- /media./usb
+11     /media./usb <- /media./usb/.
+ 7         /media. <- /media./usb/..
+11      /media/usb <- /media/./usb
+ 4            /usb <- /media/../usb/
+ 4            /usb <- /media//../usb/
+    */
+    #undef CHECK
+
+}
+
+
+#define GET_NORMALIZED_PATH(out_PATH, PATH) \
+        char normalized##PATH[256]; \
+        int res##PATH = normalizePath(normalized##PATH, sizeof(normalized##PATH), PATH); \
+        if (res##PATH == -1) goto exit; \
+        char* out_PATH = normalized##PATH;
 
 int find_slash(const cstring path, int offset) {
     int head = 0;
@@ -121,9 +246,11 @@ int find_slash(const cstring path, int offset) {
 
 
 
-bool VFS_mkdir(const char* cpath) {
+bool VFS_mkdir(const char* _cpath) {
     bool returnValue = false;
     LOCK_INT(&g_vfs_lock);
+
+    GET_NORMALIZED_PATH(cpath, _cpath);
 
     int subIndex;
     VFS_Mount* mount = resolveMount(cpath, &subIndex);
@@ -141,9 +268,11 @@ exit:
 }
 
 
-bool VFS_mount(const char* cpath, DiskDevice device, int partitionIndex) {
+bool VFS_mount(const char* _cpath, DiskDevice device, int partitionIndex) {
     bool returnValue = false;
     LOCK_INT(&g_vfs_lock);
+
+    GET_NORMALIZED_PATH(cpath, _cpath);
     
     u64 start_lba;
     u64 end_lba;
@@ -181,9 +310,11 @@ exit:
 }
 
 
-VFS_Handle VFS_open(const char* cpath, VFS_OpenFlags flags) {
+VFS_Handle VFS_open(const char* _cpath, VFS_OpenFlags flags) {
     VFS_Handle returnValue = VFS_NULL_HANDLE;
-    UNLOCK_INT(&g_vfs_lock);
+    LOCK_INT(&g_vfs_lock);
+
+    GET_NORMALIZED_PATH(cpath, _cpath);
 
     // From a path we get back a directory, a file, a mounting point
     // A virtual node directory.
@@ -236,23 +367,33 @@ void VFS_info(VFS_Handle _handle, VFS_HandleInfo* info) {
 
 
 u64 VFS_read(VFS_Handle _handle, u64 offset, u64 size, void* buffer) {
+    u64 returnValue = 0;
+    LOCK_INT(&g_vfs_lock);
+
     VFS_Handle_impl* handle = (VFS_Handle)_handle;
-    
+
     if (handle->fileObject) {
-        return read_fat(handle, offset, size, buffer);
-    } else {
-        return 0;
+        returnValue = read_fat(handle, offset, size, buffer);
     }
+
+exit:
+    UNLOCK_INT(&g_vfs_lock);
+    return returnValue;
 }
 
 u64 VFS_write(VFS_Handle _handle, u64 offset, u64 size, const void* buffer) {
+    u64 returnValue = 0;
+    LOCK_INT(&g_vfs_lock);
+
     VFS_Handle_impl* handle = (VFS_Handle)_handle;
     
     if (handle->fileObject) {
-        return write_fat(handle, offset, size, buffer);
-    } else {
-        return 0;
+        returnValue = write_fat(handle, offset, size, buffer);
     }
+
+exit:
+    UNLOCK_INT(&g_vfs_lock);
+    return returnValue;
 }
 
 
@@ -319,9 +460,11 @@ exit:
 }
 
 
-bool VFS_readdir(const char* path, u64* cookie, u64* entryCount, ELOS_DirectoryEntry* buffer) {
+bool VFS_readdir(const char* _cpath, u64* cookie, u64* entryCount, ELOS_DirectoryEntry* buffer) {
     bool returnValue = false;
-    UNLOCK_INT(&g_vfs_lock);
+    LOCK_INT(&g_vfs_lock);
+
+    GET_NORMALIZED_PATH(cpath, _cpath);
 
     /*
     @TODO If directory has mounts then we won't get those since they
@@ -340,7 +483,7 @@ bool VFS_readdir(const char* path, u64* cookie, u64* entryCount, ELOS_DirectoryE
     a path prefix resolution system.
     */
 
-    VFS_FileObject* obj = resolveFileObject(path);
+    VFS_FileObject* obj = resolveFileObject(cpath);
     if (!obj) {
         goto exit;
     }
@@ -353,9 +496,11 @@ exit:
 
 }
 
-bool VFS_remove(const char* cpath) {
+bool VFS_remove(const char* _cpath) {
     bool returnValue = false;
-    UNLOCK_INT(&g_vfs_lock);
+    LOCK_INT(&g_vfs_lock);
+
+    GET_NORMALIZED_PATH(cpath, _cpath);
 
     int subIndex;
     VFS_Mount* mount = resolveMount(cpath, &subIndex);
@@ -372,9 +517,12 @@ exit:
     return returnValue;
 }
 
-bool VFS_rename(const char* old_path, const char* new_path) {
+bool VFS_rename(const char* _old_path, const char* _new_path) {
     bool returnValue = false;
-    UNLOCK_INT(&g_vfs_lock);
+    LOCK_INT(&g_vfs_lock);
+
+    GET_NORMALIZED_PATH(old_path, _old_path);
+    GET_NORMALIZED_PATH(new_path, _new_path);
 
     int subIndex;
     VFS_Mount* oldMount = resolveMount(old_path, &subIndex);
@@ -403,9 +551,13 @@ exit:
 }
 
 
-bool VFS_copy(const char* old_path, const char* new_path) {
+bool VFS_copy(const char* _old_path, const char* _new_path) {
     bool returnValue = false;
-    UNLOCK_INT(&g_vfs_lock);
+    LOCK_INT(&g_vfs_lock);
+
+
+    GET_NORMALIZED_PATH(old_path, _old_path);
+    GET_NORMALIZED_PATH(new_path, _new_path);
 
     int subIndex;
     VFS_Mount* oldMount = resolveMount(old_path, &subIndex);

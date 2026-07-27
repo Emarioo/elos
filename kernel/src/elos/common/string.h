@@ -16,6 +16,7 @@ int strcmp(const char* dst, const char* src);
 int strncmp(const char* dst, const char* src, size_t maxlen);
 void* memset(void* dst, int val, size_t size);
 
+char *strncpy(char *dst, const char *src, size_t n);
 long strtol(const char* ptr, char** endptr, int base);
 
 static inline cstring STR_CSTR(const string s) {

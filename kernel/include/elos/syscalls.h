@@ -79,6 +79,10 @@ typedef void* ELOS_SharedMemory;
 typedef void* ELOS_UserEventBufferHandle;
 typedef void* ELOS_File;
 
+typedef void(*FN_thread_entry)(void* arg);
+typedef void* ELOS_ThreadHandle;
+typedef u32 ELOS_ThreadID;
+
 typedef u32 ELOS_DeviceID;
 
 typedef enum {
@@ -273,9 +277,55 @@ ELOS_Error SYS_shared_memory_info(ELOS_SharedMemory handle, void** buffer, u64* 
 */
 ELOS_Error SYS_request_user_event_buffer(u32 minimumEvents, ELOS_UserEventBuffer** buffer);
 
+/*
+    Terminate the process.
 
+    @param exitCode The exit code.
+*/
+void SYS_exit(int exitCode);
 
+/*
+    Terminate the thread. If no more threads then process is also terminated.
+*/
+void SYS_thread_exit();
 
+/*
+    Spawn a thread.
+
+    @param entry  Entry point of the thread.
+    @param handle Handle to the thread
+*/
+ELOS_Error SYS_spawn_thread(FN_thread_entry entry, ELOS_ThreadHandle* handle);
+
+/*
+    Join a thread into the thread that spawned it. 
+
+    @param handle Handle to the thread
+*/
+ELOS_Error SYS_join(ELOS_ThreadHandle handle);
+
+/*
+    @return ID of current thread.
+*/
+ELOS_ThreadID SYS_self();
+
+/*
+    Spawn a process.
+
+    @TODO Should we get handle to it so we can wait for it to finish.
+          We want to explore unconvential ways to do capabilities/threads/processes.
+          Domain execution is the term I use to differentiate from normal processes.
+
+    @param path     Path to the executable.
+    @param data     Data to pass to the executable. Process should parse flags from it. ()
+    @param data_len Size of the data.
+*/
+ELOS_Error SYS_spawn_process(const char* path, const char* data, u32 data_len);
+
+// @TODO Spawn a process.
+
+// We have ASYNC operations for these.
+// We may provide syscalls for convenience?
 // ELOS_Error SYS_file_open(const char* path, ELOS_File* file);
 // ELOS_Error SYS_file_close(ELOS_File file);
 // ELOS_Error SYS_file_read(ELOS_File file, u64 offset, void* data, u64* size);
@@ -294,8 +344,6 @@ ELOS_Error SYS_request_user_event_buffer(u32 minimumEvents, ELOS_UserEventBuffer
         File operations
         Network operations
         Timer wait, events, signaling?
-
-
 */
 
 typedef enum {
@@ -496,6 +544,7 @@ typedef enum {
     _SYS_DESTROY_ASYNC_RING,
     _SYS_SUBMIT_ASYNC_RING,
     _SYS_WAIT_ASYNC_RING,
+    _SYS_EXIT,
 } ELOS_SyscallID;
 
 
@@ -717,7 +766,10 @@ ELOS_Error SYS_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, u64 tim
     return rax;
 }
 
-
+void SYS_exit(int exitCode) {
+    ELOS_Error rax;
+    SYSCALL1(_SYS_EXIT, exitCode);
+}
 
 
 #endif // ELOS_SYSCALL_IMPL

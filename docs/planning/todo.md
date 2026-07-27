@@ -29,7 +29,7 @@ Tasks related to kernel and operating system
 - [ ] Kernel mouse syscalls. (maybe generic input syscalls for keyboard, controller, mouse?)
 - [ ] Kernel audio syscalls.
 - [ ] Audio server.
-- [ ] DOOM port.
+- [x] DOOM port.
 
 ## @urgent
 - [ ] build.py clean, make clean do not work properly.
@@ -47,7 +47,7 @@ Tasks related to kernel and operating system
 - [ ] Wake On Lan, mainly for testing. I don't need to turn on/off test machine. This assumes the kernel enables WoL first.
 
 ## @project
-- [ ] Clearly state dependencies of this project. Do fresh Ubuntu install in VirtualBox and compile this project, see what you need.
+- [x] Clearly state dependencies of this project. Do fresh Ubuntu install in VirtualBox and compile this project, see what you need.
 - [ ] A way to compile the project on Windows? Are there tools for it or is Linux the only?
 
 ## @optimize

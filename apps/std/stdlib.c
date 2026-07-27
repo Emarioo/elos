@@ -1,5 +1,6 @@
 
 #include "elos/common/string.h"
+#include "elos/common/intrinsics.h"
 
 #include "elos/syscalls.h"
 
@@ -13,9 +14,6 @@
 #include <ctype.h>
 
 #include "async_io.h"
-// #include <sys/stat.h>
-// #include <stdlib.h>
-
 
 // typedef void FILE;
 
@@ -150,11 +148,11 @@ double atof(const char *str) {
     return sign * value;
 }
 
-void exit(int code)
-{
-    SYS_debug_log("EXIT\n", 5);
-    for (;;)
-        ;
+void exit(int code) {
+    SYS_exit(code);
+    printf("SYS_exit SHOULD NOT HAVE RETURNED! spinning...\n");
+    while (1) pause(); // spin loop in case we do return by accident? only happens if bug in syscall handler.
+     __builtin_unreachable();
 }
 
 void sleep(uint64_t ns) {
@@ -171,7 +169,7 @@ int putchar(int c)
 {
     char v = c;
     SYS_debug_log(&v, 1);
-    return c;
+    return 0;
 }
 
 const unsigned short int** __ctype_b_loc(void) {

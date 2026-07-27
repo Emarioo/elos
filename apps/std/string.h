@@ -17,7 +17,7 @@ char *strrchr(const char *s, int c);
 char *strchr(const char *s, int c);
 char *strstr(const char *haystack, const char *needle);
 
-char *strncpy(char *dst, const char *src, size_t n);
+// char *strncpy(char *dst, const char *src, size_t n);
 int strcasecmp(const char *a, const char *b);
 
 int strncasecmp(const char *a, const char *b, size_t n);

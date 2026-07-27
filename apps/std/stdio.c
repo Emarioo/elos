@@ -1,7 +1,6 @@
 
 #include "elos/common/string.h"
 
-#include "elos/syscalls.h"
 
 #include <stdarg.h>
 #include "async_io.h"
@@ -10,13 +9,24 @@
 #include "stdio.h"
 #include <errno.h>
 
-typedef u32 mode_t;
 
 
 struct FILE {
     ELOS_File file;
     uintptr_t position;
 };
+
+FILE* stdin  = (FILE*)0;
+FILE* stderr = (FILE*)1;
+FILE* stdout = (FILE*)2;
+
+char cwd[256];
+int  cwd_len;
+
+#define GET_ABS_PATH(outPATH, PATH) \
+    char temp##outPATH[256];    \
+    resolveAbsPath(temp##outPATH, sizeof(temp##outPATH), PATH); \
+    char* outPATH = temp##outPATH;
 
 int printf(const char* format, ...) {
     char buffer[400];
@@ -30,10 +40,15 @@ int printf(const char* format, ...) {
     return len;
 }
 
-
-FILE* stdin  = (FILE*)0;
-FILE* stderr = (FILE*)1;
-FILE* stdout = (FILE*)2;
+int resolveAbsPath(char* buffer, int bufferMax, const char* path) {
+    if (path[0] == '/') {
+        return snprintf(buffer, bufferMax, "%s", path);
+    } else if (cwd[cwd_len-1] == '/') {
+        return snprintf(buffer, bufferMax, "%s%s", cwd ,path);
+    } else {
+        return snprintf(buffer, bufferMax, "%s/%s", cwd, path);
+    }
+}
 
 
 int fprintf(FILE* stream, const char* format, ...) {
@@ -62,8 +77,10 @@ int fflush(FILE* stream) {
     return 0;
 }
 
-FILE *fopen(const char *restrict path, const char *restrict mode) {
+FILE *fopen(const char *restrict _path, const char *restrict mode) {
     ELOS_Error error;
+
+    GET_ABS_PATH(path, _path);
 
     ELOS_AsyncRequest req;
     ELOS_AsyncCompletion cqe;
@@ -105,7 +122,7 @@ FILE *fopen(const char *restrict path, const char *restrict mode) {
 }
 int fclose(FILE *file) {
     ELOS_Error error;
-
+    
     ELOS_AsyncRequest req;
     ELOS_AsyncCompletion cqe;
     Async_RequestID requestID;
@@ -393,8 +410,10 @@ int sscanf(const char *str, const char *fmt, ...)
 }
 
 
-int remove(const char* path) {
+int remove(const char* _path) {
     ELOS_Error error;
+    
+    GET_ABS_PATH(path, _path);
 
     ELOS_AsyncRequest req;
     ELOS_AsyncCompletion cqe;
@@ -420,8 +439,11 @@ int remove(const char* path) {
     return 0;
 }
 
-int rename(const char* oldpath, const char* newpath) {
+int rename(const char* _oldpath, const char* _newpath) {
     ELOS_Error error;
+
+    GET_ABS_PATH(oldpath, _oldpath);
+    GET_ABS_PATH(newpath, _newpath);
 
     ELOS_AsyncRequest req;
     ELOS_AsyncCompletion cqe;
@@ -447,8 +469,10 @@ int rename(const char* oldpath, const char* newpath) {
 
     return 0;
 }
-int mkdir(const char* path, mode_t mode) {
+int mkdir(const char* _path, mode_t mode) {
     ELOS_Error error;
+
+    GET_ABS_PATH(path, _path);
 
     ELOS_AsyncRequest req;
     ELOS_AsyncCompletion cqe;
@@ -475,9 +499,22 @@ int mkdir(const char* path, mode_t mode) {
 }
 
 
-ELOS_Error elos_readdir(const char* path, u64* cookie, u64* entryCount, ELOS_DirectoryEntry* buffer) {
+char *getcwd(char* buf, size_t size) {
+    snprintf(buf, size, "%s", cwd);
+    return buf;
+}
+
+int chdir(const char *path) {
+    cwd_len = snprintf(cwd, sizeof(cwd), "%s", path);
+    return 0;
+}
+
+
+ELOS_Error elos_readdir(const char* _path, u64* cookie, u64* entryCount, ELOS_DirectoryEntry* buffer) {
     
     ELOS_Error error;
+
+    GET_ABS_PATH(path, _path);
 
     ELOS_AsyncRequest req;
     ELOS_AsyncCompletion cqe;

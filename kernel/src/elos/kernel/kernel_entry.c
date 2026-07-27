@@ -97,6 +97,9 @@ void dumpdir(const char* path, int depth) {
 }
 
 
+
+void os_entry();
+
 void kernel_entry(BootAPI* in_boot_api) {
 
     // Put BootAPI in kernel's memory space. in_boot_api will become invalid when
@@ -262,32 +265,48 @@ void kernel_entry(BootAPI* in_boot_api) {
     // NET_send_arp(net_device, target_ip);
 
 
-
-    //#############################
-    //   KERNEL TERMINAL STUFF?
-    //#############################
-
-
-    // EXEC_init();
-    // EXEC_create_kernel_thread(terminal_main, 0);
-    
-    //######################
-    //   USER MODE TEST
-    //######################
-
     // Start scheduling
     EXEC_init();
 
+    os_entry();
+}
+
+int normalizePath(char* buffer, int bufferSize, const char* path);
+
+void os_entry() {
 
     // dumpdir("/", 0);
     // dumpdir("/boot", 0);
 
+    int res = 0;
+    char buffer[256];
 
+    #define CHECK(PATH) \
+        res = normalizePath(buffer, sizeof(buffer), PATH); \
+        if (res == -1) { \
+            buffer[0] = 0; \
+        } \
+        printf("%2d %14s <- %s\n", res,  buffer, PATH); 
+
+    CHECK(".")
+    CHECK("./")
+    CHECK("/.")
+    CHECK("/..")
+    CHECK("//")
+    CHECK("//a//b//c//")
+    CHECK("/.media")
+    CHECK("/media.")
+    CHECK("/media./usb")
+    CHECK("/media./usb/.")
+    CHECK("/media./usb/..")
+    CHECK("/media/./usb")
+    CHECK("/media/../usb/")
+    CHECK("/media//../usb/")
 
 
     EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
-    EXEC_create_user_thread("/pkg/slate/slate.elf", 0);
-    // EXEC_create_user_thread("/pkg/doom/doom.elf", 0);
+    // EXEC_create_user_thread("/pkg/slate/slate.elf", 0);
+    EXEC_create_user_thread("/pkg/doom/doom.elf", 0);
 
     EXEC_create_kernel_thread(SCON_main, 0);
 
@@ -306,7 +325,6 @@ void kernel_entry(BootAPI* in_boot_api) {
 
         pause();
     }
-
 }
 
 
