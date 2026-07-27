@@ -149,6 +149,8 @@ double atof(const char *str) {
 }
 
 void exit(int code) {
+    // @TODO Temporary print
+    printf("exit %d\n", code);
     SYS_exit(code);
     printf("SYS_exit SHOULD NOT HAVE RETURNED! spinning...\n");
     while (1) pause(); // spin loop in case we do return by accident? only happens if bug in syscall handler.

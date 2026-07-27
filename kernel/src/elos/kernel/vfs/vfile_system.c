@@ -490,7 +490,7 @@ bool VFS_readdir(const char* _cpath, u64* cookie, u64* entryCount, ELOS_Director
     GET_NORMALIZED_PATH(cpath, _cpath);
 
     /*
-    @TODO If directory has mounts then we won't get those since they
+    If directory has mounts then we won't get those since they
        exist above file system on disk. We need to inject mounted directories.
        Cookie also has to represent this now. Maybe we have a layered cookie.
        Do we iterate mounts first or last?
@@ -506,12 +506,99 @@ bool VFS_readdir(const char* _cpath, u64* cookie, u64* entryCount, ELOS_Director
     a path prefix resolution system.
     */
 
+    if (*entryCount == 0) {
+        goto exit;
+    }
+
+    u32  consumedEntries = 0;
+    u32  maxEntries = *entryCount;
+    bool checkMounts = 0 == (*cookie & ((u64)1<<63));
+
+    if (checkMounts) {
+        /*  If we have
+                /              <- mount
+                /pkg/prism
+                /boot          <- mount
+                /media/usb0    <- mount
+
+            Then we should get
+                iterdir("/")
+                    pkg boot media
+                iterdir("pkg")
+                    prism
+                iterdir("boot")
+                    efi initrd.img
+                iterdir("media")
+                    usb0
+
+            Note that we can never list the root mount itself.
+            We can list things in the root mount of course.
+        */
+
+        int mountIndex = *cookie & (u64)0xFFFFFFFF;
+
+        int cpath_len = strlen(cpath);
+
+        for (;mountIndex<g_mounts_len;mountIndex++) {
+            VFS_Mount* mount = &g_mounts[mountIndex];
+
+            bool delimiter = (mount->name_len > cpath_len && (mount->name[cpath_len] == '/' || mount->name[cpath_len-1] == '/'));
+            if (!delimiter) {
+                continue;
+            }
+            bool eq = !strncmp(mount->name, cpath, cpath_len);
+            if (!eq) {
+                continue;
+            }
+
+            // Cases to handle
+            //      /boot
+            //      /media/usb
+            //      /media/usb/disk
+            int mountSubname_index = cpath_len == 1 ? cpath_len : cpath_len + 1;
+            int head = mountSubname_index;
+            while (head < mount->name_len) {
+                char chr = mount->name[head];
+                if (chr == '/') {
+                    break;
+                }
+                head++;
+            }
+
+            ELOS_DirectoryEntry* entry = &buffer[consumedEntries];
+            consumedEntries++;
+            entry->isDirectory = true;
+            entry->isReadOnly = false;
+            entry->fileSize = 0;
+            entry->lastWriteTime_us = 0;
+            entry->name_len = snprintf(entry->name, sizeof(entry->name), "%.*s", head - mountSubname_index, mount->name + mountSubname_index);
+
+            if (consumedEntries >= maxEntries) {
+                break;
+            }
+        }
+
+        if (consumedEntries == maxEntries) {
+            *entryCount = consumedEntries;
+            *cookie = mountIndex;
+            goto exit;
+        }
+
+        *entryCount = consumedEntries;
+        *cookie = (u64)1<<63;
+    }
+
     VFS_FileObject* obj = resolveFileObject(cpath);
     if (!obj) {
         goto exit;
     }
 
-    returnValue = iter_fat(obj->mount, obj, cookie, entryCount, buffer);
+    u64 fat_entryCount = maxEntries - consumedEntries;
+    u64 fat_cookie = *cookie & (u64)0xFFFFFFFF;
+    returnValue = iter_fat(obj->mount, obj, &fat_cookie, &fat_entryCount, buffer + consumedEntries);
+
+    *entryCount = consumedEntries + fat_entryCount;
+    *cookie = (u64)1<<63 | fat_cookie;
 
 exit:
     UNLOCK_INT(&g_vfs_lock);
@@ -524,6 +611,8 @@ bool VFS_remove(const char* _cpath) {
     LOCK_INT(&g_vfs_lock);
 
     GET_NORMALIZED_PATH(cpath, _cpath);
+
+    printf("VFS_remove %s\n", cpath);
 
     int subIndex;
     VFS_Mount* mount = resolveMount(cpath, &subIndex);
@@ -546,6 +635,8 @@ bool VFS_rename(const char* _old_path, const char* _new_path) {
 
     GET_NORMALIZED_PATH(old_path, _old_path);
     GET_NORMALIZED_PATH(new_path, _new_path);
+
+    printf("VFS_rename %s %s\n", old_path, new_path);
 
     int subIndex;
     VFS_Mount* oldMount = resolveMount(old_path, &subIndex);

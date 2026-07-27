@@ -271,9 +271,6 @@ void printCallback(const char* buffer, size_t size, void* userData) {
     respond_message(text);
 }
 
-ELOS_DirectoryEntry* dirEntries;
-int                  dirEntries_cap;
-
 
 void resolvePath(char* fullpath, int fullpathMax, const char* ls_path) {
     if (ls_path[0] == '/') {
@@ -320,11 +317,8 @@ void send_command(cstring text) {
         respond_message(basePath);
 
 
-        if (!dirEntries) {
-            // @TODO One entry to test the function, don't forget to increase.
-            dirEntries_cap = 1;
-            dirEntries = PMEM_alloc(dirEntries_cap * sizeof(*dirEntries));
-        }
+        ELOS_DirectoryEntry dirEntries[3];
+        int                 dirEntries_cap = ARRAY_LENGTH(dirEntries);
 
         u64 cookie = 0;
         u64 entryCount;

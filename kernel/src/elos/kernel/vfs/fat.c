@@ -1484,6 +1484,11 @@ bool delete_entry(FATContext* context, FAT_ID currentDir, const cstring subname)
 
         fat__DirectoryEntry* entry = fat_next_entry(context, currentDir, &entryIndex, longName);
 
+        if (!entry) {
+            // Didn't exist
+            return true;
+        }
+
         cstring entryName = {
             .ptr = longName,
             .len = strlen(longName),
