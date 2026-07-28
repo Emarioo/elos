@@ -149,6 +149,7 @@ def main():
 
             # cmd(f"qemu-img create -f raw {DISK_IMG} 64M")
             # cmd(f"gcc scripts/fwrite.c -g -o int/fwrite && int/fwrite {DISK_IMG}")
+        HAS_AUDIO = True
         core_count = 1
         qemu_flags = f'''
             -enable-kvm -cpu host
@@ -165,6 +166,12 @@ def main():
             # -device ide-hd,drive=disk1,bus=ahci.1
             # -nographic
         '''
+        if HAS_AUDIO:
+            qemu_flags += f'''
+            -device intel-hda 
+            -device hda-output
+            # -device hda-duplex # includes microphone
+            '''
         if HAS_TAP:
             qemu_flags += f'''
             -device e1000,netdev=net0  # e1000 ~= intel 8254x

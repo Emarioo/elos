@@ -14,6 +14,7 @@
 #include "elos/execution.h"
 #include "elos/vfs.h"
 #include "elos/async.h"
+#include "elos/audio.h"
 
 #include "elos/common/intrinsics.h"
 #include "elos/common/string.h"
@@ -178,7 +179,6 @@ void kernel_entry(BootAPI* in_boot_api) {
     DISK_scan_devices(diskDevices, &diskDevices_len);
     KCON_printf("Disk devices: %d\n", diskDevices_len);
 
-    bool hasBootDevice = false;
     for (int i=0;i<diskDevices_len;i++) {
         DiskDevice dev = diskDevices[i];
         DiskInfo diskInfo = {0};
@@ -189,7 +189,7 @@ void kernel_entry(BootAPI* in_boot_api) {
             // If we don't have initrd then one of our normal partitions should
             // be root. This should be described in a text file in boot partition.
             snprintf(path, sizeof(path), "/", i, 0);
-        } else if (i == 1) {
+        } else if (i == 1) { 
             // We should find partition GUID.
             snprintf(path, sizeof(path), "/boot", i, 0);
         } else {
@@ -204,6 +204,22 @@ void kernel_entry(BootAPI* in_boot_api) {
         }
 
     }
+
+
+    AUDIO_init(boot_api);
+
+    AudioDevice audioDevices[8];
+    int audioDevices_len = ARRAY_LENGTH(audioDevices);
+    AUDIO_scan_devices(audioDevices, &audioDevices_len);
+
+    for (int i=0;i<audioDevices_len;i++) {
+        AudioDevice dev = audioDevices[i];
+        AudioInfo audioInfo = {0};
+        AUDIO_get_info(dev, &audioInfo);
+
+        KCON_printf("Audio '%s'\n", audioInfo.name);
+    }
+
 
     //###############################
     //   LOAD AND DRAW BACKGROUND
@@ -311,7 +327,7 @@ void os_entry() {
 
     EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
     // EXEC_create_user_thread("/pkg/slate/slate.elf", 0);
-    EXEC_create_user_thread("/pkg/doom/doom.elf", 0);
+    // EXEC_create_user_thread("/pkg/doom/doom.elf", 0);
 
 
 

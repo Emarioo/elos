@@ -324,6 +324,10 @@ ELOS_Error SYS_spawn_process(const char* path, const char* data, u32 data_len);
 
 // @TODO Spawn a process.
 
+
+
+
+
 // We have ASYNC operations for these.
 // We may provide syscalls for convenience?
 // ELOS_Error SYS_file_open(const char* path, ELOS_File* file);
@@ -341,8 +345,6 @@ ELOS_Error SYS_spawn_process(const char* path, const char* data, u32 data_len);
     Asynchonrous operations
 
     @TODO What to support:
-        File operations
-        Network operations
         Timer wait, events, signaling?
 */
 
@@ -352,6 +354,8 @@ typedef enum {
 
 enum _ELOS_AsyncOperation {
     ELOS_ASYNC_INVALID = 0,
+
+    // File operations
     ELOS_ASYNC_FILE_OPEN = 1,
     ELOS_ASYNC_FILE_CLOSE,
     ELOS_ASYNC_FILE_READ,
@@ -362,6 +366,12 @@ enum _ELOS_AsyncOperation {
     ELOS_ASYNC_FILE_COPY,
     ELOS_ASYNC_FILE_MKDIR,
     ELOS_ASYNC_FILE_READDIR,
+
+    // @TODO File monitor
+
+    // @TODO Network operations
+
+    // 
 };
 typedef u16 ELOS_AsyncOperation;
 
