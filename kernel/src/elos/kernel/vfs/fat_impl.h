@@ -68,6 +68,7 @@ FAT_ID create_fat_entry(FATContext* context, FAT_ID currentDir, const cstring su
 bool delete_entry(FATContext* context, FAT_ID currentDir, const cstring subname);
 
 VFS_FileObject* fat_mkfile(VFS_Mount* mount, const cstring path);
+// bool fat_rename(VFS_Mount* mount, const cstring old_path, const cstring new_path);
 
 fat__DirectoryEntry* fat_next_entry(FATContext* context, FAT_ID currentDir, u32* entryIndex, char* longName);
 

@@ -54,7 +54,7 @@ bool VFS_copy(const char* old_path, const char* new_path);
 
 VFS_Handle VFS_open(const char* path, VFS_OpenFlags flags);
 void VFS_close(VFS_Handle handle);
-void VFS_info(VFS_Handle handle, VFS_HandleInfo* info);
+bool VFS_info(VFS_Handle handle, VFS_HandleInfo* info);
 
 /*
     Only for files

@@ -290,7 +290,7 @@ bool iter_fat(VFS_Mount* mount, VFS_FileObject* fileObject, u64* cookie, u64* en
         vfsEntry->fileSize = entry->file_size;
         vfsEntry->isDirectory = entry->attributes & fat__DIRECTORY;
         vfsEntry->isReadOnly = entry->attributes & fat__READ_ONLY;
-        vfsEntry->name_len = snprintf(vfsEntry->name, sizeof(vfsEntry->name), "%s", entryName.ptr);
+        vfsEntry->name_len = snprintf(vfsEntry->name, sizeof(vfsEntry->name), "%.*s", entryName.len, entryName.ptr);
         vfsEntry->lastWriteTime_us = 0; // @TODO Last write time
     }
     *entryCount = numEntries;
@@ -460,7 +460,7 @@ VFS_FileObject* search_fat(VFS_Mount* mount, const cstring path) {
                 char temp_name[256];
                 memcpy(temp_name, subname.ptr, subname.len);
                 temp_name[subname.len] = '\0';
-                printf("Sub path refers to file not directory, can't go deeper %s\n", temp_name);
+                printf("Sub path refers to file not directory %s, can't go deeper %s\n", path.ptr, temp_name);
                 return NULL;
             }
 
@@ -1625,6 +1625,10 @@ int get_free_cluster(FATContext* context) {
     return -1;
 }
 
+
+// bool fat_rename(VFS_Mount* mount, const cstring old_path, const cstring new_path) {
+
+// }
 
 fat__DirectoryEntry* fat_next_entry(FATContext* context, FAT_ID currentDir, u32* inout_entryIndex, char* longName) {
     int res;

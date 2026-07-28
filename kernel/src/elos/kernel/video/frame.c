@@ -285,11 +285,15 @@ Texture* load_texture(const char* path) {
     }
 
     VFS_HandleInfo info;
-    VFS_info(handle, &info);
+    bool yes = VFS_info(handle, &info);
+    if (!yes) {
+        printf("load_texture: VFS_info failed %s\n", path);
+        return NULL;
+    }
 
     u8* data = PMEM_alloc(info.fileSize);
     if (!data) {
-        printf("Couldn't allocate %d\n", info.fileSize);
+        printf("load_texture: Couldn't allocate %d, %s\n", info.fileSize, path);
         return NULL;
     }
 

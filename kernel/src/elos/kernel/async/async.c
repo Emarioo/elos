@@ -450,7 +450,10 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
             GET_SANITIZED_STRUCT(&safeVFSHandleInfo, request->info.fileInfo);
 
             // @TODO Handle errors!?
-            VFS_info(safeVFSHandle, &info);
+            bool yes = VFS_info(safeVFSHandle, &info);
+            if (!yes) {
+                break;
+            }
 
             safeVFSHandleInfo->fileSize          = info.fileSize;
             safeVFSHandleInfo->blockSize         = info.blockSize;

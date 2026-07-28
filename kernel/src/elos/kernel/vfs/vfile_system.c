@@ -314,9 +314,10 @@ void stap(){
     printf("BREAK\n");
 }
 
-VFS_Handle VFS_open(const char* _cpath, VFS_OpenFlags flags) {
+
+VFS_Handle vfs_open(const char* _cpath, VFS_OpenFlags flags) {
     VFS_Handle returnValue = VFS_NULL_HANDLE;
-    LOCK_INT(&g_vfs_lock);
+    // LOCK_INT(&g_vfs_lock);
 
     GET_NORMALIZED_PATH(cpath, _cpath);
 
@@ -352,46 +353,69 @@ VFS_Handle VFS_open(const char* _cpath, VFS_OpenFlags flags) {
     }
 
 exit:
+    // UNLOCK_INT(&g_vfs_lock);
+    return returnValue;
+}
+
+VFS_Handle VFS_open(const char* _cpath, VFS_OpenFlags flags) {
+    VFS_Handle returnValue = VFS_NULL_HANDLE;
+    LOCK_INT(&g_vfs_lock);
+
+    returnValue = vfs_open(_cpath, flags);
+
+exit:
     UNLOCK_INT(&g_vfs_lock);
     return returnValue;
-
 }
 
 
-void VFS_info(VFS_Handle _handle, VFS_HandleInfo* info) {
+bool vfs_info(VFS_Handle _handle, VFS_HandleInfo* info) {
     VFS_Handle_impl* handle = (VFS_Handle)_handle;
     
-    if (handle->fileObject) {
-        int res;
-        char stackBuffer[512];
-        int buffer_head = 0;
-        int sectorSize = 512;
-        VFS_FileObject* fileObject = handle->fileObject;
+    memset(info, 0, sizeof(*info));
 
-        fat__DirectoryEntry* direntryBlock = (fat__DirectoryEntry*)(stackBuffer + buffer_head);
-        buffer_head += sectorSize;
-
-        memset(info, 0, sizeof(*info));
-        
-        res = DISK_read(fileObject->mount->diskDevice, (fileObject->mount->start_lba + fileObject->direntrySector) * sectorSize, sectorSize, direntryBlock);
-        if (!res) return;
-
-        fat__DirectoryEntry* entry = &direntryBlock[fileObject->direntryIndex];
-        
-        info->isDirectory = entry->attributes & fat__DIRECTORY;
-        info->readOnly = entry->attributes & fat__READ_ONLY;
-        info->fileSize = entry->file_size;
-        info->blockSize = sectorSize;
-        info->lastWriteTime_us = fat__sane_mtime(entry);
-    } else {
-        memset(info, 0, sizeof(*info));
+    if (!handle->fileObject) {
+        return false;
     }
+
+    int res;
+    char stackBuffer[512];
+    int buffer_head = 0;
+    int sectorSize = 512;
+    VFS_FileObject* fileObject = handle->fileObject;
+
+    fat__DirectoryEntry* direntryBlock = (fat__DirectoryEntry*)(stackBuffer + buffer_head);
+    buffer_head += sectorSize;
+
+    memset(info, 0, sizeof(*info));
+    
+    res = DISK_read(fileObject->mount->diskDevice, (fileObject->mount->start_lba + fileObject->direntrySector) * sectorSize, sectorSize, direntryBlock);
+    if (!res) return false;
+
+    fat__DirectoryEntry* entry = &direntryBlock[fileObject->direntryIndex];
+    
+    info->isDirectory = entry->attributes & fat__DIRECTORY;
+    info->readOnly = entry->attributes & fat__READ_ONLY;
+    info->fileSize = entry->file_size;
+    info->blockSize = sectorSize;
+    info->lastWriteTime_us = fat__sane_mtime(entry);
+    return true;
 }
 
-
-u64 VFS_read(VFS_Handle _handle, u64 offset, u64 size, void* buffer) {
-    u64 returnValue = 0;
+bool VFS_info(VFS_Handle _handle, VFS_HandleInfo* info) {
+    bool returnValue = false;
     LOCK_INT(&g_vfs_lock);
+
+    returnValue = vfs_info(_handle, info);
+
+exit:
+    UNLOCK_INT(&g_vfs_lock);
+    return returnValue;
+}
+
+u64 vfs_read(VFS_Handle _handle, u64 offset, u64 size, void* buffer) {
+    u64 returnValue = 0;
+    // LOCK_INT(&g_vfs_lock);
 
     VFS_Handle_impl* handle = (VFS_Handle)_handle;
 
@@ -400,13 +424,24 @@ u64 VFS_read(VFS_Handle _handle, u64 offset, u64 size, void* buffer) {
     }
 
 exit:
+    // UNLOCK_INT(&g_vfs_lock);
+    return returnValue;
+}
+
+u64 VFS_read(VFS_Handle _handle, u64 offset, u64 size, void* buffer) {
+    u64 returnValue = 0;
+    LOCK_INT(&g_vfs_lock);
+
+    returnValue = vfs_read(_handle, offset, size, buffer);
+
+exit:
     UNLOCK_INT(&g_vfs_lock);
     return returnValue;
 }
 
-u64 VFS_write(VFS_Handle _handle, u64 offset, u64 size, const void* buffer) {
+u64 vfs_write(VFS_Handle _handle, u64 offset, u64 size, const void* buffer) {
     u64 returnValue = 0;
-    LOCK_INT(&g_vfs_lock);
+    // LOCK_INT(&g_vfs_lock);
 
     VFS_Handle_impl* handle = (VFS_Handle)_handle;
     
@@ -415,18 +450,37 @@ u64 VFS_write(VFS_Handle _handle, u64 offset, u64 size, const void* buffer) {
     }
 
 exit:
+    // UNLOCK_INT(&g_vfs_lock);
+    return returnValue;
+}
+
+u64 VFS_write(VFS_Handle _handle, u64 offset, u64 size, const void* buffer) {
+    u64 returnValue = 0;
+    LOCK_INT(&g_vfs_lock);
+
+    returnValue = vfs_write(_handle, offset, size, buffer);
+
+exit:
     UNLOCK_INT(&g_vfs_lock);
     return returnValue;
 }
 
 
-
-void VFS_close(VFS_Handle _handle) {
+void vfs_close(VFS_Handle _handle) {
     VFS_Handle_impl* handle = (VFS_Handle)_handle;
 
     // This should update lastModified timestamp.
     // handle->node = NULL;
     // @TODO Free handle
+}
+
+void VFS_close(VFS_Handle _handle) {
+    LOCK_INT(&g_vfs_lock);
+
+    vfs_close(_handle);
+
+exit:
+    UNLOCK_INT(&g_vfs_lock);
 }
 
 
@@ -581,6 +635,7 @@ bool VFS_readdir(const char* _cpath, u64* cookie, u64* entryCount, ELOS_Director
         if (consumedEntries == maxEntries) {
             *entryCount = consumedEntries;
             *cookie = mountIndex;
+            returnValue = true;
             goto exit;
         }
 
@@ -606,9 +661,9 @@ exit:
 
 }
 
-bool VFS_remove(const char* _cpath) {
+bool vfs_remove(const char* _cpath) {
     bool returnValue = false;
-    LOCK_INT(&g_vfs_lock);
+    // LOCK_INT(&g_vfs_lock);
 
     GET_NORMALIZED_PATH(cpath, _cpath);
 
@@ -625,6 +680,103 @@ bool VFS_remove(const char* _cpath) {
     returnValue = fat_remove(mount, subpath);
 
 exit:
+    // UNLOCK_INT(&g_vfs_lock);
+    return returnValue;
+}
+
+bool VFS_remove(const char* _cpath) {
+    bool returnValue = false;
+    LOCK_INT(&g_vfs_lock);
+
+    returnValue = vfs_remove(_cpath);
+
+exit:
+    UNLOCK_INT(&g_vfs_lock);
+    return returnValue;
+}
+
+
+bool vfs_copy(const char* _old_path, const char* _new_path) {
+    bool returnValue = false;
+
+
+    GET_NORMALIZED_PATH(old_path, _old_path);
+    GET_NORMALIZED_PATH(new_path, _new_path);
+
+    printf("VFS_copy %s\n", old_path, new_path);
+
+
+    // @TODO For the same mount the specific file system code should
+    //    provide a file copy function. It can more efficiently copy
+    //    disk sectors. Below will work just fine for now.
+
+
+    VFS_Handle old_handle = VFS_NULL_HANDLE;
+    VFS_Handle new_handle = VFS_NULL_HANDLE;
+    size_t bufferSize     = 4 * PAGE_SIZE;
+    void* buffer          = NULL;
+
+
+     old_handle = vfs_open(old_path, VFS_FLAG_READ_ONLY);
+    if (old_handle == VFS_NULL_HANDLE) {
+        goto exit;
+    }
+    new_handle = vfs_open(new_path, VFS_FLAG_CREATE);
+    if (new_handle == VFS_NULL_HANDLE) {
+        goto exit;
+    }
+
+    VFS_HandleInfo oldInfo;
+    bool yes = vfs_info(old_handle, &oldInfo);
+    if (!yes) {
+        goto exit;
+    }
+
+    buffer = PMEM_alloc_phys(bufferSize, PMEM_FLAG_IDENTITY_MAPPED);
+    if (!buffer) {
+        goto exit;
+    }
+
+    size_t offset = 0;
+    while (offset < oldInfo.fileSize) {
+        // printf("Write 0x%zx\n", offset);
+        u64 bytesToTransfer = oldInfo.fileSize - offset;
+        if (bytesToTransfer > bufferSize)
+            bytesToTransfer = bufferSize;
+        size_t readBytes = vfs_read(old_handle, offset, bytesToTransfer, buffer);
+        if (readBytes != bytesToTransfer) {
+            goto exit;
+        }
+        size_t writtenBytes = vfs_write(new_handle, offset, bytesToTransfer, buffer);
+        if (writtenBytes != bytesToTransfer) {
+            goto exit;
+        }
+        offset += bytesToTransfer;
+    }
+
+    returnValue = true;
+    goto exit;
+
+exit:
+    if (old_handle) {
+        vfs_close(old_handle);
+    }
+    if (new_handle) {
+        vfs_close(new_handle);
+    }
+    if (buffer) {
+        PMEM_free(buffer);
+    }
+    return returnValue;
+}
+
+bool VFS_copy(const char* _old_path, const char* _new_path) {
+    bool returnValue = false;
+    LOCK_INT(&g_vfs_lock);
+
+    returnValue = vfs_copy(_old_path, _new_path);
+
+exit:
     UNLOCK_INT(&g_vfs_lock);
     return returnValue;
 }
@@ -635,67 +787,32 @@ bool VFS_rename(const char* _old_path, const char* _new_path) {
 
     GET_NORMALIZED_PATH(old_path, _old_path);
     GET_NORMALIZED_PATH(new_path, _new_path);
-
+    
     printf("VFS_rename %s %s\n", old_path, new_path);
 
-    int subIndex;
-    VFS_Mount* oldMount = resolveMount(old_path, &subIndex);
-    if (!oldMount) {
+    bool yes;
+    yes = vfs_copy(_old_path, _new_path);
+    if (!yes) {
         goto exit;
     }
 
-    int subIndex2;
-    VFS_Mount* newMount = resolveMount(new_path, &subIndex);
-    if (!newMount) {
+    yes = vfs_remove(_old_path);
+    if (!yes) {
         goto exit;
     }
 
-    if (oldMount != newMount) {
-        // @TODO Handle different mounts?
-        // Copy operation first?
-        // Then delete operation?
-        goto exit;
-    }
-
-    // @TODO Move file?
+    // @TODO Implement file rename in file system.
+    //   We don't right now so we can implement file systems without
+    //   implementing rename and copy operations since they just use VFS.
+    // cstring old_subpath = PTR_CSTR(old_path + old_subIndex);
+    // cstring new_subpath = PTR_CSTR(new_path + new_subIndex);
+    // returnValue = fat_rename(oldMount, old_subpath, new_subpath);
 
 exit:
     UNLOCK_INT(&g_vfs_lock);
     return returnValue;
 }
 
-
-bool VFS_copy(const char* _old_path, const char* _new_path) {
-    bool returnValue = false;
-    LOCK_INT(&g_vfs_lock);
-
-
-    GET_NORMALIZED_PATH(old_path, _old_path);
-    GET_NORMALIZED_PATH(new_path, _new_path);
-
-    int subIndex;
-    VFS_Mount* oldMount = resolveMount(old_path, &subIndex);
-    if (!oldMount) {
-        goto exit;
-    }
-
-    int subIndex2;
-    VFS_Mount* newMount = resolveMount(new_path, &subIndex);
-    if (!newMount) {
-        goto exit;
-    }
-
-    if (oldMount != newMount) {
-        // @TODO Handle different mounts.
-        goto exit;
-    }
-
-    // @TODO Copy data?
-
-exit:
-    UNLOCK_INT(&g_vfs_lock);
-    return returnValue;
-}
 
 
 bool find_partition(DiskDevice device, int partitionIndex, u64* start_lba, u64* end_lba) {

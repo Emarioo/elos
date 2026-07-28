@@ -46,7 +46,11 @@ bool read_elf(const char* path, ElfObject* object) {
     }
 
     VFS_HandleInfo info;
-    VFS_info(handle, &info);
+    bool yes = VFS_info(handle, &info);
+    if (!yes) {
+        debug("read_elf: VFS_info failed %s\n", path);
+        goto exit;
+    }
 
     if (info.fileSize <= 0) {
         debug("read_elf: File size of %s is zero\n", path);

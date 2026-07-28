@@ -117,11 +117,13 @@ void SCON_main() {
         
         while (hasKeyEvent) {
             if (keyEvent.keycode == ELOSKEY_ENTER && keyEvent.pressed) {
-                cstring cmd = { inputBuffer.text, inputBuffer_len };
-                inputBuffer.text[inputBuffer_len] = 0;
-                send_command(cmd);
-                inputBuffer_len = 0;
-                inputBuffer.text[inputBuffer_len] = 0;
+                if (inputBuffer_len > 0) {
+                    cstring cmd = { inputBuffer.text, inputBuffer_len };
+                    inputBuffer.text[inputBuffer_len] = 0;
+                    send_command(cmd);
+                    inputBuffer_len = 0;
+                    inputBuffer.text[inputBuffer_len] = 0;
+                }
                 g_terminal_cursor_pos = 0;
             } else if (keyEvent.pressed) {
                 edit_text(inputBuffer.text, sizeof(inputBuffer), &inputBuffer_len, keyEvent.keycode, keyEvent.character, keyEvent.mods, &g_terminal_cursor_pos);
