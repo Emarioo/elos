@@ -206,8 +206,8 @@ typedef struct fat__InternalContext {
 } fat__InternalContext;
 
 
-#define fat__END_OF_FILE 0xFFFFFFF
-#define fat__RESERVED 0xFFFFFF8
+#define FAT_CLUSTER_EOF 0xFFFFFFF
+#define FAT_CLUSTER_RESERVED 0xFFFFFF8
 
 
 static void fat__memzero(void* addr, int size) {
@@ -768,7 +768,7 @@ int fat__find_dir_entry(fat__InternalContext* internal, int* cluster, int create
             res = context->write_sectors(temp_sector, context->lba_start + sector_start + sector_index, 1, context->user_data);
             if (res) return res;
 
-            res = fat__write_fat(internal, new_cluster, fat__END_OF_FILE);
+            res = fat__write_fat(internal, new_cluster, FAT_CLUSTER_EOF);
             if (res) return res;
 
             int sector = fat__cluster_to_sector_offset(internal, new_cluster);
@@ -906,9 +906,9 @@ uint32_t fat__get_fat(fat__InternalContext* internal, int cluster) {
         } else if (internal->fat_version == fat__FAT16) {
             value = ((uint16_t*)sector_buffer)[entry_index];
             if (value == 0xFFFF)
-                value = fat__END_OF_FILE;
+                value = FAT_CLUSTER_EOF;
             if (value == 0xFFF8)
-                value = fat__RESERVED;
+                value = FAT_CLUSTER_RESERVED;
         }
     } else {
         int fat_offset = cluster + cluster / 2;
@@ -930,9 +930,9 @@ uint32_t fat__get_fat(fat__InternalContext* internal, int cluster) {
         }
       
         if (value == 0xFFF)
-            value = fat__END_OF_FILE;
+            value = FAT_CLUSTER_EOF;
         if (value == 0xFF8)
-            value = fat__RESERVED;
+            value = FAT_CLUSTER_RESERVED;
     }
 
     return value;
@@ -957,7 +957,7 @@ int fat__write_fat(fat__InternalContext* internal, int cluster, uint32_t value) 
             ((uint32_t*)internal->loaded_fat_sector)[entry_index] =
                 (value & 0x0FFFFFFF) | (((uint32_t*)internal->loaded_fat_sector)[entry_index] & 0xF0000000);
         } else if (internal->fat_version == fat__FAT16) {
-            if (value == fat__END_OF_FILE)
+            if (value == FAT_CLUSTER_EOF)
                 value = 0xFFFF;
             ((uint16_t*)internal->loaded_fat_sector)[entry_index] = value;
         }
@@ -975,7 +975,7 @@ int fat__write_fat(fat__InternalContext* internal, int cluster, uint32_t value) 
 
         char* sector_buffer = internal->loaded_fat_sector;
 
-        if (value == fat__END_OF_FILE)
+        if (value == FAT_CLUSTER_EOF)
             value = 0xFFF;
         
         uint16_t prev_value = *((uint16_t*)&sector_buffer[fat_offset % context->sector_size]);
@@ -992,7 +992,7 @@ int fat__write_fat(fat__InternalContext* internal, int cluster, uint32_t value) 
         if (res) return res;
 
         uint32_t written_value = fat__get_fat(internal, cluster);
-        if (written_value != value && !(written_value == fat__END_OF_FILE && value == 0xFFF)) {
+        if (written_value != value && !(written_value == FAT_CLUSTER_EOF && value == 0xFFF)) {
             log("Read did not return written FAT, %u != %u\n", value, written_value);
             fat__trigger_break();
         }
@@ -1157,7 +1157,7 @@ int fat__create_entry(fat__Context* context, const char* path, fat__DirectoryAtt
     res = fat__find_free_cluster(internal, &free_cluster);
     if (res) return res;
 
-    res = fat__write_fat(internal, free_cluster, fat__END_OF_FILE);
+    res = fat__write_fat(internal, free_cluster, FAT_CLUSTER_EOF);
     if (res) return res;
 
 
@@ -1290,7 +1290,7 @@ int fat__write_data(fat__Context* context, const char* path, uint64_t offset, vo
     while (advance_clusters) {
         advance_clusters--;
         uint32_t next_cluster = fat__get_fat(internal, cluster);
-        if (next_cluster == fat__END_OF_FILE) {
+        if (next_cluster == FAT_CLUSTER_EOF) {
             // Allocate new cluster
             int new_cluster;
             res = fat__find_free_cluster(internal, &new_cluster);
@@ -1300,7 +1300,7 @@ int fat__write_data(fat__Context* context, const char* path, uint64_t offset, vo
 
             res = fat__write_fat(internal, cluster, new_cluster);
             if (res) return res;
-            res = fat__write_fat(internal, new_cluster, fat__END_OF_FILE);
+            res = fat__write_fat(internal, new_cluster, FAT_CLUSTER_EOF);
             if (res) return res;
 
             cluster = new_cluster;
@@ -1320,7 +1320,7 @@ int fat__write_data(fat__Context* context, const char* path, uint64_t offset, vo
 
         if (sector_index >= bpb->sectors_per_cluster) {
             uint32_t next_cluster = fat__get_fat(internal, cluster);
-            if (next_cluster == fat__END_OF_FILE) {
+            if (next_cluster == FAT_CLUSTER_EOF) {
                 // Allocate new cluster
                 int new_cluster;
                 res = fat__find_free_cluster(internal, &new_cluster);
@@ -1330,7 +1330,7 @@ int fat__write_data(fat__Context* context, const char* path, uint64_t offset, vo
 
                 res = fat__write_fat(internal, cluster, new_cluster);
                 if (res) return res;
-                res = fat__write_fat(internal, new_cluster, fat__END_OF_FILE);
+                res = fat__write_fat(internal, new_cluster, FAT_CLUSTER_EOF);
                 if (res) return res;
 
                 cluster = new_cluster;

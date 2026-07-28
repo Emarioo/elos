@@ -314,14 +314,14 @@ static size_t cached_read(void* ptr, size_t size, FILE *restrict stream) {
             return cachedBytesToRead;
         }
 
-        stream->position += cqe.read.readBytes;
         stream->rcache_len = cqe.read.readBytes;
         stream->rcache_readOffset = 0;
 
         memcpy(ptr + cachedBytesToRead, stream->rcache + stream->rcache_readOffset, size - cachedBytesToRead);
         stream->rcache_readOffset += size - cachedBytesToRead;
 
-        return cachedBytesToRead + size - cachedBytesToRead + cqe.read.readBytes;
+        u32 readBytes = cachedBytesToRead + size - cachedBytesToRead + cqe.read.readBytes;
+        return readBytes;
     } else {
         ELOS_AsyncRequest req;
         ELOS_AsyncCompletion cqe;
@@ -340,7 +340,7 @@ static size_t cached_read(void* ptr, size_t size, FILE *restrict stream) {
         if (!res) {
             return cachedBytesToRead;
         }
-
+        
         if (cqe.error != ELOS_OK) {
             // Shouldn't be equal to req.ead.size or it would have failed.
             // User detects input vs output size and if they differ
@@ -348,7 +348,6 @@ static size_t cached_read(void* ptr, size_t size, FILE *restrict stream) {
             return cachedBytesToRead + cqe.read.readBytes;
         }
 
-        stream->position += cqe.read.readBytes;
         return cachedBytesToRead + cqe.read.readBytes;
     }
 }
@@ -356,9 +355,11 @@ static size_t cached_read(void* ptr, size_t size, FILE *restrict stream) {
 size_t fread(void* ptr, size_t size, size_t n, FILE *restrict stream) {
     ELOS_Error error;
 
-    printf("fread pos=0x%zx bytes=0x%zx\n", stream->position, size * n);
+    // printf("fread pos=0x%zx bytes=0x%zx\n", stream->position, size * n);
 
-    return cached_read(ptr, size * n, stream);
+    size_t readBytes = cached_read(ptr, size * n, stream);
+    stream->position += (readBytes * size) / size;
+    return readBytes / size;
 
     // ELOS_AsyncRequest req;
     // ELOS_AsyncCompletion cqe;
@@ -378,11 +379,11 @@ size_t fread(void* ptr, size_t size, size_t n, FILE *restrict stream) {
     //     return 0;
     // }
 
-    // if (cqe.error != ELOS_OK) {
-    //     return 0;
-    // }
-
     // stream->position += cqe.read.readBytes;
+    
+    // if (cqe.error != ELOS_OK) {
+    //     return cqe.read.readBytes;
+    // }
 
     // return cqe.read.readBytes;
 }
@@ -452,7 +453,6 @@ static size_t cached_write(const void* ptr, size_t size, FILE *restrict stream) 
             stream->cache_pos = stream->position;
             memcpy(stream->cache, ptr, size);
             stream->cache_len += size;
-            stream->position += size;
             return size;
         }
 
@@ -460,13 +460,11 @@ static size_t cached_write(const void* ptr, size_t size, FILE *restrict stream) 
         if (stream->cache_len + size <= stream->cache_max) {
             memcpy(stream->cache + stream->cache_len, ptr, size);
             stream->cache_len += size;
-            stream->position += size;
             return size;
         } else if (size - stream->cache_len <= stream->cache_max) {
             int bytesToCache = size - stream->cache_len;
             memcpy(stream->cache + stream->cache_len, ptr, bytesToCache);
             stream->cache_len += bytesToCache;
-            stream->position += bytesToCache;
 
             flush_write_cache(stream);
 
@@ -510,7 +508,7 @@ static size_t cached_write(const void* ptr, size_t size, FILE *restrict stream) 
         return cqe.write.writtenBytes;
     }
 
-    return cqe.write.writtenBytes;
+    return cqe.write.writtenBytes / size;
 }
 
 
@@ -521,7 +519,9 @@ size_t fwrite(const void* ptr, size_t size, size_t n, FILE *restrict stream) {
     }
 
 
-    return cached_write(ptr, size * n, stream);
+    size_t writtenBytes = cached_write(ptr, size * n, stream);
+    stream->position += (writtenBytes / size) * size;
+    return writtenBytes / size;
 
     // Below is uncached write if we want in the future:
 
@@ -546,7 +546,7 @@ size_t fwrite(const void* ptr, size_t size, size_t n, FILE *restrict stream) {
     // }
 
     // if (cqe.error != ELOS_OK) {
-    //     return 0;
+    //     return cqe.write.writtenBytes;
     // }
 
     // stream->position += cqe.write.writtenBytes;

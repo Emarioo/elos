@@ -283,50 +283,36 @@ void os_entry() {
     int res = 0;
     char buffer[256];
 
-    #define CHECK(PATH) \
-        res = normalizePath(buffer, sizeof(buffer), PATH); \
-        if (res == -1) { \
-            buffer[0] = 0; \
-        } \
-        printf("%2d %14s <- %s\n", res,  buffer, PATH); 
 
-    // CHECK(".")
-    // CHECK("./")
-    // CHECK("/.")
-    // CHECK("/..")
-    // CHECK("//")
-    // CHECK("//a//b//c//")
-    // CHECK("/.media")
-    // CHECK("/media.")
-    // CHECK("/media./usb")
-    // CHECK("/media./usb/.")
-    // CHECK("/media./usb/..")
-    // CHECK("/media/./usb")
-    // CHECK("/media/../usb/")
-    // CHECK("/media//../usb/")
+    // VFS_mkdir("/home/.savegame");
 
-    // bool ress = VFS_mkdir("/home");
+    // VFS_Handle tmp = VFS_open("/home/.savegame/temp.dsg", VFS_FLAG_CREATE);
+    // VFS_write(tmp, 0, 14, "CAKE IS A LIE");
+    // VFS_close(tmp);
+    
+    // VFS_rename("/home/.savegame/temp.dsg", "/home/.savegame/yup.dsg");
+    
+    // dumpdir("/home/.savegame", 0);
 
-    // bool ress = VFS_mkdir("/home/.savegame");
-    // // bool ress = VFS_mkdir("/home/savega");
-    // if (!ress) {
-    //     printf("Could not create home\n");
-    // }
+    // char buffer[256];
 
-    // VFS_Handle handle = VFS_open("/home/.savegame/temp.dsg", VFS_FLAG_CREATE);
-    // if (handle == VFS_NULL_HANDLE) {
-    //     printf("Could not open temp.dsg\n");
-    // }
+    // tmp = VFS_open("/home/.savegame/yup.dsg", VFS_FLAG_READ_ONLY);
+    // VFS_HandleInfo info;
+    // VFS_info(tmp, &info);
+    // VFS_read(tmp, 0, info.fileSize, buffer);
+    // VFS_close(tmp);
+    // buffer[info.fileSize] = 0;
+    // printf("size=%d text='%s'\n", info.fileSize, buffer);
 
-    // dumpdir("/home", 0);
-    // dumpdir("/", 0);
 
+
+    EXEC_create_kernel_thread(SCON_main, 0);
+    EXEC_create_kernel_thread(ASYNC_main, 0);
 
     EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
     // EXEC_create_user_thread("/pkg/slate/slate.elf", 0);
     EXEC_create_user_thread("/pkg/doom/doom.elf", 0);
 
-    EXEC_create_kernel_thread(SCON_main, 0);
 
 
     while (1) {
@@ -339,9 +325,7 @@ void os_entry() {
         //     }
         // }
 
-        ASYNC_handler();
-
-        pause();
+        EXEC_sleep(1000*1000);
     }
 }
 

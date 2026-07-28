@@ -92,7 +92,6 @@ PrismSurface* prism_createSurface(PrismInstance* instance, int width, int height
     u64 responseSize;
 
     // @TODO Timeout doesn't work at the moment. When it does use that instead of while loop.
-    // @TODO Add our own timeout for the time being.
     while (1) {
         error = SYS_service_recv(instance->endpoint, NULL, (const void**)&response, &responseSize, 0);
         if (error == ELOS_OK && response != NULL) {

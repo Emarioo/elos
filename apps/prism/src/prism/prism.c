@@ -42,13 +42,14 @@ void _start() {
 
     error = SYS_service_create(PRISM_SERVICE_NAME, &serviceEndpoint, 4096);
     if (error != ELOS_OK) {
-        printf("Could not start PRISM service\n");
+        // Happens if another instance is open
+        printf("prism: Could not start service\n");
         exit(1);
     }
 
     error = SYS_default_monitor(&monitorFrameBuffer);
     if (error != ELOS_OK) {
-        printf("Could not get default monitor frame buffer\n");
+        printf("prism: Could not get default monitor frame buffer\n");
         exit(1);
     }
 

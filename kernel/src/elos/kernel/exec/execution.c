@@ -82,6 +82,14 @@ void EXEC_timer_handler(InterruptFrame* frame) {
         memcpy(&currentThread->frame, frame, sizeof(*frame));
         memcpy(frame, &nextThread->frame, sizeof(*frame));
 
+        if (!currentThread->userSpace) {
+            // If we are on a kernel thread (not the original one at boot) then when popping the frame
+            // we will switch page table and tripple fault because the stack isn't mapped.
+            // We will implement high half kernel which will solve this problem but for now we make sure
+            // it's mapped here (very inefficient).
+            PMEM_map_memory((PageTable*)frame->cr3, currentThread->stack, currentThread->stack, currentThread->stack_size, PMEM_FLAG_NONE);
+        }
+
         // SS privilege gets cleared on my laptop (not in QEMU).
         // May be doing something wrong but
         // this ensures we get right privilege.
@@ -244,6 +252,16 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex) {
     frame->rip = (u64)object.entry_point;
     frame->cr3 = (u64)object.pageTable;
 
+    // This is so dumb. a page for a tiny little string
+    char* name = PMEM_alloc_phys(4096, PMEM_FLAG_IDENTITY_MAPPED);
+    char* slashPos = strrchr(path, '/');
+    if (slashPos) {
+        strncpy(name, slashPos + 1, 4096);
+    } else {
+        strncpy(name, path, 4096);
+    }
+    found_thread->elfBaseName = name;
+
 exit:
     // @TODO Cleanup allocated stuff.
     UNLOCK_INT(&core->thread_lock);
@@ -278,4 +296,39 @@ void EXEC_sleep(u64 sleepTime_ns) {
     // printf("Sleeped for %d ms (%d us)\n", ms, sleepTime_ns/1000);
 
     CPU_enable_interrupt();
+}
+
+
+bool EXEC_kill(const char* pattern) {
+    bool foundAny = false;
+    for (int i=0;i<CORE_LIMIT;i++) {
+        EXEC_Core* core = &cores[i];
+        LOCK_INT(&core->thread_lock);
+    }
+
+    for (int ci=0;ci<CORE_LIMIT;ci++) {
+        EXEC_Core* core = &cores[ci];
+
+        for (int ti=0;ti<THREAD_LIMIT;ti++) {
+            EXEC_Thread* thread = &core->threads[ti];
+            if (!thread->used || !thread->userSpace)
+                continue;
+
+            char* res = strstr(thread->elfBaseName, pattern);
+            if (res) {
+                // @TODO Free resources.
+                //    Maybe notify thread it's being killed and give it 500ms until it's forcefully terminated?
+                printf("Killed %s, core=%d thread=%d\n", thread->elfBaseName, ci, ti);
+                thread->used = false;
+                foundAny = true;
+            }
+        }
+    }
+
+    for (int i=CORE_LIMIT-1;i>=0;i--) {
+        EXEC_Core* core = &cores[i];
+        UNLOCK_INT(&core->thread_lock);
+    }
+
+    return foundAny;
 }

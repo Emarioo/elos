@@ -265,8 +265,8 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
         } else if (state == S_LENGTH) {
             switch(c) {
                 case 'h': lflags = lflags == L_CHAR ? L_SHORT : L_CHAR; break;
+                case 'z':
                 case 'l': lflags = lflags == L_LONG ? L_LLONG : L_LONG; break;
-                case 'z': lflags = lflags == L_LONG ? L_LLONG : L_LONG; break;
                 case 'L': lflags = L_DOUBLE; break;
                 default: fmt--; state = S_CONV;
             }

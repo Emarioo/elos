@@ -2,7 +2,7 @@
 
 #include "elos/common/types.h"
 
-
+#include "elos/disk.h"
 
 typedef struct gpt__GUID {
     uint32_t data0;
@@ -51,4 +51,7 @@ typedef struct gpt__Partition {
     uint16_t partition_name[36]; // UTF-16
 } gpt__Partition;
 
+
+
+bool gpt_find_partition(DiskDevice device, int partitionIndex, u64* start_lba, u64* end_lba);
 

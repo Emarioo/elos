@@ -38,6 +38,26 @@ Some useful flags to build.py
 gdb
 ```
 
+# What can you do
+
+First there is no deception here. Everything is buggy and unfinished.
+
+User-wise there is very little to do except play DOOM. Editing some text perhaps but the files are overwritten when you reboot or rebuild. The following programs exist:
+
+*System Console* which is similar to a TTY. Toggle it with `SUPER+T` and `help` for commands. The most important one is `doom`. Note that
+all other apps stop rendering to the monitor while system console is open.
+
+There is a *Slate Text Editor*. `slate` in *System Console* to start it. The editor is very basic at the moment.
+|Command|Action|
+|-|-|
+|CTRL+Q|Quit|
+|CTRL+O|Open file|
+|CTRL+S|Save file|
+
+If you notice logs from *Prism* and wonder what it is: It's a compositor and window manager.
+You can restart it in the system console. (system console does not depend on prism.)
+
+
 # Flashing OS to USB drive (WIP)
 
 ## Windows (WIP)

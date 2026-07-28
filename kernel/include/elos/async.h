@@ -37,4 +37,4 @@ int ASYNC_submit_async_ring(ELOS_AsyncRequestRing* requestRing);
 // int ASYNC_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, u64 timeout_ns);
 
 
-void ASYNC_handler();
+void ASYNC_main();

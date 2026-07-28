@@ -17,6 +17,8 @@ typedef struct {
     bool            waitingForIO;
     u64             sleepUntilTick;
 
+    const char*     elfBaseName;
+
     u16             pcid;
 
 } EXEC_Thread;
@@ -53,6 +55,8 @@ bool EXEC_create_kernel_thread(void* entry, int pinnedCoreIndex);
     @param pinnedCoreIndex Specifies which core to pin the thread to. -1 for any core.
 */
 bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex);
+
+bool EXEC_kill(const char* pattern);
 
 void EXEC_terminate_self();
 

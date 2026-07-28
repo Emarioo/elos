@@ -31,7 +31,8 @@ volatile u32 g_async_lock;
 
 AsyncRing asyncRings[MAX_ASYNC_RINGS];
 
-void ASYNC_handler_specific(AsyncRing* ring);
+bool ASYNC_handler_specific(AsyncRing* ring);
+void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request);
 
 
 u32 ringMaskFromEntryCount(u32 count) {
@@ -200,82 +201,39 @@ exit:
     return returnValue;
 }
 
-// int ASYNC_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, u64 timeout_ns) {
-//     int returnValue = -1;
-//     LOCK_INT(&g_async_lock);
-
-//     AsyncRing* ring = getAsyncRing(NULL, completionRing);
-//     if (!ring) {
-//         goto exit;
-//     }
-
-//     // Thread is waiting for an operation to complete.
-//     // First check if any is completed.
-//     // If not schedule another process.
-//     // When it's time to reschedule we check if any IO operation has completed.
-//     // pendingIO=false.
-
-//     // @TODO We should suspend the user process and schedule other processes.
-//     //   Maybe prioritize or make sure a kernel thread processing async operations is running.
-
-//     returnValue = 0;
-// exit:
-//     UNLOCK_INT(&g_async_lock);
-//     return returnValue;
-// }
 
 
-/*
-    Some implemnentation handling functions.
-    Called from a kernel thread. It will process a request.
-*/
+void ASYNC_main() {
+    while (1) {
+        bool anyWork = false;
+        for (int ri=0;ri<MAX_ASYNC_RINGS;ri++) {
+            AsyncRing* ring = &asyncRings[ri];
+            if (!ring->used && 0 == (ring->flags & ELOS_ASYNC_KERNEL_POLLING)) {
+                continue;
+            }
 
-
-void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request);
-
-// u32 availItems(void* _ring, u32 ringMask) {
-//     ELOS_AsyncRequestRing* ring = _ring;
-
-//     u32 head = ring->head & ringMask;
-//     u32 tail = ring->tail & ringMask;
-//     if (tail >= head) {
-//         // [  H----T  ]
-//         return tail - head;
-//     } else {
-//         // [--T   H---]
-//         return tail + (ringMask+1) - head;
-//     }
-// }
-
-// u32 freeItems(void* _ring, u32 ringMask) {
-//     ELOS_AsyncRequestRing* ring = _ring;
-//     return (ringMask+1) - availItems(ring, ringMask);
-// }
-
-
-void ASYNC_handler() {
-
-    for (int ri=0;ri<MAX_ASYNC_RINGS;ri++) {
-        AsyncRing* ring = &asyncRings[ri];
-        if (!ring->used && 0 == (ring->flags & ELOS_ASYNC_KERNEL_POLLING)) {
-            continue;
+            bool didWork = ASYNC_handler_specific(ring);
+            if (didWork) {
+                anyWork = true;
+            }
         }
 
-        ASYNC_handler_specific(ring);
+        if (!anyWork) {
+            EXEC_sleep(100*1000);
+        }
     }
-
 }
 
 
-void ASYNC_handler_specific(AsyncRing* ring) {
+bool ASYNC_handler_specific(AsyncRing* ring) {
     // These checks assumes one completion producer
     if (ring->requestRing->head == ring->requestRing->tail) {
         // No requests
-        return;
+        return false;
     }
     if (ring->completionRing->head - ring->completionRing->tail >= ring->ringMask) {
         // No free space for completions
-        return;
+        return false;
     }
 
     u32 tail = ring->requestRing->tail & ring->ringMask;
@@ -286,6 +244,7 @@ void ASYNC_handler_specific(AsyncRing* ring) {
     __atomic_fetch_add(&ring->requestRing->tail, 1, __ATOMIC_SEQ_CST);
 
     ASYNC_request_handler(ring, &request);
+    return true;
 }
 
 #define VFS_HANDLE_TO_ELOS_FILE(HANDLE) ((ELOS_File)(HANDLE))

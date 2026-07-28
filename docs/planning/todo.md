@@ -21,6 +21,8 @@ Tasks related to kernel and operating system
 ## @current
 - [ ] Separate CPU architecture specific code to separate folder/files.
 - [ ] System console.
+- [ ] If a thread gets a fault then kernel should continue to run. At least user threads.
+- [ ] Process manager. If process exits gets terminated then free resources. Memory, created services, rings, buffers.
 - [ ] Text editor. Try to port https://github.com/martanne/vis?
 - [ ] Terminal.
 - [ ] PRISM Compositor, moving and resizing windows, double buffering, transparent windows, input passthrough. Keyboard and mouse input.

@@ -3,20 +3,19 @@
 #include "elos/vfs.h"
 #include "elos/disk.h"
 
-// typedef struct VFS_VirtualNode VFS_VirtualNode;
+#include "elos/kernel/vfs/fat.h" // we need FAT_ID
+
+
+#define TO_HANDLE(P) ((VFS_Handle)P)
+#define FROM_HANDLE(P) ((VFS_Handle_impl*)P)
+
+typedef enum {
+    FILESYSTEM_NONE,
+    FILESYSTEM_FAT,
+    FILESYSTEM_EXT2,
+} FileSystemKind;
+
 typedef struct VFS_Mount VFS_Mount;
-
-// struct VFS_VirtualNode {
-//     char name[63]; // Allocate in string table?
-//     u8 name_len;
-
-//     DiskDevice mounted_diskDevice;
-//     int        mounted_partitionIndex;
-    
-//     VFS_VirtualNode* parent;
-//     VFS_VirtualNode* child;
-//     VFS_VirtualNode* sibling;
-// };
 
 struct VFS_Mount {
     char name[63]; // 62 is maximum which seems reasonable: "/boot/dajioda/jjeajoeo/andaaod/jöamödanld/aenlajepajepajepajeF"
@@ -26,20 +25,13 @@ struct VFS_Mount {
     int        partitionIndex;
     u64        start_lba;
     u64        end_lba;
+
+    FileSystemKind fileSystemKind;
 };
 
-
-// typedef struct {
-//     DiskDevice diskDevice;
-//     int        partitionIndex;
-//     u64        start_lba;
-//     u64        end_lba;
-// } VFS_FileSystem;
-
-typedef struct {
-    // disk and partition
-    // DiskDevice device;
-    // u64 start_lba; // @TODO If we move partitions then this breaks. But if we change partitions we may shrink or ruin FAT anyway so we should probably flush all file objects.
+typedef struct VFS_FileObject VFS_FileObject;
+struct VFS_FileObject {
+    VFS_Mount*  mount;
 
     // Specific to FAT
     u32 clusterIndex;
@@ -47,16 +39,15 @@ typedef struct {
     u32 direntrySector; // Relative to start of partition (start_lba + direntrySector is relative to whole disk).
     u32 direntryIndex;
     bool isRootDirectory;
-
-    // VFS_VirtualNode* node;
-    VFS_Mount*  mount;
-} VFS_FileObject;
+};
 
 
 typedef struct {
     VFS_OpenFlags    flags;
+    VFS_Mount*       mount;
+    FAT_ID           fatID;
+
     VFS_FileObject*  fileObject;
-    // VFS_VirtualNode* node;
 } VFS_Handle_impl;
 
 
@@ -64,6 +55,11 @@ typedef struct {
 VFS_Mount* resolveMount(const char* cpath, int* subIndex);
 VFS_FileObject* resolveFileObject(const char* path);
 
+VFS_Mount* reserve_mount();
+void unreserve_mount(VFS_Mount* mount);
 
-#define TO_HANDLE(P) ((VFS_Handle)P)
-#define FROM_HANDLE(P) ((VFS_Handle_impl*)P)
+VFS_Handle_impl* reserve_handle();
+void unreserve_handle(VFS_Handle_impl* handle);
+
+// Returns -1 if buffer is too small or has invalid characters
+int normalizePath(char* buffer, int bufferSize, const char* path);

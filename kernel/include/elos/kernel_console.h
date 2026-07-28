@@ -18,4 +18,5 @@ void KCON_net_write(const char* buffer, int len);
 
 void kernel_panic(const char* format, ...);
 
-#define KERNEL_PANIC(expression) ((expression) ? true : (kernel_panic("[PANIC] %s (%s:%u)\n",#expression,__FILE__,__LINE__)))
+#define KERNEL_PANIC(expression, reason, ...) ((expression) ? true : \
+    (kernel_panic("[PANIC] %s (%s:%u)\n  " reason, #expression, __FILE__, __LINE__ __VA_OPT__(,)__VA_ARGS__)))

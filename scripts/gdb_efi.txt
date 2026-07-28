@@ -10,5 +10,5 @@ add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/doom/doom.elf -o 0xC100000
 # add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/slate/slate.elf -o 0xC1000000
 # hb exception_handler
 
-# hb os_entry
+hb fat_info
 c

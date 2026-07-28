@@ -206,7 +206,10 @@ void editor_loop() {
 
             ELOS_UserEvent_Key key = event.key;
             
-            if (key.keycode == ELOSKEY_O && (key.mods & ELOSKEY_MOD_CTRL)) {
+            if (key.keycode == ELOSKEY_Q && (key.mods & ELOSKEY_MOD_CTRL)) {
+                printf("Exit slate\n");
+                exit(0);
+            } else if (key.keycode == ELOSKEY_O && (key.mods & ELOSKEY_MOD_CTRL)) {
                 session->command = CMD_OPEN_FILE;
             } else if (key.keycode == ELOSKEY_S && (key.mods & ELOSKEY_MOD_CTRL)) {
                 session->command = CMD_SAVE_FILE;

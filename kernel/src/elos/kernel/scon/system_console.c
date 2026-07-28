@@ -78,7 +78,7 @@ bool SCON_is_enabled() {
     return g_systemConsole_is_enabled;
 }
 
-
+static u64 ticks_per_sec;
 
 /*
     Entry point of the system console.
@@ -86,6 +86,7 @@ bool SCON_is_enabled() {
 */
 void SCON_main() {
     cwd_len = snprintf(cwd, sizeof(cwd), "/");
+    ticks_per_sec = CPU_tsc_per_sec();
 
     int screenWidth, screenHeight;
     draw_frame_info(&screenWidth, &screenHeight);
@@ -99,6 +100,9 @@ void SCON_main() {
     inputBuffer.text[0] = 0;
 
     printf("SCON main\n");
+
+    u64 startBlink = rdtsc();
+    #define BLINK_CYCLE 1000
 
     #define REFRESH_RATE (1000000000LU / 60LU)
 
@@ -140,6 +144,9 @@ void SCON_main() {
             Since this is slightly slower we don't at the moment.
         */
 
+        // @TODO We need to fix scrolling and wrapping.
+        //    Where should system console be displayed? Ontop of everything?
+        //    Should you be able to move it, resize?
 
         int maxLines = g_terminal_height / fontHeight;
         int lineIndex = (lineStart + lineScroll) % LINE_LIMIT;
@@ -182,6 +189,10 @@ void SCON_main() {
         temp.ptr = inputBuffer.text;
         temp.len = g_terminal_cursor_pos;
         int width = draw_text_width(temp, fontHeight, g_default_font);
+
+        u64 nowBlink = rdtsc();
+        u64 time_ms = (nowBlink - startBlink) / (ticks_per_sec / 1000);
+        if ((time_ms % BLINK_CYCLE) > BLINK_CYCLE/2)
         draw_rect(text_x + width, text_y, 2, fontHeight, WHITE);
 
         EXEC_sleep(REFRESH_RATE);
@@ -288,7 +299,17 @@ void send_command(cstring text) {
 
     // Shell executor
 
-    if (!strcmp(text.ptr, "cd") || !strncmp(text.ptr, "cd ", 3)) {
+    if (!strcmp(text.ptr, "help")) {
+
+        char* message = 
+            "Commands:\n"
+            "   cd ls             (you know what these do, flags not supported)\n"
+            "   doom slate prism  (programs to start, killed if already exists)\n"
+        ;
+
+        respond_message((cstring){ .ptr = message, .len = strlen(message) });
+
+    } else if (!strcmp(text.ptr, "cd") || !strncmp(text.ptr, "cd ", 3)) {
 
         char tempPath[256];
         if (text.len > 3) {
@@ -343,9 +364,19 @@ void send_command(cstring text) {
                 // The end
                 break;
             }
-
         }
-
+    } else if (!strcmp(text.ptr, "prism")) {
+        // Kill prism if it exists
+        EXEC_kill("prism");
+        EXEC_create_user_thread("/pkg/prism/prism.elf", -1);
+    } else if (!strcmp(text.ptr, "slate")) {
+        // Kill slate if it exists
+        EXEC_kill("slate");
+        EXEC_create_user_thread("/pkg/slate/slate.elf", -1);
+    } else if (!strcmp(text.ptr, "doom")) {
+        // Kill doom if it exists
+        EXEC_kill("doom");
+        EXEC_create_user_thread("/pkg/doom/doom.elf", -1);
     } else if (!strcmp(text.ptr, "mount")) {
         VFS_dump_mounts(printCallback, NULL);
     } else {
