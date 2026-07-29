@@ -178,6 +178,9 @@ typedef struct {
     u32  corbWritePointer;
     u32  rirbReadPointerMask;
     u32  rirbReadPointer;
+
+    ScanInfo* scanInfo;
+    PCI_ConfigSpace config;
     
 } HDA_Device;
 

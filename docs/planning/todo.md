@@ -31,6 +31,8 @@ Tasks related to kernel and operating system
 - [ ] Kernel mouse syscalls. (maybe generic input syscalls for keyboard, controller, mouse?)
 - [ ] Kernel audio syscalls.
 - [ ] Audio server.
+- [ ] API to read/write disk device directlty from user space. Requires special capability. Kernel handles AHCI, NVMe details.
+      And ensures the device isn't used or mounted by anyone else.
 - [x] DOOM port.
 
 ## @urgent

@@ -18,7 +18,7 @@ typedef struct {
 
 typedef struct {
     AudioDeviceType type;
-    AudioInfo audioInfo;
+    AudioDeviceInfo audioInfo;
 
     union {
         struct {
@@ -29,5 +29,8 @@ typedef struct {
 } AudioDevice_impl;
 
 
-#define MAX_DISK_DEVICES 8
-extern AudioDevice_impl impl_audioDevices[MAX_DISK_DEVICES];
+#define MAX_AUDIO_DEVICES 8
+extern AudioDevice_impl impl_audioDevices[MAX_AUDIO_DEVICES];
+
+AudioDevice_impl* AUDIO_reserve_device();
+

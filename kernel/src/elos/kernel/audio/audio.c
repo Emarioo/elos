@@ -13,7 +13,7 @@
 #include "elos/kernel/audio/hda.h"
 
 
-AudioDevice_impl impl_audioDevices[MAX_DISK_DEVICES];
+AudioDevice_impl impl_audioDevices[MAX_AUDIO_DEVICES];
 
 #define printf(...) KCON_printf(__VA_ARGS__)
 
@@ -48,14 +48,14 @@ bool AUDIO_find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
   
 AudioDevice_impl* AUDIO_reserve_device() {
     AudioDevice_impl* device = NULL;
-    for (int i=0;i<MAX_DISK_DEVICES;i++) {
+    for (int i=0;i<MAX_AUDIO_DEVICES;i++) {
         if (impl_audioDevices[i].type == AUDIO_TYPE_NONE) {
             device = &impl_audioDevices[i];
             break;
         }
     }
     if (!device) {
-        printf("[WARNING] Reached Disk Device limit (%d).\n", MAX_DISK_DEVICES);
+        printf("[WARNING] Reached Disk Device limit (%d).\n", MAX_AUDIO_DEVICES);
         return NULL;
     }
     memset(device, 0, sizeof(*device));
@@ -77,7 +77,7 @@ void AUDIO_scan_devices(AudioDevice* devices, int* count) {
     *count = scanInfo.count;
 }
 
-void AUDIO_get_info(AudioDevice _device, AudioInfo* info) {
+void AUDIO_get_info(AudioDevice _device, AudioDeviceInfo* info) {
     AudioDevice_impl* device = (AudioDevice_impl*)_device;
     memcpy(info, &device->audioInfo, sizeof(*info));
 }

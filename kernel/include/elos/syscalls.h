@@ -38,6 +38,7 @@ typedef enum {
     ELOS_CAP_SERVICE_CLIENT  = (1<<9),
     ELOS_CAP_USER_EVENT      = (1<<10),
     ELOS_CAP_ASYNC           = (1<<11),
+    ELOS_CAP_AUDIO           = (1<<12),
 } ELOS_GlobalCapability;
 
 
@@ -325,6 +326,32 @@ ELOS_Error SYS_spawn_process(const char* path, const char* data, u32 data_len);
 // @TODO Spawn a process.
 
 
+
+typedef void* ELOS_AudioDevice;
+
+#define ELOS_INVALID_AUDIO_DEVICE NULL
+
+typedef struct {
+    int x;
+} ELOS_AudioDeviceInfo;
+
+// Note that Audio functions are not ASYNC because you don't call them often
+// and you write audio data to ring buffers which is syscall-less.
+
+/*
+    Returns the default audio device
+*/
+ELOS_Error SYS_default_audio(ELOS_AudioDevice* device);
+
+/*
+    Returns audio information
+*/
+ELOS_Error SYS_audio_info(ELOS_AudioDevice device, ELOS_AudioDeviceInfo* info);
+
+/*
+    Returns audio information
+*/
+// ELOS_Error SYS_audio_info(ELOS_AudioDevice device, ELOS_AudioDeviceInfo* info);
 
 
 

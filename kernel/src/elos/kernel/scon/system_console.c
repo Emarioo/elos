@@ -20,6 +20,8 @@
 #include "elos/execution.h"
 #include "elos/vfs.h"
 #include "elos/physical_memory.h"
+#include "elos/audio.h"
+#include "elos/kernel/audio/wav.h"
 
 #include "elos/common/string.h"
 #include "elos/common/intrinsics.h"
@@ -379,10 +381,56 @@ void send_command(cstring text) {
         EXEC_create_user_thread("/pkg/doom/doom.elf", -1);
     } else if (!strcmp(text.ptr, "mount")) {
         VFS_dump_mounts(printCallback, NULL);
+    // } else if (!strcmp(text.ptr, "sound")) {
+    //     const char* path = "/pkg/wav/dream.wav";
+    //     play_sound(path);
     } else {
         respond_message(PTR_CSTR("Unknown command\n"));
     }
 }
 
+// static AudioDevice audioDevice;
 
+// void play_sound(const char* path) {
+
+
+//     int len = 1;
+//     AUDIO_scan_devices(audioDevice, &len);
+
+//     if (len != 0) {
+//         // @TODO Response
+//         printf("No audio device\n");
+//         return;
+//     }
+
+//     AudioDeviceInfo info;
+//     AUDIO_get_info(audioDevice, &info);
+    
+//     printf("Playing sound from %s\n", info.name);
+
+//     WAVFile* file;
+//     WAVError err = ReadWAVFile(path, &file, true);
+
+//     if (err != WAV_SUCCESS) {
+//         // @TODO Respond
+//         printf("Could not read %s\n", path);
+//         return;
+//     }
+
+//     AudioDeviceBuffer* buffer;
+
+//     bool yes = AUDIO_create_buffer(audioDevice,  &buffer);
+//     if (!yes) {
+//         printf("Could not create audio ring\n");
+//         return;
+//     }
+
+//     // play a sound
+    
+
+//     AUDIO_start();
+
+//     AUDIO_stop();
+
+// }
 
