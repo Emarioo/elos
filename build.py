@@ -168,7 +168,7 @@ def main():
         '''
         if HAS_AUDIO:
             qemu_flags += f'''
-            -device intel-hda 
+            -device intel-hda #,debug=4
             -device hda-output
             # -device hda-duplex # includes microphone
             '''
