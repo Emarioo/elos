@@ -241,6 +241,9 @@ def package_elos(release_dir, build_iso = False):
     DOOM_MAKEFILE   = f"{ROOT}/../doomgeneric/doomgeneric/Makefile.elos"
     DOOM_WAD        = f"{ROOT}/../iwad/doom1.wad"
 
+    # @TODO Provide copyright-free sound for testing.
+    WAV_PATH        = f"{ROOT}/dream_aria.wav"
+
     if os.path.exists(DOOM_WAD):
         os.makedirs(os.path.dirname(wad_path), exist_ok=True)
         cmd(f"cp {DOOM_WAD} {wad_path}")
@@ -296,6 +299,11 @@ def package_elos(release_dir, build_iso = False):
     if os.path.exists(DOOM_MAKEFILE):
         DEPS_SPEC.append((doom_path, "PKG/DOOM/DOOM.ELF"))
         DEPS_SPEC.append((wad_path, "PKG/DOOM/DOOM1.WAD"))
+
+    if os.path.exists(WAV_PATH):
+        DEPS_SPEC.append((WAV_PATH, "PKG/WAV/DREAM.WAV"))
+    else:
+        print(f"\033[33mWARNING:\033[0m Could not find {WAV_PATH} (it won't be included in PKG)")
         
     make_gpt(initrd_path, DEPS_SPEC)
     

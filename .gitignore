@@ -24,6 +24,7 @@ __pycache__
 
 scripts/disk_fs/*.elf
 
+dream_aria.wav
 
 # IDE stuff
 .vscode

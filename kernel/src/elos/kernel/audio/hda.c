@@ -8,6 +8,11 @@
 #include "elos/common/string.h"
 #include "elos/cpu.h"
 
+#include "elos/vfs.h"
+
+#include "elos/kernel/audio/wav.h"
+
+
 #define printf(...) KCON_printf(__VA_ARGS__)
 #define debug(...) printf(__VA_ARGS__)
 
@@ -15,6 +20,7 @@
 //#####################
 //     TYPES
 //#####################
+
 
 typedef enum {
     HDA_NODE_NONE,
@@ -199,7 +205,7 @@ static u64 ticks_per_sec;
 //     FUNCTIONS
 //#####################
 
-void generate_sine(void* buffer, int size);
+void generate_sine(void* buffer, int size, u64* frameOffset);
 
 void hda_reset(HDA_Device* dev) {
     volatile HDA_Regs* regs = dev->regs;
@@ -522,7 +528,7 @@ bool hda_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
     memset(dev->corbAddress, 0x9A, PAGE_SIZE);
     memset(dev->rirbAddress, 0x9A, PAGE_SIZE);
 
-    hda_dump(dev);
+    // hda_dump(dev);
 
     if ((regs->GCTL & 1) == 0) {
         // Controller is in reset state, bring it out of reset.
@@ -684,6 +690,11 @@ int gain_index_from_db(u32 amp_cap, float db_level) {
     return index;
 }
 
+#define DEFAULT_PCM_16BIT_48KHZ   0x0011
+#define DEFAULT_PCM_16BIT_44_1KHZ 0x4011
+#define DEFAULT_AUDIO_FORMAT DEFAULT_PCM_16BIT_44_1KHZ
+
+
 void hda_setup_widgests(HDA_Device* dev) {
     volatile HDA_Regs* regs = dev->regs;
 
@@ -813,8 +824,9 @@ void hda_setup_widgests(HDA_Device* dev) {
                 #define BIT_SET_OUTPUT_AMP (1 << 15)
                 #define BIT_SET_LEFT_AMP (1 << 13)
                 #define BIT_SET_RIGHT_AMP (1 << 12)
+                #define BIT_SET_MUTE (1 << 7)
 
-                int settings = BIT_SET_OUTPUT_AMP | BIT_SET_LEFT_AMP | BIT_SET_RIGHT_AMP | gainIndex;
+                int settings = BIT_SET_OUTPUT_AMP | BIT_SET_LEFT_AMP | BIT_SET_RIGHT_AMP | gainIndex | BIT_SET_MUTE;
                 SEND(wi, HDA_SET_AMPLIFIER_GAIN_MUTE, settings);
             }
 
@@ -827,10 +839,11 @@ void hda_setup_widgests(HDA_Device* dev) {
             // @TODO Pick format based on what is supported.
             //    We hardcode a good default for now.
 
-            u32 bits = 0b001; // 16-bits
-            u32 channel = 0b1; // 2 channels
+            // u32 bits = 0b001; // 16-bits
+            // u32 channel = 0b1; // 2 channels
             // leaving other fields as zero specifies 48kHz
-            u16 payload = (bits << 4) | (channel << 0);
+            // u16 payload = (bits << 4) | (channel << 0);
+            u16 payload = DEFAULT_AUDIO_FORMAT;
             SEND(wi, HDA_SET_CONVERTER_FORMAT, payload);
 
             u32 stream = 1; // 0 is reserved for unused
@@ -891,20 +904,68 @@ void hda_stream_stop(HDA_Device* dev, int index) {
 }
 
 
+void hda_mute(HDA_Device* dev, bool enabled) {
+    int codecAddress = 0;
+    u32 verb;
+    HDA_RIRB_Entry response;
+    int wi = 2;
+    int got;
+
+    GET_PARAM(wi, HDA_PARAM_OUTPUT_AMPLIFIER_CAP);
+    int outputAmp = response.verb;
+
+    int gainIndex = gain_index_from_db(outputAmp, 0.0);
+
+    int settings = BIT_SET_OUTPUT_AMP | BIT_SET_LEFT_AMP | BIT_SET_RIGHT_AMP | gainIndex;
+    if (enabled)
+        settings |= BIT_SET_MUTE;
+    SEND(wi, HDA_SET_AMPLIFIER_GAIN_MUTE, settings);
+}
+
 void hda_stream_buffers(HDA_Device* dev) {
     volatile HDA_Regs* regs = dev->regs;
 
-    u32 streamBufferSize = 0x4000;
+
+
+    u32   streamBufferSize;
+    void* buffer0;
+    void* buffer1;
+
+
+    WAVFile* wav;
+    WAVError err = ReadWAVFile("/PKG/WAV/DREAM.WAV", &wav, true);
+
+    if (err != WAV_SUCCESS) {
+        // These values are choosen to divide cleanly and
+        // provide smooth looping.
+        streamBufferSize = 10 * 4 * (48000/400);
+        buffer0 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+        buffer1 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+
+        u64 frameOffset = 0;
+        generate_sine(buffer0, streamBufferSize, &frameOffset);
+        generate_sine(buffer1, streamBufferSize, &frameOffset);
+        printf("Sine done\n");
+    } else {
+        
+        // Divide by 4 because 16-bit and 2 channels make up one sample.
+        // We don't want to split a sample.
+        streamBufferSize = (wav->data_len / 4) * 2;
+
+        buffer0 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+        buffer1 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+
+        memcpy(buffer0, wav->data, streamBufferSize);
+        memcpy(buffer1, wav->data + streamBufferSize, streamBufferSize);
+    }
+
+    KERNEL_PANIC(((u64)buffer0 >> 32) == 0, "High 32 bits of buffer0 are set");
+    KERNEL_PANIC(((u64)buffer1 >> 32) == 0, "High 32 bits of buffer1 are set");
 
     int bufferDescriptors_max = PAGE_SIZE/sizeof(HDA_BufferDescriptor);
     int bufferDescriptors_len = 0;
     volatile HDA_BufferDescriptor* bufferDescriptors = PMEM_alloc_phys(PAGE_SIZE, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
     memset((HDA_BufferDescriptor*)bufferDescriptors, 0, bufferDescriptors_max * sizeof(*bufferDescriptors));
-
-    void* buffer0 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
-    void* buffer1 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
-    KERNEL_PANIC(((u64)buffer0 >> 32) == 0, "High 32 bits of buffer0 are set");
-    KERNEL_PANIC(((u64)buffer1 >> 32) == 0, "High 32 bits of buffer1 are set");
 
     bufferDescriptors[bufferDescriptors_len].addressLow = (u64)buffer0;
     bufferDescriptors[bufferDescriptors_len].addressHigh = (u64)0;
@@ -943,10 +1004,11 @@ void hda_stream_buffers(HDA_Device* dev) {
 
     stream->LVI = (stream->LVI & ~0xFF) | (bufferDescriptors_len - 1);
 
-    u32 bits = 0b001; // 16-bits
-    u32 channel = 0b1; // 2 channels
+    // u32 bits = 0b001; // 16-bits
+    // u32 channel = 0b1; // 2 channels
     // leaving other fields as zero specifies 48kHz
-    u16 fmt = (bits << 4) | (channel << 0);
+    // u16 fmt = (bits << 4) | (channel << 0);
+    u16 fmt = DEFAULT_AUDIO_FORMAT;
     stream->FMT = (stream->FMT & ~0x80) | fmt;
 
 
@@ -957,26 +1019,41 @@ void hda_stream_buffers(HDA_Device* dev) {
     // @NOCHECKIN This should be bytes right? spec says "CBL must represent an integer number samples."
     //    Bytes must align to an even sample count but the unit is still bytes?
 
-    generate_sine(buffer0, streamBufferSize);
-    generate_sine(buffer1, streamBufferSize);
 
-    // printf("Sine done\n");
+
+
+    // hda_mute(dev, true);
 
     hda_stream_start(dev, streamIndex);
 
     // printf("Dump done\n");
 
-    hda_dump_stream(dev, streamIndex);
+    // hda_dump_stream(dev, streamIndex);
 
     // int prev = stream->LPIB;
-    // while (1) {
-    //     int now = stream->LPIB;
-    //     // if (now != prev) {
-    //     //     printf("LPIB %d\n", now);
-    //     //     prev = now;
-    //     // }
-    //     pause();
-    // }
+    u32 timeout = 2000 * ticks_per_sec / 1000;
+    int muted = true;
+    u64 startTime = rdtsc();
+    while (1) {
+
+        // u64 now = rdtsc();
+        // if (muted && now - startTime > timeout) {
+        //     hda_mute(dev, true);
+        //     muted = false;
+        // }
+
+        // u32 bufferIndex = (stream->LPIB / streamBufferSize) % bufferDescriptors_len;
+        // if (readPointer != bufferIndex) {
+        //     readPointer = (readPointer + 1) % bufferDescriptors_len;
+        // }
+        // int now = stream->LPIB;
+
+        // if (now != prev) {
+        //     printf("LPIB %d\n", now);
+        //     prev = now;
+        // }
+        pause();
+    }
     
  }
 
@@ -1007,8 +1084,8 @@ static double sin_approx(double x) {
 }
 
 
-void generate_sine(void* buffer, int size) {
-    double frequency = 440;
+void generate_sine(void* buffer, int size, u64* frameOffset) {
+    double frequency = 400;
     double amplitude = 0.3;
     const double sampleRate = 48000.0;
 
@@ -1016,8 +1093,10 @@ void generate_sine(void* buffer, int size) {
 
     int frames = size / 4; // 16-bit per sound value * 2 channels
 
+    u64 _frameOffset = *frameOffset;
     for (int i = 0; i < frames; i++) {
-        double t = (double)i / sampleRate;
+        int sine_offset = i + _frameOffset;
+        double t = (double)(sine_offset) / sampleRate;
         double angle = 2.0 * PI * frequency * t;
 
         int16_t sample = (int16_t)(32767.0 * amplitude * sin_approx(angle));
@@ -1028,6 +1107,6 @@ void generate_sine(void* buffer, int size) {
 
         // printf("%d %d\n", i, (int16_t)samples[i*2]);
     }
-
+    *frameOffset += frames;
 }
 
