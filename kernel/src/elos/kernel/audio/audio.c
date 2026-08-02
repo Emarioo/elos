@@ -13,10 +13,27 @@
 #include "elos/kernel/audio/hda.h"
 
 
-AudioDevice_impl impl_audioDevices[MAX_AUDIO_DEVICES];
-
 #define printf(...) KCON_printf(__VA_ARGS__)
 
+
+AudioDevice_impl impl_audioDevices[MAX_AUDIO_DEVICES];
+
+
+
+#define MAX_AUDIO_BUFFERS 50
+
+typedef struct {
+    ELOS_AudioBuffer* buffer;
+    u32 tail;
+    u32 ringMask;
+    bool used;
+    // EXEC_Thread* thread; // refer to ID instead?
+} KernelAudioBuffer;
+
+
+volatile u32 g_audio_lock;
+
+KernelAudioBuffer audioBuffers[MAX_AUDIO_BUFFERS];
 
 
 void AUDIO_init(BootAPI* boot_api) {
@@ -77,7 +94,40 @@ void AUDIO_scan_devices(AudioDevice* devices, int* count) {
     *count = scanInfo.count;
 }
 
-void AUDIO_get_info(AudioDevice _device, AudioDeviceInfo* info) {
+void AUDIO_get_info(AudioDevice _device, ELOS_AudioDeviceInfo* info) {
     AudioDevice_impl* device = (AudioDevice_impl*)_device;
     memcpy(info, &device->audioInfo, sizeof(*info));
 }
+
+bool AUDIO_create_buffer(AudioDevice device, ELOS_AudioBuffer** buffer) {
+    bool returnValue = false;
+
+    LOCK_INT(&g_audio_lock);
+
+    
+    
+
+
+    // @TODO Does process have enough memory for maxEntries?
+
+    u32 ringMask = ringMaskFromEntryCount(maxEntries);
+
+    AsyncRing* ring = makeAsyncRing(ringMask);
+    if (!ring) {
+        goto exit;
+    }
+    
+    ring->flags = flags;
+
+    int coreIndex = CPU_get_core_index();
+    EXEC_Core* core = &cores[coreIndex];
+    EXEC_Thread* activeThread = &core->threads[core->active_thread];
+    ring->thread = activeThread;
+
+    *requestRing = ring->requestRing;
+    *completionRing = ring->completionRing;
+
+    returnValue = ASYNC_OK;
+exit:
+    UNLOCK_INT(&g_audio_lock);
+    return returnValue;

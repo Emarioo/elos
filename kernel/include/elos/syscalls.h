@@ -331,9 +331,30 @@ typedef void* ELOS_AudioDevice;
 
 #define ELOS_INVALID_AUDIO_DEVICE NULL
 
+
+typedef enum {
+    ELOS_AUDIO_8BIT_PCM,
+    ELOS_AUDIO_16BIT_PCM,
+    ELOS_AUDIO_32BIT_PCM,
+    ELOS_AUDIO_32BIT_FLOAT,
+} ELOS_AudioFormatKind;
+
 typedef struct {
-    int x;
+    u32 sampleRate;
+    ELOS_AudioFormatKind kind;
+} ELOS_AudioFormat;
+
+typedef struct {
+    char name[32];
+    ELOS_AudioFormat format;
 } ELOS_AudioDeviceInfo;
+
+typedef volatile struct {
+    u64 head;
+    u64 tail;
+    u64 sizeMask;
+    u8  data[];
+} ELOS_AudioBuffer;
 
 // Note that Audio functions are not ASYNC because you don't call them often
 // and you write audio data to ring buffers which is syscall-less.
@@ -351,7 +372,7 @@ ELOS_Error SYS_audio_info(ELOS_AudioDevice device, ELOS_AudioDeviceInfo* info);
 /*
     Returns audio information
 */
-// ELOS_Error SYS_audio_info(ELOS_AudioDevice device, ELOS_AudioDeviceInfo* info);
+ELOS_Error SYS_create_buffer(ELOS_AudioDevice device, ELOS_AudioDeviceInfo* info);
 
 
 
