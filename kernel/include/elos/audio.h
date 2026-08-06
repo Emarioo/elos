@@ -26,6 +26,6 @@ void AUDIO_scan_devices(AudioDevice* devices, int* count);
 
 void AUDIO_get_info(AudioDevice device, ELOS_AudioDeviceInfo* info);
 
-bool AUDIO_create_buffer(AudioDevice device, u32 maxBytes, ELOS_AudioBuffer** buffer);
+bool AUDIO_create_buffer(AudioDevice device, ELOS_AudioFormat* format, u32 maxBytes, ELOS_AudioBuffer** buffer);
 
 

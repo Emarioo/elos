@@ -705,6 +705,14 @@ int sscanf(const char *str, const char *fmt, ...)
     return ret;
 }
 
+int __isoc99_sscanf(const char* str, const char* fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    int r = vsscanf(str, fmt, ap);
+    va_end(ap);
+    return r;
+}
 
 int remove(const char* _path) {
     ELOS_Error error;

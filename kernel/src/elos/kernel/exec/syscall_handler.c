@@ -700,7 +700,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 returnValue = ELOS_OK;
             }
         } break;
-        case _SYS_CREATE_ASYNC_RING: {
+        case _SYS_CREATE_ASYNC_RINGS: {
             u32 maxEntries = arg0;
             ELOS_AsyncCreateFlag flags = arg1;
             ELOS_AsyncRequestRing** requestRing = (void*)arg2;
@@ -745,7 +745,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 returnValue = ELOS_GENERIC_ERROR;
             }
         } break;
-        case _SYS_DESTROY_ASYNC_RING: {
+        case _SYS_DESTROY_ASYNC_RINGS: {
             ELOS_AsyncRequestRing* requestRing = (void*)arg0;
             ELOS_AsyncCompletionRing* completionRing = (void*)arg1;
 

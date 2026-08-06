@@ -18,7 +18,7 @@ typedef struct {
 
 typedef struct {
     AudioDeviceType type;
-    AudioDeviceInfo audioInfo;
+    ELOS_AudioDeviceInfo audioInfo;
 
     union {
         struct {

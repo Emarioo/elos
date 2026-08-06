@@ -206,19 +206,19 @@ void kernel_entry(BootAPI* in_boot_api) {
     }
 
 
-    AUDIO_init(boot_api);
+    // AUDIO_init(boot_api);
 
-    AudioDevice audioDevices[8];
-    int audioDevices_len = ARRAY_LENGTH(audioDevices);
-    AUDIO_scan_devices(audioDevices, &audioDevices_len);
+    // AudioDevice audioDevices[8];
+    // int audioDevices_len = ARRAY_LENGTH(audioDevices);
+    // AUDIO_scan_devices(audioDevices, &audioDevices_len);
 
-    for (int i=0;i<audioDevices_len;i++) {
-        AudioDevice dev = audioDevices[i];
-        AudioInfo audioInfo = {0};
-        AUDIO_get_info(dev, &audioInfo);
+    // for (int i=0;i<audioDevices_len;i++) {
+    //     AudioDevice dev = audioDevices[i];
+    //     ELOS_AudioDeviceInfo audioInfo = {0};
+    //     AUDIO_get_info(dev, &audioInfo);
 
-        KCON_printf("Audio '%s'\n", audioInfo.name);
-    }
+    //     KCON_printf("Audio '%s'\n", audioInfo.name);
+    // }
 
 
     //###############################
@@ -327,7 +327,7 @@ void os_entry() {
 
     EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
     // EXEC_create_user_thread("/pkg/slate/slate.elf", 0);
-    // EXEC_create_user_thread("/pkg/doom/doom.elf", 0);
+    EXEC_create_user_thread("/pkg/doom/doom.elf", 0);
 
 
 

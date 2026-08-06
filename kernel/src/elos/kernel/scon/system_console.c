@@ -65,6 +65,9 @@ int backColor = TERMINAL_BACK;
 char cwd[256];
 int  cwd_len;
 
+
+void play_sound(const char* path);
+
 void send_command(cstring text);
 void edit_text(char* text_ptr, int text_max, int* inout_text_len, ELOS_Keycode keycode, int character, int mods, int* cursor);
 
@@ -403,7 +406,7 @@ void play_sound(const char* path) {
         return;
     }
 
-    AudioDeviceInfo info;
+    ELOS_AudioDeviceInfo info;
     AUDIO_get_info(audioDevice, &info);
     
     printf("Playing sound from %s\n", info.name);
@@ -417,9 +420,16 @@ void play_sound(const char* path) {
         return;
     }
 
-    AudioBuffer* buffer;
+    ELOS_AudioBuffer* buffer;
+    ELOS_AudioFormat format = {
+        .sampleRate = 48000,
+        .sampleFormat = ELOS_AUDIO_16BIT_PCM,
+        .channels = 2,
+    };
 
-    bool yes = AUDIO_create_buffer(audioDevice,  &buffer);
+    u32 bufferSize = 0x40000;
+
+    bool yes = AUDIO_create_buffer(audioDevice, &format, bufferSize, &buffer);
     if (!yes) {
         printf("Could not create audio ring\n");
         return;
@@ -428,9 +438,9 @@ void play_sound(const char* path) {
     // play a sound
     
 
-    AUDIO_start();
+    // AUDIO_start();
 
-    AUDIO_stop();
+    // AUDIO_stop();
 
 }
 

@@ -9,8 +9,10 @@
 #include "elos/common/intrinsics.h"
 
 #include "elos/kernel/audio/audio_internal.h"
+#include "elos/physical_memory.h"
 
 #include "elos/kernel/audio/hda.h"
+#include "elos/execution.h"
 
 
 #define printf(...) KCON_printf(__VA_ARGS__)
@@ -25,9 +27,9 @@ AudioDevice_impl impl_audioDevices[MAX_AUDIO_DEVICES];
 typedef struct {
     ELOS_AudioBuffer* buffer;
     u32 tail;
-    u32 ringMask;
+    u32 sizeMask;
     bool used;
-    // EXEC_Thread* thread; // refer to ID instead?
+    EXEC_Thread* thread; // refer to ID instead?
 } KernelAudioBuffer;
 
 
@@ -99,35 +101,82 @@ void AUDIO_get_info(AudioDevice _device, ELOS_AudioDeviceInfo* info) {
     memcpy(info, &device->audioInfo, sizeof(*info));
 }
 
-bool AUDIO_create_buffer(AudioDevice device, ELOS_AudioBuffer** buffer) {
+u32 sizeMaskFromBufferSize(u32 size) {
+    if (size == 1)
+        return 1;
+
+    u32 bit = 31;
+    while (bit >= 0) {
+        u32 shifted_bit = 1 << bit;
+        if (shifted_bit & size)  {
+            if (size-1 && (shifted_bit & size) == 0) {
+                return size-1;
+            } else if(bit == 31) {
+                return -1;
+            } else {
+                return (1 << (bit + 1)) - 1;
+            }
+        }
+        bit--;
+    }
+    return 0;
+}
+
+
+
+KernelAudioBuffer* makeAudioBuffer(u32 bufferSize) {
+    KernelAudioBuffer* newBuffer = NULL;
+    for (int i=0;i<ARRAY_LENGTH(audioBuffers);i++) {
+        KernelAudioBuffer* buf = &audioBuffers[i];
+        if (!buf->used) {
+            newBuffer = buf;
+            break;
+        }
+    }
+    if (!newBuffer) {
+        return NULL;
+    }
+
+    u32 sizeMask = sizeMaskFromBufferSize(bufferSize);
+
+    u64 totalBufferSize = sizeof(ELOS_AudioBuffer) + sizeMask + 1;
+
+    void* bufferAddress = PMEM_alloc_phys(totalBufferSize, PMEM_FLAG_IDENTITY_MAPPED);
+    if (!bufferAddress) {
+        return NULL;
+    }
+
+    memset(bufferAddress, 0, totalBufferSize);
+
+    newBuffer->buffer = bufferAddress;
+    newBuffer->sizeMask = sizeMask;
+    *(u32*)&newBuffer->buffer->sizeMask = sizeMask;
+
+    newBuffer->used = true;
+    return newBuffer;
+}
+
+bool AUDIO_create_buffer(AudioDevice device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer) {
     bool returnValue = false;
-
     LOCK_INT(&g_audio_lock);
-
-    
-    
-
 
     // @TODO Does process have enough memory for maxEntries?
 
-    u32 ringMask = ringMaskFromEntryCount(maxEntries);
+    // @TODO Check if device supports format.
 
-    AsyncRing* ring = makeAsyncRing(ringMask);
-    if (!ring) {
+    KernelAudioBuffer* kernelBuffer = makeAudioBuffer(bufferSize);
+    if (!kernelBuffer) {
         goto exit;
     }
-    
-    ring->flags = flags;
 
     int coreIndex = CPU_get_core_index();
     EXEC_Core* core = &cores[coreIndex];
     EXEC_Thread* activeThread = &core->threads[core->active_thread];
-    ring->thread = activeThread;
+    kernelBuffer->thread = activeThread;
 
-    *requestRing = ring->requestRing;
-    *completionRing = ring->completionRing;
+    returnValue = true;
 
-    returnValue = ASYNC_OK;
 exit:
     UNLOCK_INT(&g_audio_lock);
     return returnValue;
+}

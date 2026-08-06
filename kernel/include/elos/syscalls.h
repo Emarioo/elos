@@ -6,6 +6,17 @@
 
     Define ELOS_SYSCALL_IMPL to get implementions for functions.
 
+    Note: Rules for consistency
+
+        - "size" ALWAYS refers to bytes.
+            int bufferSize;
+        - "count", "amount", "length" ALWAYS refers to elements and NEVER bytes.
+           Except for 'char' type which happens to be a byte as well.
+            int stringLength;
+            int ringCount;
+        - "index" refers to a zero-based element position.
+        - "offset" always refers to a byte offset.
+
 */
 
 #ifndef ELOS_SYSCALL_INCLUDE
@@ -23,6 +34,8 @@ typedef enum {
     ELOS_INVALID_SYSCALL,
     ELOS_INVALID_OPERATION,
     ELOS_IPC_FULL,
+
+    ELOS_UNSUPPORTED_AUDIO_FORMAT,
 } ELOS_Error;
 
 typedef enum {
@@ -133,7 +146,7 @@ typedef struct {
 
     @param capabilities Filled with information.
 */
-void SYS_capabilites(ELOS_Capabilities* capabilities);
+void SYS_capabilities(ELOS_Capabilities* capabilities);
 
 
 /*
@@ -144,7 +157,7 @@ void SYS_capabilites(ELOS_Capabilities* capabilities);
     @param capabilities Zero all but the capabilities you want to request.
     On return the accepted capabilities remain non-zero and denied ones become zero.
 */
-void SYS_request_capabilites(ELOS_Capabilities* capabilities);
+void SYS_request_capabilities(ELOS_Capabilities* capabilities);
 
 
 /*
@@ -337,11 +350,12 @@ typedef enum {
     ELOS_AUDIO_16BIT_PCM,
     ELOS_AUDIO_32BIT_PCM,
     ELOS_AUDIO_32BIT_FLOAT,
-} ELOS_AudioFormatKind;
+} ELOS_AudioSampleFormat;
 
 typedef struct {
     u32 sampleRate;
-    ELOS_AudioFormatKind kind;
+    u8  channels;
+    ELOS_AudioSampleFormat sampleFormat;
 } ELOS_AudioFormat;
 
 typedef struct {
@@ -349,31 +363,62 @@ typedef struct {
     ELOS_AudioFormat format;
 } ELOS_AudioDeviceInfo;
 
-typedef volatile struct {
-    u64 head;
-    u64 tail;
-    u64 sizeMask;
+typedef struct {
+    u32 head;
+    u32 tail;
+    u32 sizeMask;
     u8  data[];
 } ELOS_AudioBuffer;
 
-// Note that Audio functions are not ASYNC because you don't call them often
-// and you write audio data to ring buffers which is syscall-less.
-
 /*
-    Returns the default audio device
+    Returns the default audio device.
+
+    @param device The returned default device.
+
+    @pre ELOS_CAP_AUDIO is required.
 */
 ELOS_Error SYS_default_audio(ELOS_AudioDevice* device);
 
+// @TODO Provide audio device enumeration functions.
+
 /*
-    Returns audio information
+    Returns information about the audio device such as name and audio format.
+
+    @param device The device to get information from.
+    @param info The information of the device.
+
+    @pre ELOS_CAP_AUDIO is required.
 */
 ELOS_Error SYS_audio_info(ELOS_AudioDevice device, ELOS_AudioDeviceInfo* info);
 
 /*
-    Returns audio information
-*/
-ELOS_Error SYS_create_buffer(ELOS_AudioDevice device, ELOS_AudioDeviceInfo* info);
+    Returns an audio sample buffer for the audio device. Samples written to the buffer will be
+    transferred to the hardware device.
 
+    @param device The device to make a buffer for.
+    @param bufferSize Size in bytes of the buffer.
+    @param buffer The buffer to write audio samples to. The kernel will transfer them to the audio device.
+
+    @pre ELOS_CAP_AUDIO is required.
+
+    @exception ELOS_UNSUPPORTED_AUDIO_FORMAT
+    
+*/
+ELOS_Error SYS_create_buffer(ELOS_AudioDevice device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer);
+
+typedef enum {
+    AUDIO_IOCTL_PLAY,
+    AUDIO_IOCTL_STOP,
+} ELOS_AudioOperation;
+
+/*
+    Perform an operation on the audio device.
+
+    @param device The device to perform operation on.
+    @param operation The action to perform.
+    @param value Specific to the operation. Some operations needs no value and ignores it.
+*/
+ELOS_Error SYS_audio_control(ELOS_AudioDevice device, ELOS_AudioOperation operation, size_t value);
 
 
 // We have ASYNC operations for these.
@@ -575,261 +620,7 @@ ELOS_Error SYS_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, u64 tim
 //   Network Time Protocol and DNS to sync the time.
 
 
-// @TODO Auto-generate stuff below?
-
-
-typedef enum {
-    // Zero is reserved for invalid.
-    _SYS_CAPABILITIES = 1,
-    _SYS_REQUEST_CAPABILITIES,
-    _SYS_DEBUG_LOG,
-    _SYS_HEAP_ALLOCATE,
-    _SYS_HEAP_FREE,
-    _SYS_HEAP_REALLOCATE,
-    _SYS_HEAP_MAP,
-    _SYS_DEFAULT_MONITOR,
-    _SYS_TICKS_PER_SECOND,
-    _SYS_SLEEP_NS,
-    _SYS_SERVICE_CREATE,
-    _SYS_SERVICE_CONNECT,
-    _SYS_SERVICE_SEND,
-    _SYS_SERVICE_RECV,
-    _SYS_SHARED_MEMORY_CREATE,
-    _SYS_SHARED_MEMORY_GRANT,
-    _SYS_SHARED_MEMORY_INFO,
-    _SYS_REQUEST_USER_EVENT_BUFFER,
-    _SYS_CREATE_ASYNC_RING,
-    _SYS_DESTROY_ASYNC_RING,
-    _SYS_SUBMIT_ASYNC_RING,
-    _SYS_WAIT_ASYNC_RING,
-    _SYS_EXIT,
-} ELOS_SyscallID;
-
-
 #endif // ELOS_SYSCALL_INCLUDE
 
-#ifdef ELOS_SYSCALL_IMPL
-
-
-#define SYSCALL0(ID)              \
-    asm volatile (                \
-        "syscall"                 \
-        : "=a" (rax)              \
-        : "a" (ID)                \
-        : "rcx", "r11", "memory"  \
-    );
-
-#define SYSCALL1(ID, ARG0)        \
-    asm volatile (                \
-        "syscall"                 \
-        : "=a" (rax)              \
-        : "a" (ID), "D" (ARG0)    \
-        : "rcx", "r11", "memory"  \
-    );
-
-#define SYSCALL2(ID, ARG0, ARG1)            \
-    asm volatile (                          \
-        "syscall"                           \
-        : "=a" (rax)                        \
-        : "a" (ID), "D" (ARG0), "S" (ARG1)  \
-        : "rcx", "r11", "memory"            \
-    );
-    
-#define SYSCALL3(ID, ARG0, ARG1, ARG2)                  \
-    asm volatile (                                      \
-        "syscall"                                       \
-        : "=a" (rax)                                    \
-        : "a" (ID), "D" (ARG0), "S" (ARG1), "d" (ARG2)  \
-        : "rcx", "r11", "memory"                        \
-    )
-
-#define SYSCALL4(ID, ARG0, ARG1, ARG2, ARG3)                       \
-    register u64 r10 asm ("r10") = (u64)(ARG3);                    \
-    asm volatile (                                                 \
-        "syscall"                                                  \
-        : "=a" (rax)                                               \
-        : "a" (ID), "D" (ARG0), "S" (ARG1), "d" (ARG2), "r" (r10)  \
-        : "rcx", "r11", "memory"                                   \
-    )
-
-#define SYSCALL5(ID, ARG0, ARG1, ARG2, ARG3, ARG4)                            \
-    register u64 r10 asm ("r10") = (u64)(ARG3);                               \
-    register u64 r8 asm ("r8") = (u64)(ARG4);                                 \
-    asm volatile (                                                            \
-        "syscall"                                                             \
-        : "=a" (rax)                                                          \
-        : "a" (ID), "D" (ARG0), "S" (ARG1), "d" (ARG2), "r" (r10), "r" (r8)   \
-        : "rcx", "r11", "memory"                                              \
-    )
-
-
-void SYS_capabilites(ELOS_Capabilities* capabilities)  {
-    ELOS_Error rax;
-    SYSCALL1(_SYS_CAPABILITIES, capabilities);
-}
-
-void SYS_request_capabilites(ELOS_Capabilities* capabilities) {
-    ELOS_Error rax;
-    SYSCALL1(_SYS_REQUEST_CAPABILITIES, capabilities);
-}
-
-void SYS_debug_log(const char* text, u32 length) {
-    ELOS_Error rax;
-    SYSCALL2(_SYS_DEBUG_LOG, text, length);
-}
-
-ELOS_Error SYS_heap_allocate(void** newAddress, u64 size) {
-    ELOS_Error rax;
-    SYSCALL2(_SYS_HEAP_ALLOCATE, newAddress, size);
-    return rax;
-}
-
-ELOS_Error SYS_heap_free(void* oldAddress) {
-    ELOS_Error rax;
-    SYSCALL1(_SYS_HEAP_FREE, oldAddress);
-    return rax;
-}
-
-ELOS_Error SYS_heap_reallocate(void** newAddress, u64 size, void* oldAddress) {
-    ELOS_Error rax;
-    SYSCALL3(_SYS_HEAP_REALLOCATE, newAddress, size, oldAddress);
-    return rax;
-}
-
-ELOS_Error SYS_heap_map(void* virtAddress, u64 size) {
-    ELOS_Error rax;
-    SYSCALL2(_SYS_HEAP_MAP, virtAddress, size);
-    return rax;
-}
-
-ELOS_Error SYS_default_monitor(ELOS_FrameBuffer* frameBuffer) {
-    ELOS_Error rax;
-    SYSCALL1(_SYS_DEFAULT_MONITOR, frameBuffer);
-    return rax;
-}
-
-ELOS_Error SYS_ticks_per_second(u64* tps) {
-    ELOS_Error rax;
-    SYSCALL1(_SYS_TICKS_PER_SECOND, tps);
-    return rax;
-}
-
-
-void SYS_sleep_ns(u64 nanoseconds) {
-    ELOS_Error rax;
-    SYSCALL1(_SYS_SLEEP_NS, nanoseconds);
-
-    // static u64 tps;
-    // if (tps == 0) {
-    //     ELOS_Error error = SYS_ticks_per_second(&tps);
-    //     if (error != ELOS_OK) {
-    //         tps = 2900000000;
-    //     }
-    // }
-    
-    // // CPU burning implementation for now
-    // u64 start;
-    // asm(
-    //     "rdtsc\n"
-    //     "shl $32, %%rdx\n"
-    //     "or %%rdx, %%rax\n"
-    //     : "=a" (start)
-    //     :
-    // );
-    // while (1) {
-    //     u64 now;
-    //     asm(
-    //         "rdtsc\n"
-    //         "shl $32, %%rdx\n"
-    //         "or %%rdx, %%rax\n"
-    //         : "=a" (now)
-    //         :
-    //     );
-    //     u64 now_ns = (1000000000 * (now - start)) / tps;
-    //     if (now_ns > nanoseconds) {
-    //         return;
-    //     }
-    // }
-}
-
-ELOS_Error SYS_service_create(const char* name, ELOS_ServiceEndpoint* endpoint, u64 queueSize) {
-    ELOS_Error rax;
-    SYSCALL3(_SYS_SERVICE_CREATE, name, endpoint, queueSize);
-    return rax;
-}
-
-ELOS_Error SYS_service_connect(const char* name, ELOS_ServiceEndpoint* endpoint, u64 queueSize) {
-    ELOS_Error rax;
-    SYSCALL3(_SYS_SERVICE_CONNECT, name, endpoint, queueSize);
-    return rax;
-}
-
-ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, const void* data, u64 size) {
-    ELOS_Error rax;
-    SYSCALL3(_SYS_SERVICE_SEND, endpoint, data, size);
-    return rax;
-}
-
-ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint* senderEndpoint, const void** data, u64* size, u64 timeout_ns) {
-    ELOS_Error rax;
-    SYSCALL5(_SYS_SERVICE_RECV, endpoint, senderEndpoint, data, size, timeout_ns);
-    return rax;
-}
-
-ELOS_Error SYS_shared_memory_create(u64 size, ELOS_SharedMemory* handle) {
-    ELOS_Error rax;
-    SYSCALL2(_SYS_SHARED_MEMORY_CREATE, size, handle);
-    return rax;
-}
-
-ELOS_Error SYS_shared_memory_grant(ELOS_SharedMemory handle, ELOS_ServiceEndpoint endpoint) {
-    ELOS_Error rax;
-    SYSCALL2(_SYS_SHARED_MEMORY_GRANT, handle, endpoint);
-    return rax;
-}
-
-ELOS_Error SYS_shared_memory_info(ELOS_SharedMemory handle, void** buffer, u64* size) {
-    ELOS_Error rax;
-    SYSCALL3(_SYS_SHARED_MEMORY_INFO, handle, buffer, size);
-    return rax;
-}
-
-ELOS_Error SYS_request_user_event_buffer(u32 maxEvents, ELOS_UserEventBuffer** buffer) {
-    ELOS_Error rax;
-    SYSCALL2(_SYS_REQUEST_USER_EVENT_BUFFER, maxEvents, buffer);
-    return rax;
-}
-
-ELOS_Error SYS_create_async_rings(u32 maxEntries, ELOS_AsyncCreateFlag flags, ELOS_AsyncRequestRing** requestRing, ELOS_AsyncCompletionRing** completionRing) {
-    ELOS_Error rax;
-    SYSCALL4(_SYS_CREATE_ASYNC_RING, maxEntries, flags, requestRing, completionRing);
-    return rax;
-}
-
-ELOS_Error SYS_destroy_async_rings(ELOS_AsyncRequestRing* requestRing, ELOS_AsyncCompletionRing* completionRing) {
-    ELOS_Error rax;
-    SYSCALL2(_SYS_DESTROY_ASYNC_RING, requestRing, completionRing);
-    return rax;
-}
-
-ELOS_Error SYS_submit_async_ring(ELOS_AsyncRequestRing* requestRing) {
-    ELOS_Error rax;
-    SYSCALL1(_SYS_SUBMIT_ASYNC_RING, requestRing);
-    return rax;
-}
-
-ELOS_Error SYS_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, u64 timeout_ns) {
-    ELOS_Error rax;
-    SYSCALL2(_SYS_WAIT_ASYNC_RING, completionRing, timeout_ns);
-    return rax;
-}
-
-void SYS_exit(int exitCode) {
-    ELOS_Error rax;
-    SYSCALL1(_SYS_EXIT, exitCode);
-}
-
-
-#endif // ELOS_SYSCALL_IMPL
-
-
+// Auto-generated
+#include "syscalls_impl.h"

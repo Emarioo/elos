@@ -68,7 +68,11 @@ $(INT_DIR):
 	$(SILENT) mkdir -p $@
 
 $(INT_DIR)/interrupts.s: $(ROOT)/kernel/gen_interrupts.py | $(INT_DIR)
-	$(SILENT) $(ROOT)/kernel/gen_interrupts.py $@
+	$(SILENT) $< $@
+	$(SILENT) chmod -w $@ 2>/dev/null || true # This will fail in WSL on NTFS paths
+
+$(ROOT)/kernel/include/elos/syscalls_impl.h: $(ROOT)/kernel/gen_syscalls.py $(ROOT)/kernel/include/elos/syscalls.h | $(INT_DIR)
+	$(SILENT) $< $@
 	$(SILENT) chmod -w $@ 2>/dev/null || true # This will fail in WSL on NTFS paths
 
 $(INT_DIR)/%.o: $(ROOT)/%.c | $(INT_DIR)
@@ -93,7 +97,7 @@ $(INT_DIR)/default_font.o: $(ROOT)/res/Lat2-Terminus16.psf | $(INT_DIR)
         --redefine-sym _binary_Lat2_Terminus16_psf_start=__default_font_start \
         $(INT_DIR)/default_font.trash $@
 
-$(KERNEL_ELF): $(OBJ_FILES) $(KERNEL_LD_SCRIPT) | $(INT_DIR)
+$(KERNEL_ELF):$(ROOT)/kernel/include/elos/syscalls_impl.h $(OBJ_FILES) $(KERNEL_LD_SCRIPT) | $(INT_DIR)
 	$(SILENT) mkdir -p $(@D)
 	$(SILENT) $(LD) $(LDFLAGS) -o $@ $(OBJ_FILES) -Map $(basename $@).map
 	

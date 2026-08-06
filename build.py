@@ -244,7 +244,9 @@ def package_elos(release_dir, build_iso = False):
     # @TODO Provide copyright-free sound for testing.
     WAV_PATH        = f"{ROOT}/dream_aria.wav"
 
-    if os.path.exists(DOOM_WAD):
+    provide_doom = os.path.exists(DOOM_MAKEFILE) and os.path.exists(DOOM_WAD)
+
+    if provide_doom:
         os.makedirs(os.path.dirname(wad_path), exist_ok=True)
         cmd(f"cp {DOOM_WAD} {wad_path}")
 
@@ -282,10 +284,14 @@ def package_elos(release_dir, build_iso = False):
     
     threads.append(cmd_async(sync0))
     threads.append(cmd_async(sync1))
+
+    wait_pool(threads)
+    
+    threads = []
     threads.append(cmd_async(sync2))
     threads.append(cmd_async(sync3))
     threads.append(cmd_async(sync4))
-    if os.path.exists(DOOM_MAKEFILE):
+    if provide_doom:
         threads.append(cmd_async(sync5))
 
     wait_pool(threads)
@@ -296,7 +302,7 @@ def package_elos(release_dir, build_iso = False):
         (term_path,  "PKG/TERM/TERM.ELF"),
         (slate_path, "PKG/SLATE/SLATE.ELF"),
     ]
-    if os.path.exists(DOOM_MAKEFILE):
+    if provide_doom:
         DEPS_SPEC.append((doom_path, "PKG/DOOM/DOOM.ELF"))
         DEPS_SPEC.append((wad_path, "PKG/DOOM/DOOM1.WAD"))
 

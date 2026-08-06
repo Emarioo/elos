@@ -250,7 +250,10 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
 extern Keymap* g_currentKeymap;
 
 
-ELOS_Keycode g_superKey = ELOSKEY_LEFT_SUPER;
+// SUPER key cannot be detected when running ELOS in QEMU on Windows.
+// Works fine on Linux.
+// ELOS_Keycode g_superKey = ELOSKEY_LEFT_SUPER;
+ELOS_Keycode g_superKey = ELOSKEY_LEFT_ALT;
 bool g_superKeyIsDown = false;
 
 void keyboard_handler(int isr_number, KeyboardInterruptFrame* frame, u64 extra) {
