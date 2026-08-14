@@ -181,7 +181,7 @@ void init_network() {
 }
 
 
-void CPU_sleep(u64 nanoseconds) {
+void CPU_spin_sleep(u64 nanoseconds) {
     static u64 rdtsc_base;
     if (!rdtsc_base)
         rdtsc_base = rdtsc();

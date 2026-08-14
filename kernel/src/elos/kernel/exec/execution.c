@@ -28,7 +28,7 @@ bool scheduling_enabled;
 void EXEC_terminate_self_end();
 void thread_bootstrap(FN_ThreadEntry entry);
 
-void EXEC_timer_handler(InterruptFrame* frame) {
+void EXEC_timer_handler(ContextFrame* frame) {
     int coreIndex = CPU_get_core_index();
 
     if (coreIndex == 0) {
@@ -168,7 +168,7 @@ bool EXEC_create_kernel_thread(void* entry, int pinnedCoreIndex) {
     u64 rsp = (u64)found_thread->stack + found_thread->stack_size;
     rsp -= 0x8; // So that we at _start when we push rbp have 16-byte aligned stack.
 
-    InterruptFrame* frame = &found_thread->frame;
+    ContextFrame* frame = &found_thread->frame;
     memset(frame, 0, sizeof(*frame));
     frame->cs = KERNEL_CODE_SEGMENT;
     frame->ss = KERNEL_DATA_SEGMENT;
@@ -243,7 +243,7 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex) {
     u64 rsp = (u64)found_thread->stack + found_thread->stack_size;
     rsp -= 0x8; // So that we at _start when we push rbp have 16-byte aligned stack.
 
-    InterruptFrame* frame = &found_thread->frame;
+    ContextFrame* frame = &found_thread->frame;
     memset(frame, 0, sizeof(*frame));
     frame->cs = USER_CODE_SEGMENT | 3;
     frame->ss = USER_DATA_SEGMENT | 3;
@@ -278,7 +278,7 @@ void EXEC_sleep(u64 sleepTime_ns) {
     CPU_disable_interrupt();
 
     u64 nowTick = rdtsc();
-    u64 sleepTick = nowTick + (sleepTime_ns * CPU_tsc_per_sec()/100) / 10000000;
+    u64 sleepTick = nowTick + (sleepTime_ns * CPU_ticks_per_second()/100) / 10000000;
 
     int coreIndex = CPU_get_core_index();
     EXEC_Core* core = &cores[coreIndex];
@@ -288,7 +288,7 @@ void EXEC_sleep(u64 sleepTime_ns) {
     kernel_thread_reschedule();
 
     u64 endTick = rdtsc();
-    u64 ms = (endTick - nowTick) / (CPU_tsc_per_sec()/1000);
+    u64 ms = (endTick - nowTick) / (CPU_ticks_per_second()/1000);
     // In QEMU on my laptop with power cable in if we sleep for 16.66 ms we seem to
     // sleep for about 18-20ms.
     // @TODO Investigate on real hardware how we can make sleep more precise.

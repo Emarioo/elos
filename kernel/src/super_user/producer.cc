@@ -71,7 +71,7 @@ void proc1() {
         index = (index + 1) % ARRAY_LENGTH(messages);
 
         printf("C%d Sent %d\n", core, index);
-        CPU_sleep(10 * MS);
+        CPU_spin_sleep(10 * MS);
     }
 }
 
@@ -87,6 +87,6 @@ void proc2() {
         int read_bytes = read(ringBuffer, &msg, sizeof(msg));
         printf("C%d Read: %s\n", core, msg.text);
 
-        CPU_sleep(300 * MS);
+        CPU_spin_sleep(300 * MS);
     }
 }

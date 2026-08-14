@@ -5,6 +5,10 @@
 #include "elos/common/types.h"
 
 
+//#################
+//      TYPES
+//#################
+
 #define KERNEL_CODE_SEGMENT 0x8
 #define KERNEL_DATA_SEGMENT 0x10
 // Theoretical segment you might want, aligns nicely with syscall/sysret
@@ -47,36 +51,58 @@ typedef struct {
     u64 rflags;
     u64 rsp;
     u64 ss;
+} ContextFrame;
+
+
+typedef struct {
+    uint64_t r11, r10, r9, r8;
+    uint64_t rdi, rsi, rdx, rcx, rax;
+
+    uint64_t rip;
+    uint64_t cs;
+    uint64_t rflags;
+    uint64_t rsp;
+    uint64_t ss;
 } InterruptFrame;
+
+typedef void(*FN_interrupt_handler)(u32 vector, InterruptFrame* frame);
+
+
+
+//#####################
+//      FUNCTIONS
+//#####################
+
 
 
 void CPU_init(BootAPI* boot_api);
-
-void CPU_enable_extensions();
-
-void CPU_enable_interrupt();
-void CPU_disable_interrupt();
-
 void CPU_reset();
 
-// Implemented with a spin loop. Use this function in early booting.
+// Spin sleep should be used in early booting.
 // Use EXEC_sleep when scheduler is initialized.
-void CPU_sleep(u64 nanoseconds);
+void CPU_spin_sleep(u64 nanoseconds);
+
+u64 CPU_ticks_per_second();
+u64 CPU_ticks();
 
 int CPU_get_core_index();
 int CPU_get_core_count();
 
-u64 CPU_tsc_per_sec();
 
-void CPU_start_core(u32 apic_id);
+void CPU_enable_interrupt();
+void CPU_disable_interrupt()
+;
+void CPU_set_irq(u32 coreId, u32 local_irq, u32 global_irq, FN_interrupt_handler handler);
 
 
 
+
+
+// @TODO Move sync primitives elsewhere.
 
 void LOCK(volatile u32* ptr);
 void UNLOCK(volatile u32* ptr);
 bool IS_LOCKED(volatile u32* ptr);
-
 
 void LOCK_INT(volatile u32* ptr);
 void UNLOCK_INT(volatile u32* ptr);

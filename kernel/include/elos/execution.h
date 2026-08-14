@@ -8,7 +8,7 @@
 typedef void(*FN_ThreadEntry)();
 
 typedef struct {
-    InterruptFrame  frame;
+    ContextFrame    frame;
     void*           stack;
     FN_ThreadEntry  entry;
     u32             stack_size;
@@ -62,7 +62,7 @@ void EXEC_terminate_self();
 
 void EXEC_sleep(u64 ns);
 
-void EXEC_timer_handler(InterruptFrame* frame);
+void EXEC_timer_handler(ContextFrame* frame);
 
 u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 arg5);
 

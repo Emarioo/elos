@@ -63,3 +63,10 @@ Tasks related to kernel and operating system
 ## @feature
 - [ ] Provide C compiler in OS by default. (TinyCC? how do we compile it?)
 - [ ] Provide Git by default. (build from source using TinyCC?)
+
+
+## OS system settings
+
+- [ ] Safety mode which turns off auto-start apps, internet access.
+- [ ] An emergency key binding to freeze all processes except for system console. You can then terminate processes, enter safety mode or restart the system.
+

@@ -11,18 +11,70 @@
 #include "elos/user_event.h"
 #include "elos/system_console.h"
 #include "elos/cpu.h"
+#include "elos/physical_memory.h"
 
 
 #define printf(...) KCON_printf(__VA_ARGS__)
 
+void keyboard_handler(u32 isr_number, InterruptFrame* frame);
 
 Keymap* g_currentKeymap;
 
 void KBD_init(BootAPI* boot_api) {
+    u32 coreIndex = CPU_get_core_index();
+
     ps2_init();
   
     KBD_set_layout("sv");
+
+    // Enable IRQ1 for keyboard interrupts for core 0 (apic id = 0)
+    CPU_set_irq(coreIndex, 1, 1, keyboard_handler);
 }
+
+
+// SUPER key cannot be detected when running ELOS in QEMU on Windows.
+// Works fine on Linux.
+// ELOS_Keycode g_superKey = ELOSKEY_LEFT_SUPER;
+ELOS_Keycode g_superKey = ELOSKEY_LEFT_ALT;
+bool g_superKeyIsDown = false;
+
+void keyboard_handler(u32 isr_number, InterruptFrame* frame) {
+    // printf("Interrupt #%d\n", isr_number);
+
+    u64 userPageTable = read_cr3();
+
+    write_cr3((uintptr_t)g_kernelPageTable);
+    
+    while (1) {
+        int pressed;
+        int scancode = ps2_poll_scancode(&pressed);
+        if (scancode == 0)
+            break;
+        
+        // @TODO Reboot key is nice but it should not be here.
+        int keycode = scancode_to_keycode(g_currentKeymap, scancode);
+        if (keycode == ELOSKEY_F1) {
+            CPU_reset();
+        }
+
+        if (keycode == g_superKey) {
+            g_superKeyIsDown = pressed;
+        }
+        // printf("%d=%d %d %d %d scan=%d\n", keyEvent.keycode, g_superKey, keyEvent.pressed, keyEvent.mods, g_superKeyIsDown, keyEvent.scancode);
+        if (keycode == ELOSKEY_T && pressed && g_superKeyIsDown) {
+            SCON_enable(!SCON_is_enabled());
+            continue;
+        }
+        
+        KBD_push_key_event(scancode, pressed);
+        
+        // printf("scancode %d, %c\n", scancode, chr);
+    }
+
+    write_cr3(userPageTable);
+    
+}
+
 
 #define MAX_ELOSKEY_EVENTS 256
 
@@ -62,7 +114,7 @@ void KBD_push_key_event(int scancode, int pressed) {
         if (pressed != 0) {
             KeyState* state = &keyStates[keyStates_len];
             state->scancode = scancode;
-            state->nextRepeatTick = rdtsc() + repeatDelay_ms * (CPU_tsc_per_sec()/1000);
+            state->nextRepeatTick = rdtsc() + repeatDelay_ms * (CPU_ticks_per_second()/1000);
             keyStates_len++;
         } else {
             for (int i=0;i<keyStates_len;i++) {
@@ -205,7 +257,7 @@ void KBD_tick_handler() {
         // int presses = 0;
         while (nowTick > state->nextRepeatTick) {
             push_key_event(state->scancode, 1);
-            state->nextRepeatTick += repeatInterval_ms * (CPU_tsc_per_sec()/1000);
+            state->nextRepeatTick += repeatInterval_ms * (CPU_ticks_per_second()/1000);
             // pressed++;
         }
         // if (presses) {

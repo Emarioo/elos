@@ -162,14 +162,13 @@ void kernel_entry(BootAPI* in_boot_api) {
     int monCount = ARRAY_LENGTH(monDevices);
     MON_scan_devices(monDevices, &monCount);
 
-    CPU_enable_extensions();
+    // Initialize GDT, IDT, interrupt tables, vectors
+    // Timer interrupt, parse ACPI tables for IOAPIC, APIC, HPET
+    CPU_init(boot_api);
 
     // Initialize simple keyboard
     KBD_init(boot_api);
 
-    // Initialize GDT, IDT, interrupt tables, vectors
-    // Timer interrupt, parse ACPI tables for IOAPIC, APIC, HPET
-    CPU_init(boot_api);
 
     DISK_init(boot_api);
 

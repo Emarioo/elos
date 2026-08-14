@@ -91,7 +91,7 @@ static u64 ticks_per_sec;
 */
 void SCON_main() {
     cwd_len = snprintf(cwd, sizeof(cwd), "/");
-    ticks_per_sec = CPU_tsc_per_sec();
+    ticks_per_sec = CPU_ticks_per_second();
 
     int screenWidth, screenHeight;
     draw_frame_info(&screenWidth, &screenHeight);

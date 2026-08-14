@@ -21,6 +21,10 @@
 
 #define printf(...) KCON_printf(__VA_ARGS__)
 
+#define IDT_MAX_DESCRIPTORS 256
+#define IDT_START_OF_IRQS 33
+#define IDT_TIMER_ISR 32
+#define MAX_IRQS (IDT_MAX_DESCRIPTORS - IDT_START_OF_IRQS)
 
 #define APIC_APICID     0x20
 #define APIC_APICVER    0x30
@@ -53,14 +57,22 @@
 #define MSR_IA32_EFER 0xC0000080
 
 
+
 void ap_trampoline(); // defined in assembly
 
+void hpet_isr(u32 isr_number, InterruptFrame* frame);
 
 void init_gdt();
 void init_idt();
 void init_apic();
 void init_syscall();
 void calibrate_tsc();
+
+
+void start_core(u32 apic_id);
+
+
+void enable_extensions();
 
 // MUST BE PAGE ALIGNED. Address is hardcoded in trampoline assembly.
 #define TRAMPOLINE_ADDRESS ((void*)0x8000)
@@ -72,9 +84,14 @@ volatile u32* g_lapic_base;
 
 u64 tsc_per_sec;
 
-u64 CPU_tsc_per_sec() {
+u64 CPU_ticks_per_second() {
     // @TODO Should be per CORE
     return tsc_per_sec;
+}
+u64 CPU_ticks() {
+    // @TODO Use rdtscp instead because it does some kind of
+    // sync fence lock thing for more sturdy TSC value?
+    return rdtsc();
 }
 
 static void disable_pit() {
@@ -86,6 +103,7 @@ static void disable_pit() {
 }
 
 void CPU_init(BootAPI* boot_api) {
+    enable_extensions();
     
     init_gdt();
     init_idt();
@@ -100,11 +118,8 @@ void CPU_init(BootAPI* boot_api) {
     init_apic();
     init_syscall();
 
+    u32 coreIndex = CPU_get_core_index();
 
-
-    // Enable IRQ1 for keyboard interrupts for core 0 (apic id = 0)
-    cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x12, 33 | (1 << 15)); // 1<<15 does level trigger instead of edge, seems to work better?
-    cpuWriteIoApic((void*)acpi_ioapic_array[0].address, 0x13, 0);
 
     // @TODO Calibration per core
     calibrate_tsc();
@@ -127,7 +142,7 @@ void CPU_init(BootAPI* boot_api) {
             continue; // don't start yourself
 
         // printf("APIC id: %d\n", apic_id);
-        CPU_start_core(apic_id);
+        start_core(apic_id);
     }
 }
 
@@ -180,15 +195,12 @@ typedef struct {
 #pragma pack(pop)
 
 
-_align(8) GDT_Register _gdt_register[CORE_LIMIT];
-_align(8) IDT_Register _idt_register; // Same for every core
+_align(16) GDT_Register _gdt_register[CORE_LIMIT];
+_align(16) IDT_Register _idt_register[CORE_LIMIT]; // Same for every core
 _align(16) TSS_Entry   _tss_entry[CORE_LIMIT];
 
-static u64 _gdt[CORE_LIMIT][(LAST_SEGMENT+16)/8]; // +16 for NULL and the width of the last segment
-
-
-_align(16)
-static IDT_Entry _idt[256];
+_align(16) static u64 _gdt[CORE_LIMIT][(LAST_SEGMENT+16)/8]; // +16 for NULL and the width of the last segment
+_align(16) static IDT_Entry g_idt[CORE_LIMIT][256];
 
 
 typedef struct {
@@ -204,16 +216,6 @@ typedef struct {
 } PageFaultFrame;
 
 
-typedef struct {
-    uint64_t r11, r10, r9, r8;
-    uint64_t rdi, rsi, rdx, rcx, rax;
-
-    uint64_t rip;
-    uint64_t cs;
-    uint64_t rflags;
-    uint64_t rsp;
-    uint64_t ss;
-} KeyboardInterruptFrame;
 
 typedef struct {
     u64 rip;
@@ -247,66 +249,6 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     while (1) asm ( "cli\nhlt\n" );
 }
 
-extern Keymap* g_currentKeymap;
-
-
-// SUPER key cannot be detected when running ELOS in QEMU on Windows.
-// Works fine on Linux.
-// ELOS_Keycode g_superKey = ELOSKEY_LEFT_SUPER;
-ELOS_Keycode g_superKey = ELOSKEY_LEFT_ALT;
-bool g_superKeyIsDown = false;
-
-void keyboard_handler(int isr_number, KeyboardInterruptFrame* frame, u64 extra) {
-    // printf("Interrupt #%d\n", isr_number);
-
-    u64 userPageTable = read_cr3();
-
-    write_cr3((uintptr_t)g_kernelPageTable);
-    
-    while (1) {
-        int pressed;
-        int scancode = ps2_poll_scancode(&pressed);
-        if (scancode == 0)
-            break;
-        
-        // @TODO Reboot key is nice but it should not be here.
-        int keycode = scancode_to_keycode(g_currentKeymap, scancode);
-        if (keycode == ELOSKEY_F1) {
-            CPU_reset();
-        }
-
-        if (keycode == g_superKey) {
-            g_superKeyIsDown = pressed;
-        }
-        // printf("%d=%d %d %d %d scan=%d\n", keyEvent.keycode, g_superKey, keyEvent.pressed, keyEvent.mods, g_superKeyIsDown, keyEvent.scancode);
-        if (keycode == ELOSKEY_T && pressed && g_superKeyIsDown) {
-            SCON_enable(!SCON_is_enabled());
-            continue;
-        }
-        
-        KBD_push_key_event(scancode, pressed);
-        
-        // printf("scancode %d, %c\n", scancode, chr);
-    }
-
-    write_cr3(userPageTable);
-    
-    // SS privilege gets cleared on my laptop.
-    // May have set up something bad in descriptors.
-    // But this ensures we get the right wrong.
-    frame->ss |= frame->cs & 3;
-
-    if (g_lapic_base)
-        g_lapic_base[APIC_EOI/4] = 0; // clear EOI
-}
-
-
-void unused_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
-    printf("Interrupt unused #%d\n", isr_number);
-
-    if (g_lapic_base)
-        g_lapic_base[APIC_EOI/4] = 0; // clear EOI
-}
 
 
 
@@ -319,15 +261,16 @@ void unused_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
 
 #define MB 0x100000
 
-#define IDT_MAX_DESCRIPTORS 256
 
-static bool vectors[IDT_MAX_DESCRIPTORS];
 
 extern void* isr_stub_table[];
 
+FN_interrupt_handler irq_table[CORE_LIMIT][256];
 
-void idt_set_descriptor(uint8_t vector, void* isr, uint8_t flags) {
-    IDT_Entry* descriptor = &_idt[vector];
+
+void idt_set_descriptor(u32 coreIndex, uint8_t vector, void* isr, uint8_t flags) {
+    
+    IDT_Entry* descriptor = &g_idt[coreIndex][vector];
 
     descriptor->isr_low        = (uint64_t)isr & 0xFFFF;
     descriptor->kernel_cs      = KERNEL_CODE_SEGMENT;
@@ -427,17 +370,42 @@ void init_gdt() {
     asm ( "sti\n" );
 }
 
-void init_idt() {
+extern void timer_isr();
 
+void interrupt_handler(int vector, InterruptFrame* frame) {
+    if (vector < IDT_START_OF_IRQS) {
+        // Timer interrupt which we have special ISR for
+        // and set manually in IDT entries.
+        return;
+    }
+    u32 coreIndex = CPU_get_core_index();
+    u32 local_irq = vector - IDT_START_OF_IRQS;
+    FN_interrupt_handler handler = irq_table[coreIndex][local_irq];
+    if (handler) {
+        handler(vector, frame);
+    }
+    
+    // SS privilege gets cleared on my laptop.
+    // May have set up something bad in descriptors.
+    // But this ensures we get the right wrong.
+    frame->ss |= frame->cs & 3;
+
+    if (g_lapic_base)
+        g_lapic_base[APIC_EOI/4] = 0; // clear EOI
+}
+
+void init_idt() {
+    u32 coreIndex = CPU_get_core_index();
     asm ( "cli\n" );
 
-    for (int vector = 0; vector < 256; vector++) {
+    for (int vector = 0; vector < IDT_MAX_DESCRIPTORS; vector++) {
         // 0x8e = 64-bit interrupt gate, present bit, super privilege
-        idt_set_descriptor(vector, isr_stub_table[vector], 0x8e);
-        vectors[vector] = true;
+        idt_set_descriptor(coreIndex, vector, isr_stub_table[vector], 0x8e);
     }
-    _idt_register.base = (u64)&_idt[0];
-    _idt_register.limit = sizeof(*_idt) * IDT_MAX_DESCRIPTORS - 1;
+    _idt_register[coreIndex].base = (u64)&g_idt[coreIndex];
+    _idt_register[coreIndex].limit = sizeof(*g_idt[coreIndex]) * IDT_MAX_DESCRIPTORS - 1;
+
+    idt_set_descriptor(coreIndex, IDT_TIMER_ISR, timer_isr, 0x8e);
 
     asm ( "lidt %0\n" : : "m"(_idt_register));
 
@@ -566,7 +534,7 @@ void init_apic() {
     g_lapic_base[APIC_EOI/4] = 0; // clear EOI
 
     g_lapic_base[APIC_TMRDIV/4] = 0x3;
-    g_lapic_base[APIC_LVT_TMR/4] = 48 | (1 << 17); // periodic mode
+    g_lapic_base[APIC_LVT_TMR/4] = IDT_TIMER_ISR | (1 << 17); // periodic mode
     g_lapic_base[APIC_TMRINITCNT/4] = 100000;
 
     //  @TODO Calibrate APIC timer with HPET.
@@ -679,10 +647,13 @@ void calibrate_tsc() {
         printf("Could not find IRQ (globalSystemInterrupt) in any IOAPIC (ACPI can provide multiple)\n");
         sti();
         return;
-    }
 
-    cpuWriteIoApic(ioapic_address, 0x10 + 2 * calculated_irq_number, 34);
-    cpuWriteIoApic(ioapic_address, 0x11 + 2 * calculated_irq_number, 0);
+    }
+    u32 coreIndex = CPU_get_core_index();
+
+
+    CPU_set_irq(coreIndex, calculated_irq_number, calculated_irq_number, hpet_isr);
+
 
     // 100 millisecond second
     u64 delay = (100000000LU*1000000LU)/counter_clk_period;
@@ -712,8 +683,7 @@ void calibrate_tsc() {
         pause();
     }
 
-    cpuWriteIoApic(ioapic_address, 0x10 + 2 * calculated_irq_number, 0x100); // Disable interrupt we are done.
-    cpuWriteIoApic(ioapic_address, 0x11 + 2 * calculated_irq_number, 0);
+    CPU_set_irq(coreIndex, calculated_irq_number, calculated_irq_number, NULL);
 
     u64 diff = hpet_rdtsc_value - start;
     tsc_per_sec = diff*10; // We measured 100 milliseconds, multiply by 10 and we get a full second
@@ -721,7 +691,7 @@ void calibrate_tsc() {
     printf("HPET measured: %d MHz\n", tsc_per_sec/1000000);
 
 }
-void hpet_isr() {
+void hpet_isr(u32 isr_number, InterruptFrame* frame) {
     hpet_rdtsc_value = rdtsc();
     // printf("Triggered %d\n", hpet_rdtsc_value/1000);
     
@@ -736,7 +706,7 @@ void CPU_reset() {
 
 
 
-void CPU_sleep(u64 nanoseconds) {
+void CPU_spin_sleep(u64 nanoseconds) {
     // tsc_per_sec can be assumed to be about 10e9-1e9
     // 1-10 second sleep can cause overflow problems.
     // Below crudely prevents the problem.
@@ -759,13 +729,16 @@ void CPU_sleep(u64 nanoseconds) {
 }
 
 int CPU_get_core_index() {
+    int coreIndex;
     if (g_lapic_base) {
-        return g_lapic_base[APIC_APICID/4] >> 24;
+        coreIndex = g_lapic_base[APIC_APICID/4] >> 24;
     } else {
         u32 eax, ebx, ecx, edx;
         cpuid(1, 0, &eax, &ebx, &ecx, &edx);
-        return ebx >> 24;
+        coreIndex = ebx >> 24;
     }
+    KERNEL_PANIC(coreIndex < CORE_LIMIT, "Need more MAX CORES!");
+    return coreIndex;
 }
 
 int CPU_get_core_count() {
@@ -784,7 +757,7 @@ void CPU_disable_interrupt() {
     cli();
 }
 
-void CPU_start_core(u32 apic_id) {
+void start_core(u32 apic_id) {
     cli();
 
     g_lapic_base[APIC_ICRH/4] = (g_lapic_base[APIC_ICRH/4] & 0x00FFFFFF) | (apic_id << 24);
@@ -798,14 +771,14 @@ void CPU_start_core(u32 apic_id) {
     
     while (g_lapic_base[APIC_ICRL/4] & 0x1000) pause(); // wait for delivery
     
-    CPU_sleep(10000000); // 10ms
+    CPU_spin_sleep(10000000); // 10ms
 
     for (int j = 0; j < 2; j++) {
         g_lapic_base[APIC_ESR/4] = 0;
         g_lapic_base[APIC_ICRH/4] = (g_lapic_base[APIC_ICRH/4] & 0x00FFFFFF) | (apic_id << 24);
         g_lapic_base[APIC_ICRL/4] = (g_lapic_base[APIC_ICRL/4] & 0xFFF0F800) | (0x00600) | ((u32)(u64)TRAMPOLINE_ADDRESS/PAGE_SIZE); // send STARTUP IPI
         
-        CPU_sleep(200000); // 200us
+        CPU_spin_sleep(200000); // 200us
 
         while (g_lapic_base[APIC_ICRL/4] & 0x1000) pause(); // wait for delivery
     }
@@ -818,7 +791,7 @@ _align(4096) u32 initial_ap_stack_top;
 
 // ap = Application Processor, BSP = Bootstrap processor?
 void ap_entry(int id) {
-    CPU_enable_extensions();
+    enable_extensions();
     
     int lapic_id = g_lapic_base[APIC_APICID/4] >> 24;
     printf("AP #%d started (edi=%d)\n", lapic_id, id);
@@ -839,7 +812,7 @@ void ap_entry(int id) {
 
 
 
-void CPU_enable_extensions() {
+void enable_extensions() {
     // Move to assembly and kernel_start and AP trampoline?
 
     // @TODO Implement optional AVX support (nice for memcopies).
@@ -901,3 +874,33 @@ void CPU_enable_extensions() {
     //     "xsetbv\n"
     // );
 }
+
+
+
+void CPU_set_irq(u32 coreIndex, u32 local_irq, u32 global_irq, FN_interrupt_handler handler) {
+    KERNEL_PANIC(coreIndex == 0, "ioapic handle other irq on other cores");
+    KERNEL_PANIC(global_irq < 24, "ioapic handle more IRQS");
+    KERNEL_PANIC(local_irq < MAX_IRQS, "Local IRQ too high. Spread to other cores.");
+
+
+    u32 vector = IDT_START_OF_IRQS + local_irq;
+    u32 ioapic_offset = 0x10 + 2 * global_irq;
+
+    printf("Set IRQ core=%u loc=%d glob=%d vec=%u ioapic_off=%u handler=%p\n", coreIndex, local_irq, global_irq, vector, ioapic_offset, handler);
+
+    if (handler) {
+        // 1<<15 does level trigger instead of edge, seems to work better?
+        cpuWriteIoApic((void*)acpi_ioapic_array[0].address, ioapic_offset, vector | (1 << 15));
+        cpuWriteIoApic((void*)acpi_ioapic_array[0].address, ioapic_offset + 1, 0);
+    } else {
+        // Disable entry
+        cpuWriteIoApic((void*)acpi_ioapic_array[0].address, ioapic_offset, 0x100);
+        cpuWriteIoApic((void*)acpi_ioapic_array[0].address, ioapic_offset + 1, 0);
+    }
+
+    irq_table[coreIndex][local_irq] = handler;
+}
+
+
+
+
