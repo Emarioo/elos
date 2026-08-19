@@ -26,33 +26,36 @@
 #define IDT_TIMER_ISR 32
 #define MAX_IRQS (IDT_MAX_DESCRIPTORS - IDT_START_OF_IRQS)
 
-#define APIC_APICID     0x20
-#define APIC_APICVER    0x30
-#define APIC_TASKPRIOR  0x80
-#define APIC_EOI        0x0B0
-#define APIC_LDR        0x0D0
-#define APIC_DFR        0x0E0
-#define APIC_SPURIOUS   0x0F0
-#define APIC_ESR        0x280
-#define APIC_ICRL       0x300
-#define APIC_ICRH       0x310
-#define APIC_LVT_TMR	0x320
-#define APIC_LVT_PERF	0x340
-#define APIC_LVT_LINT0	0x350
-#define APIC_LVT_LINT1	0x360
-#define APIC_LVT_ERR	0x370
-#define APIC_TMRINITCNT	0x380
-#define APIC_TMRCURRCNT	0x390
-#define APIC_TMRDIV	    0x3E0
-#define APIC_LAST	    0x38F
-#define APIC_DISABLE	0x10000
-#define APIC_SW_ENABLE	0x100
-#define APIC_CPUFOCUS	0x200
+#define APIC_APICID     (0x20>>2)
+#define APIC_APICVER    (0x30>>2)
+#define APIC_TASKPRIOR  (0x80>>2)
+#define APIC_EOI        (0x0B0>>2)
+#define APIC_LDR        (0x0D0>>2)
+#define APIC_DFR        (0x0E0>>2)
+#define APIC_SPURIOUS   (0x0F0>>2)
+#define APIC_ESR        (0x280>>2)
+#define APIC_ICRL       (0x300>>2)
+#define APIC_ICRH       (0x310>>2)
+#define APIC_LVT_TMR	(0x320>>2)
+#define APIC_LVT_PERF	(0x340>>2)
+#define APIC_LVT_LINT0	(0x350>>2)
+#define APIC_LVT_LINT1	(0x360>>2)
+#define APIC_LVT_ERR	(0x370>>2)
+#define APIC_TMRINITCNT	(0x380>>2)
+#define APIC_TMRCURRCNT	(0x390>>2)
+#define APIC_TMRDIV	    (0x3E0>>2)
+#define APIC_LAST	    (0x38F>>2)
+#define APIC_DISABLE	(0x10000>>2)
+#define APIC_SW_ENABLE	(0x100>>2)
+#define APIC_CPUFOCUS	(0x200>>2)
 #define APIC_NMI	 (4<<8)
 
 
 #define MSR_GS_BASE        0xC0000101
 #define MSR_KERNEL_GS_BASE 0xC0000102
+
+#define IA32_TSC_DEADLINE  0x6E0
+#define IA32_APIC_BASE_MSR 0x1B
 
 #define MSR_IA32_EFER 0xC0000080
 
@@ -66,8 +69,9 @@ void init_gdt();
 void init_idt();
 void init_apic();
 void init_syscall();
-void calibrate_tsc();
 
+void calibrate_tsc_with_pit();
+void calibrate_tsc_with_hpet();
 
 void start_core(u32 apic_id);
 
@@ -83,6 +87,8 @@ void cpuWriteIoApic(void *ioapicaddr, uint32_t reg, uint32_t value);
 volatile u32* g_lapic_base;
 
 u64 tsc_per_sec;
+
+u64 g_timer_frequency_ns = TIMER_FREQUENCY_NS;
 
 u64 CPU_ticks_per_second() {
     // @TODO Should be per CORE
@@ -122,7 +128,10 @@ void CPU_init(BootAPI* boot_api) {
 
 
     // @TODO Calibration per core
-    calibrate_tsc();
+    calibrate_tsc_with_pit();
+    // calibrate_tsc_with_hpet();
+
+    CPU_schedule_timer_interrupt(TIMER_FREQUENCY_NS);
 
 
     bool mapped = PMEM_map_memory(g_kernelPageTable, TRAMPOLINE_ADDRESS, TRAMPOLINE_ADDRESS, PAGE_SIZE, PMEM_FLAG_NONE);
@@ -132,7 +141,7 @@ void CPU_init(BootAPI* boot_api) {
     }
     memcpy(TRAMPOLINE_ADDRESS, ap_trampoline, PAGE_SIZE);
 
-    int lapic_id = g_lapic_base[APIC_APICID/4] >> 24;
+    int lapic_id = g_lapic_base[APIC_APICID] >> 24;
 
     // Starting cores requires some sleep and precise timings.
     // We must calibrate TSC first.
@@ -392,7 +401,7 @@ void interrupt_handler(int vector, InterruptFrame* frame) {
     frame->ss |= frame->cs & 3;
 
     if (g_lapic_base)
-        g_lapic_base[APIC_EOI/4] = 0; // clear EOI
+        g_lapic_base[APIC_EOI] = 0; // clear EOI
 }
 
 void init_idt() {
@@ -484,21 +493,26 @@ void init_apic() {
     wrmsr(MSR_KERNEL_GS_BASE, (u64)core);
 
 
-    #define IA32_APIC_BASE_MSR 0x1B
     #define APIC_SOFTWARE_ENABLE 0x100
 
     // @TODO Check APIC
+    // @TODO Check TSC DEADLINE
 
     u32 eax,ebx,ecx,edx;
     cpuid(1, 0, &eax,&ebx,&ecx,&edx);
 
     bool x2apic_support = (ecx & (1<<21)) != 0;
     bool apic_support = (edx & (1<<9)) != 0;
+    bool tsc_deadline_support = (ecx & (1<<24)) != 0;
 
     if (!apic_support) {
         printf("Missing APIC support\n");
         return;
     }
+
+    KERNEL_PANIC(tsc_deadline_support, "CPU is missing TSC deadline timer.");
+    
+    
 
     // printf("APIC support: apic=%d x2apic=%d\n", apic_support, x2apic_support);
 
@@ -511,45 +525,100 @@ void init_apic() {
 
     // Important that we set up APIC_SPURIOUS early.
     // APIC Timer or interrupts in general on real hardware (my laptop) won't get setup correctly.
-    g_lapic_base[APIC_SPURIOUS/4] = APIC_SOFTWARE_ENABLE | 0xFF;
+    g_lapic_base[APIC_SPURIOUS] = APIC_SOFTWARE_ENABLE | 0xFF;
     // printf("SVR: %x\n", g_lapic_base[APIC_SPURIOUS]);
 
-    int lapic_id = g_lapic_base[APIC_APICID/4] >> 24;
+    int lapic_id = g_lapic_base[APIC_APICID] >> 24;
     // printf("apic id: %d\n", lapic_id);
-
-    // g_lapic_base[APIC_SPURIOUS/4] = APIC_SOFTWARE_ENABLE | 0xFF;
 
     // Reset APIC to known state. (may or may not be necessary but certainly doesn't hurt)
     u32 tmp;
-    g_lapic_base[APIC_DFR/4] = 0xFFFFFFFF; // reset Destination Format Register
-    tmp = g_lapic_base[APIC_LDR/4];
+    g_lapic_base[APIC_DFR] = 0xFFFFFFFF; // reset Destination Format Register
+    tmp = g_lapic_base[APIC_LDR];
     tmp &= 0x00FFFFFF;
     tmp |= 1;
-    g_lapic_base[APIC_LDR/4] = tmp;
-    g_lapic_base[APIC_LVT_TMR/4] = APIC_DISABLE;
-    g_lapic_base[APIC_LVT_PERF/4] = APIC_NMI;
-    g_lapic_base[APIC_LVT_LINT0/4] = APIC_DISABLE;
-    g_lapic_base[APIC_LVT_LINT1/4] = APIC_DISABLE;
-    g_lapic_base[APIC_TASKPRIOR/4] = 0;
+    g_lapic_base[APIC_LDR] = tmp;
+    g_lapic_base[APIC_LVT_TMR] = APIC_DISABLE;
+    g_lapic_base[APIC_LVT_PERF] = APIC_NMI;
+    g_lapic_base[APIC_LVT_LINT0] = APIC_DISABLE;
+    g_lapic_base[APIC_LVT_LINT1] = APIC_DISABLE;
+    g_lapic_base[APIC_TASKPRIOR] = 0;
 
-    g_lapic_base[APIC_EOI/4] = 0; // clear EOI
+    g_lapic_base[APIC_EOI] = 0; // clear EOI
 
-    g_lapic_base[APIC_TMRDIV/4] = 0x3;
-    g_lapic_base[APIC_LVT_TMR/4] = IDT_TIMER_ISR | (1 << 17); // periodic mode
-    g_lapic_base[APIC_TMRINITCNT/4] = 100000;
+    g_lapic_base[APIC_LVT_TMR] = IDT_TIMER_ISR | (2 << 17); // TSC deadline
 
-    //  @TODO Calibrate APIC timer with HPET.
+
+    //  @TODO Fallback to one-shot or periodic mode if TSC deadline doesn't exist.
+    //     We need to measure APIC timer counter with PIT or HPET without TSC deadline.
+    // g_lapic_base[APIC_TMRDIV] = 0x3;
+    // g_lapic_base[APIC_LVT_TMR] = IDT_TIMER_ISR | (1 << 17); // periodic mode
+    // g_lapic_base[APIC_TMRINITCNT] = 100000;
+
 
     // printf("LVT timer=%x\n", g_lapic_base[APIC_LVT_TMR / 4]);
 
-    // printf("ESR=%x\n", g_lapic_base[APIC_ESR/4]);
+    // printf("ESR=%x\n", g_lapic_base[APIC_ESR]);
 
     sti();
 }
 
+void CPU_schedule_timer_interrupt(u64 nanoseconds) {
+    // We expect these circumstances and will not integer overflow if they are true.
+    //    nanoseconds <= 1e9 (1 second)
+    //    CPU_ticks_per_second() <= 10e9 (10 Ghz)
+
+    u64 now = CPU_ticks();
+    u64 tick = now + (CPU_ticks_per_second() * nanoseconds) / 1000000000;
+    wrmsr(IA32_TSC_DEADLINE, tick);
+
+    // Can't do much work here (like writing to framebuffer) because it will already be time
+    // for the next timer interrupt causing continous timer interrupts.
+    // serial_write("TIMER scheduled at %llu (%llu, %llu us)\n", tick, tick - now, (tick-now)*1000000/CPU_ticks_per_second());
+}
+
 volatile u64 hpet_rdtsc_value;
 
-void calibrate_tsc() {
+void calibrate_tsc_with_pit() {
+    const u32 pit_hz = 1193182;
+    const u32 duration_ms = 50; // Maximum duration we can measure is about 54 ms. (0xFFFF/pit_hz)
+
+    u32 count = (pit_hz * duration_ms) / 1000;
+
+    // printf("Count %u\n", count);
+
+    cli();
+
+    // PIT channel 0, lobyte/hibyte, mode 0
+    outb(0x43, 0x30);
+
+    // Load count
+    outb(0x40, count & 0xff);
+    outb(0x40, count >> 8);
+
+    u64 start = rdtsc();
+
+    // Wait for PIT channel 0 OUT
+    while (1) {
+        outb(0x43, 0xE2);
+        if (inb(0x40) & 0x80)
+            break;
+        pause();
+    }
+
+    u64 end = rdtsc();
+
+    sti();
+
+    tsc_per_sec = (end - start) * (1000 / duration_ms);
+    printf("PIT measured: %llu MHz (%llu ticks in %d ms)\n", tsc_per_sec/1000000, end - start, duration_ms);
+}
+
+void calibrate_tsc_with_hpet() {
+
+    // I don't know why but this has never worked. Maybe QEMU quirks.
+    // I remember it working fairly well on my laptop but maybe it wasn't.
+
     cli();
 
     // A lot of the bits we clear are probably already cleared but we try to be very specific
@@ -706,7 +775,7 @@ void calibrate_tsc() {
 
     printf("HPET measured: %d MHz\n", tsc_per_sec/1000000);
 
-    while (1) pause();
+    // while (1) pause();
 
 }
 void hpet_isr(u32 isr_number, InterruptFrame* frame) {
@@ -720,7 +789,7 @@ void hpet_isr(u32 isr_number, InterruptFrame* frame) {
     printf("Triggered hpet_tick=%u tsc=%u K\n", *main_counter, hpet_rdtsc_value/1000);
     
     if (g_lapic_base)
-        g_lapic_base[APIC_EOI/4] = 0; // clear EOI
+        g_lapic_base[APIC_EOI] = 0; // clear EOI
 }
 
 
@@ -755,7 +824,7 @@ void CPU_spin_sleep(u64 nanoseconds) {
 int CPU_get_core_index() {
     int coreIndex;
     if (g_lapic_base) {
-        coreIndex = g_lapic_base[APIC_APICID/4] >> 24;
+        coreIndex = g_lapic_base[APIC_APICID] >> 24;
     } else {
         u32 eax, ebx, ecx, edx;
         cpuid(1, 0, &eax, &ebx, &ecx, &edx);
@@ -770,7 +839,7 @@ int CPU_get_core_count() {
 }
 
 void apic_clear_eoi() {
-    g_lapic_base[APIC_EOI/4] = 0; // clear EOI
+    g_lapic_base[APIC_EOI] = 0; // clear EOI
 }
 
 
@@ -784,27 +853,27 @@ void CPU_disable_interrupt() {
 void start_core(u32 apic_id) {
     cli();
 
-    g_lapic_base[APIC_ICRH/4] = (g_lapic_base[APIC_ICRH/4] & 0x00FFFFFF) | (apic_id << 24);
-    g_lapic_base[APIC_ICRL/4] = (g_lapic_base[APIC_ICRL/4] & 0xFFF00000) | (0x0C500); // send INIT, Level and Trigger Mode bit is set.
+    g_lapic_base[APIC_ICRH] = (g_lapic_base[APIC_ICRH] & 0x00FFFFFF) | (apic_id << 24);
+    g_lapic_base[APIC_ICRL] = (g_lapic_base[APIC_ICRL] & 0xFFF00000) | (0x0C500); // send INIT, Level and Trigger Mode bit is set.
     // Intel manual says trigger mode should be 0 for all but INIT de-assert. We use INIT assert so maybe we should ty 0x004500
 
-    while (g_lapic_base[APIC_ICRL/4] & 0x1000) pause(); // wait for delivery
+    while (g_lapic_base[APIC_ICRL] & 0x1000) pause(); // wait for delivery
 
-    g_lapic_base[APIC_ICRH/4] = (g_lapic_base[APIC_ICRH/4] & 0x00FFFFFF) | (apic_id << 24);
-    g_lapic_base[APIC_ICRL/4] = (g_lapic_base[APIC_ICRL/4] & 0xFFF00000) | (0x08500); // send INIT deassert, Trigger Mode bit is set.
+    g_lapic_base[APIC_ICRH] = (g_lapic_base[APIC_ICRH] & 0x00FFFFFF) | (apic_id << 24);
+    g_lapic_base[APIC_ICRL] = (g_lapic_base[APIC_ICRL] & 0xFFF00000) | (0x08500); // send INIT deassert, Trigger Mode bit is set.
     
-    while (g_lapic_base[APIC_ICRL/4] & 0x1000) pause(); // wait for delivery
+    while (g_lapic_base[APIC_ICRL] & 0x1000) pause(); // wait for delivery
     
     CPU_spin_sleep(10000000); // 10ms
 
     for (int j = 0; j < 2; j++) {
-        g_lapic_base[APIC_ESR/4] = 0;
-        g_lapic_base[APIC_ICRH/4] = (g_lapic_base[APIC_ICRH/4] & 0x00FFFFFF) | (apic_id << 24);
-        g_lapic_base[APIC_ICRL/4] = (g_lapic_base[APIC_ICRL/4] & 0xFFF0F800) | (0x00600) | ((u32)(u64)TRAMPOLINE_ADDRESS/PAGE_SIZE); // send STARTUP IPI
+        g_lapic_base[APIC_ESR] = 0;
+        g_lapic_base[APIC_ICRH] = (g_lapic_base[APIC_ICRH] & 0x00FFFFFF) | (apic_id << 24);
+        g_lapic_base[APIC_ICRL] = (g_lapic_base[APIC_ICRL] & 0xFFF0F800) | (0x00600) | ((u32)(u64)TRAMPOLINE_ADDRESS/PAGE_SIZE); // send STARTUP IPI
         
         CPU_spin_sleep(200000); // 200us
 
-        while (g_lapic_base[APIC_ICRL/4] & 0x1000) pause(); // wait for delivery
+        while (g_lapic_base[APIC_ICRL] & 0x1000) pause(); // wait for delivery
     }
 
     sti();
@@ -817,7 +886,7 @@ _align(4096) u32 initial_ap_stack_top;
 void ap_entry(int id) {
     enable_extensions();
     
-    int lapic_id = g_lapic_base[APIC_APICID/4] >> 24;
+    int lapic_id = g_lapic_base[APIC_APICID] >> 24;
     printf("AP #%d started (edi=%d)\n", lapic_id, id);
     
     int coreIndex = CPU_get_core_index();

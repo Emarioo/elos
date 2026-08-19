@@ -11,6 +11,7 @@ void KCON_add_write_hook(FN_KCON_write func);
 
 void KCON_printf(const char* format, ...);
 
+void serial_write(const char* buffer, int size);
 
 void KCON_net_set_target(NetDevice device, u8 mac[6], u32 address);
 

@@ -17,7 +17,6 @@
 
 
 void serial_init();
-void serial_write(const char* buffer, int size);
 
 
 

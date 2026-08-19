@@ -147,6 +147,13 @@ timer_isr:
     mov rdi, rsp
 
     call EXEC_timer_handler
+    
+    // @TODO Every 1 ms we want to schedule or execute something.
+    //   We are not making real-time OS but we may want to use periodic
+    //   timer interrupts using processor feature or schedule timer interrupt
+    //   for one-shot mode (TSC deadline) as soon as we get the interrupt.
+    mov rdi, [g_timer_frequency_ns]
+    call CPU_schedule_timer_interrupt
 
     # The called function will memcpy the new process's registers into the stack (rdi) we gave it.
     

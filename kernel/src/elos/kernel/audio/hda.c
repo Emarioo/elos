@@ -143,7 +143,7 @@ bool hda_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
 
     // hda_stream_buffers(controller);
 
-    hda_dump(controller);
+    // hda_dump(controller);
 
 exit:
     return stopSearching;

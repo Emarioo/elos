@@ -19,6 +19,8 @@
 #define LAST_SEGMENT TASK_STATE_SEGMENT
 // task state takes up two slots
 
+#define TIMER_FREQUENCY_NS 1000000 // 1 ms
+
 typedef struct {
     u64 reserved; // here to align struct
 
@@ -90,10 +92,11 @@ int CPU_get_core_count();
 
 
 void CPU_enable_interrupt();
-void CPU_disable_interrupt()
-;
+void CPU_disable_interrupt();
 void CPU_set_irq(u32 coreId, u32 local_irq, u32 global_irq, FN_interrupt_handler handler);
 
+extern u64 g_timer_frequency_ns;
+void CPU_schedule_timer_interrupt(u64 nanoseconds);
 
 
 
