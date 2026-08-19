@@ -106,6 +106,20 @@ void pciConfig_writel(u8 bus, u8 slot, u8 func, u8 offset, u32 data) {
     outl(0xCFC, data);
 }
 
+u16 pci_config_readw(PCI_ConfigSpace* config, u8 offset) {
+    return pciConfig_readw(config->pci_bus, config->pci_device, config->pci_function, offset);
+}
+u32 pci_config_readl(PCI_ConfigSpace* config, u8 offset) {
+    return pciConfig_readl(config->pci_bus, config->pci_device, config->pci_function, offset);
+}
+void pci_config_writew(PCI_ConfigSpace* config, u8 offset, u16 data) {
+    pciConfig_writew(config->pci_bus, config->pci_device, config->pci_function, offset, data);
+}
+void pci_config_writel(PCI_ConfigSpace* config, u8 offset, u32 data) {
+    pciConfig_writel(config->pci_bus, config->pci_device, config->pci_function, offset, data);
+}
+
+
 void pci_read_config_space(PCI_ConfigSpace* config, u8 bus, u8 slot, u8 function) {
     u32* dwords = (u32*)config;
 

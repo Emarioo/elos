@@ -995,5 +995,20 @@ void CPU_set_irq(u32 coreIndex, u32 local_irq, u32 global_irq, FN_interrupt_hand
 }
 
 
+void CPU_get_msi_irq(u32 coreId, u32 local_irq, FN_interrupt_handler handler, u64* messageAddress, u16* messageData) {
+    
+    // @TODO coreId and lapic id are not necessarily the same.
+    //    We should have table to convert them.
+    //    A virtual coreId in the kernel which starts from zero even if lapic id does not.
+    u32 lapic_id = coreId;
+    u32 vector = IDT_START_OF_IRQS + local_irq;
+
+    irq_table[coreId][local_irq] = handler;
+
+    // @TODO Not sure 0xFEE should be hardcoded. It should be lapic_address from MADT.
+
+    *messageAddress = ((u64)0xFEE << 20) | (lapic_id << 12);
+    *messageData    = vector; // We want to set level, trigger modes here.
+}
 
 

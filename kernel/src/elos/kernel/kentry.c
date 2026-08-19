@@ -220,6 +220,7 @@ void kernel_entry(BootAPI* in_boot_api) {
     }
 
 
+
     //###############################
     //   LOAD AND DRAW BACKGROUND
     //###############################

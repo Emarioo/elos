@@ -191,14 +191,14 @@ typedef struct PCI_ConfigSpace {
         u16  interrupt_disable                   : 1;
     } command;
     struct {
-        u16 _reserved0                : 1;
+        u16 _reserved0                : 3;
         u16 interrupt_status          : 1;
         u16 capabilities_list         : 1;
         u16 mhz66_capable             : 1;
         u16 _reserved1                : 1;
         u16 fast_back_to_back_capable : 1;
         u16 master_data_parity_error  : 1;
-        u16 devsel_timing             : 1;
+        u16 devsel_timing             : 2;
         u16 signaled_target_abort     : 1;
         u16 received_target_abort     : 1;
         u16 received_master_abort     : 1;
@@ -310,6 +310,12 @@ u16 pciConfig_readw(u8 bus, u8 slot, u8 func, u8 offset);
 u32 pciConfig_readl(u8 bus, u8 slot, u8 func, u8 offset);
 void pciConfig_writew(u8 bus, u8 slot, u8 func, u8 offset, u16 data);
 void pciConfig_writel(u8 bus, u8 slot, u8 func, u8 offset, u32 data);
+
+
+u16 pci_config_readw(PCI_ConfigSpace* config, u8 offset);
+u32 pci_config_readl(PCI_ConfigSpace* config, u8 offset);
+void pci_config_writew(PCI_ConfigSpace* config, u8 offset, u16 data);
+void pci_config_writel(PCI_ConfigSpace* config, u8 offset, u32 data);
 
 
 void decode_bar_size(PCI_ConfigSpace* config, int bar_index, u64* bar_size);

@@ -106,6 +106,9 @@ void SCON_main() {
 
     printf("SCON main\n");
 
+    const char* path = "/pkg/wav/dream.wav";
+    play_sound(path);
+
     u64 startBlink = rdtsc();
     #define BLINK_CYCLE 1000
 
@@ -398,9 +401,9 @@ void play_sound(const char* path) {
 
 
     int len = 1;
-    AUDIO_scan_devices(audioDevice, &len);
+    AUDIO_scan_devices(&audioDevice, &len);
 
-    if (len != 0) {
+    if (len == 0) {
         // @TODO Response
         printf("No audio device\n");
         return;

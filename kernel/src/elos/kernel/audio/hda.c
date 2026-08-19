@@ -74,6 +74,53 @@ bool hda_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
 
     printf("PCI vendor=0x%x device=0x%x\n", config->vendorID, config->deviceID);
     printf(" int_pin=%d int_line=%d\n", config->header0.interrupt_pin, config->header0.interrupt_line);
+    printf(" has_cap_list=%d cap_ptr=%d\n", config->status.capabilities_list, config->header0.capabilities_pointer & ~0x3);
+
+    u32 coreIndex = CPU_get_core_index();
+    u32 localIRQ = 5;
+
+    u32 cap_ptr = config->header0.capabilities_pointer & ~0x3;
+
+    while (cap_ptr) {
+        u32 cap_data = pci_config_readl(config, cap_ptr);
+        u32 cap_id   = (cap_data & 0xFF);
+        u32 cap_next = (cap_data >> 8) & 0xFC;
+
+        printf("Cap %d\n", cap_id);
+
+        if (cap_id == 0x5) {
+            u16 messageControl = (cap_data >> 16);
+
+            int is_64bit = messageControl & (1 << 7);
+
+            u64 messageAddress;
+            u16 messageData;
+            CPU_get_msi_irq(coreIndex, localIRQ, hda_interrupt, &messageAddress, &messageData);
+
+            pci_config_writel(config, cap_ptr + 0x4, messageAddress & 0xFFFFFFFF);
+            if (is_64bit) {
+                pci_config_writel(config, cap_ptr + 0x8, messageAddress >> 32);
+                pci_config_writew(config, cap_ptr + 0xC, messageData);
+            } else {
+                pci_config_writew(config, cap_ptr + 0x8, messageData);
+            }
+
+            // Enable MSI
+            messageControl |= 1;
+            pci_config_writel(config, cap_ptr, (cap_data & 0xFFFF) | ((u32)messageControl << 16));
+
+            printf(" control 0x%x\n", messageControl);
+            printf(" address %p\n",   messageAddress);
+            printf(" data    0x%x\n", messageData);
+
+        } else if (cap_id == 0x11) {
+            // HDA on QEMU does not support MSI-X
+            // @TODO Check if my laptop HDA supports MSI or only MSI-X, probably does right?
+        }
+
+        cap_ptr = cap_next;
+    }
+
 
     u64 barSize = 0;
     void* barAddress = (void*)(u64)(config->header0.bar0 & ~0xf);
@@ -124,12 +171,7 @@ bool hda_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
     hda_corb_dma_start(controller);
     hda_rirb_dma_start(controller);
 
-    hda_enable_interrupts(controller);
-
-    u32 coreIndex = CPU_get_core_index();
-    u32 globalIRQ = 0;
-
-    CPU_set_irq(coreIndex, 0, globalIRQ, hda_interrupt);
+    // hda_enable_interrupts(controller);
 
     hda_scan_widgets(controller);
 
@@ -243,7 +285,7 @@ void hda_enable_interrupts(HDA_Controller* dev) {
     volatile HDA_Regs* regs = dev->regs;
 
     // global and controller interrupt enable
-    // regs->INTCTL = (1<<31) | (1<<30);
+    regs->INTCTL = (1<<31) | (1<<30);
 
     // Response interrupt control
     // @NOCHECKIN Also done when setting up buffers!?
@@ -579,6 +621,7 @@ bool hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 buffer
     }
 
     void* audioMemory = PMEM_alloc_phys(bufferSize + PAGE_SIZE, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+    // memset(audioMemory, 0, bufferSize + PAGE_SIZE);
     
     void* rawAudioBuffer = audioMemory + PAGE_SIZE;
     ELOS_AudioBuffer* audioBufferHeader = (ELOS_AudioBuffer*)((char*)rawAudioBuffer - sizeof(ELOS_AudioBuffer));
@@ -728,4 +771,7 @@ bool hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 buffer
 
 void hda_interrupt(u32 vector, InterruptFrame* frame) {
     // @NOCHECKIN Fix interrupts. Read PCI get interrupt pin/line and so on.
+
+    printf("HDA INTERRUPT!!!!!!!!!!!!!!!!!!!!!!\n");
+
 }
