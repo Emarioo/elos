@@ -213,6 +213,8 @@ typedef struct {
     u32 flags;
 } HDA_BufferDescriptor;
 
+#define HDA_BUFFER_DESCRIPTOR_IOC 1
+
 // #########################
 //     PUBLIC FUNCTIONS
 // #########################

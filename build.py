@@ -162,6 +162,9 @@ def main():
 
             -device ahci,id=ahci
 
+            # -M q35
+
+            # -trace "pci_cfg_write"
             # -drive  file={DISK_IMG},if=none,id=disk1,format=raw
             # -device ide-hd,drive=disk1,bus=ahci.1
             # -nographic

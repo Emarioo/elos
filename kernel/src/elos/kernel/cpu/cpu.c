@@ -507,6 +507,7 @@ void init_apic() {
 
     if (!apic_support) {
         printf("Missing APIC support\n");
+        sti();
         return;
     }
 
@@ -1005,10 +1006,10 @@ void CPU_get_msi_irq(u32 coreId, u32 local_irq, FN_interrupt_handler handler, u6
 
     irq_table[coreId][local_irq] = handler;
 
-    // @TODO Not sure 0xFEE should be hardcoded. It should be lapic_address from MADT.
+    // @TODO Not sure 0xFEE should be hardcoded. Check intel manual, maybe we should use lapic_address from MADT.
 
     *messageAddress = ((u64)0xFEE << 20) | (lapic_id << 12);
-    *messageData    = vector; // We want to set level, trigger modes here.
+    *messageData    = vector;
 }
 
 
