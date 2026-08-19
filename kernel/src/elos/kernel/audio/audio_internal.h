@@ -3,6 +3,7 @@
 #include "elos/audio.h"
 
 #include "elos/kernel/driver/pci.h"
+#include "elos/kernel/audio/hda.h"
 
 
 typedef enum {
@@ -10,23 +11,31 @@ typedef enum {
     AUDIO_TYPE_HDA,
 } AudioDeviceType;
 
-typedef struct {
+#define AUDIO_DEVICE_NULL NULL
+
+typedef struct ScanInfo ScanInfo;
+struct ScanInfo {
     AudioDevice* devices;
     int maxCount;
     int count;
-} ScanInfo;
+};
 
-typedef struct {
+typedef struct AudioDevice_impl AudioDevice_impl;
+struct AudioDevice_impl {
     AudioDeviceType type;
     ELOS_AudioDeviceInfo audioInfo;
 
     union {
         struct {
-            PCI_ConfigSpace configSpace;
+            HDA_Controller* controller;
+            int streamNumber;
+            int streamIndex;
+
+            // @TODO buffer
         } hda;
     };
 
-} AudioDevice_impl;
+};
 
 
 #define MAX_AUDIO_DEVICES 8

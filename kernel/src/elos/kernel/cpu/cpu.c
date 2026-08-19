@@ -380,6 +380,7 @@ void interrupt_handler(int vector, InterruptFrame* frame) {
     }
     u32 coreIndex = CPU_get_core_index();
     u32 local_irq = vector - IDT_START_OF_IRQS;
+    printf("IRQ HANDLER vec=%d core=%d loc=%d\n", vector, coreIndex, local_irq);
     FN_interrupt_handler handler = irq_table[coreIndex][local_irq];
     if (handler) {
         handler(vector, frame);
@@ -546,7 +547,7 @@ void init_apic() {
     sti();
 }
 
-u64 hpet_rdtsc_value;
+volatile u64 hpet_rdtsc_value;
 
 void calibrate_tsc() {
     cli();
@@ -564,7 +565,7 @@ void calibrate_tsc() {
 
     // Set to some arbitrary value in case we can't calibrate.
     // Better than nothing.
-    tsc_per_sec = 5000000000; // 5e9
+    tsc_per_sec = 3500000000; // 3.5 GHz
 
 
     // @TODO Optimize by doing less repetitive reads and writes to registers.
@@ -573,7 +574,10 @@ void calibrate_tsc() {
     volatile u64* chosen_timer = NULL;
     volatile u64* chosen_comp = NULL;
 
-    int irq_number = 2;
+    const int first_irq = 0;
+
+    bool found_timer = false;
+    int irq_number = first_irq;
     int timer_index = 0;
     while (timer_index < num_tim_cap) {
         volatile u64* hpet_timer = (u64*)(acpi_hpet_address + 0x100 + 0x20*timer_index);
@@ -584,9 +588,14 @@ void calibrate_tsc() {
         // In human terms: Disables FSB interrupt mapping, disable 32-bit force mode,
         //   disables periodic mode, and disables interrupt for this timer.
         *hpet_timer = (*hpet_timer & ~0x410CLU);
+        printf("Timer %d %llx\n", timer_index, *hpet_timer);
+
+        if (found_timer) {
+            continue;
+        }
 
         // Iterate IRQ numbers till we find a usable one.
-        irq_number = 2;
+        irq_number = first_irq;
         u32 int_route_cap = *hpet_timer >> 32;
         // printf("Interrupt map %d: %x\n", timer_index-1, int_route_cap);
         while (irq_number < 32) {
@@ -600,9 +609,10 @@ void calibrate_tsc() {
                 if (written_irq == irq_number) {
                     u32 low  = *hpet_timer;
                     u32 high = *hpet_timer >> 32;
-                    // printf("Result: %x %x\n", high, low);
+                    printf("Result: %x %x\n", high, low);
                     chosen_timer = hpet_timer;
                     chosen_comp = hpet_comp;
+                    found_timer = true;
                     break;
                 }
                 // If note then we did something wrong.
@@ -610,9 +620,6 @@ void calibrate_tsc() {
             }
             // printf("Failed timer=%d irq=%d\n", timer_index-1, irq_number);
             irq_number++;
-        }
-        if (irq_number < 32) {
-            break;
         }
         // Failed.
         // printf("Failed timer %d\n", timer_index-1);
@@ -650,10 +657,11 @@ void calibrate_tsc() {
 
     }
     u32 coreIndex = CPU_get_core_index();
-
-
+    // printf("calculated_irq_number %d\n", calculated_irq_number);
     CPU_set_irq(coreIndex, calculated_irq_number, calculated_irq_number, hpet_isr);
 
+
+    // printf("femtoseconds per tick %d\n", counter_clk_period);
 
     // 100 millisecond second
     u64 delay = (100000000LU*1000000LU)/counter_clk_period;
@@ -665,23 +673,31 @@ void calibrate_tsc() {
     //   we use them. Meaning, we know that it's safe to reset here when calibrating tsc.
     //   Since we do this in kernel startup counter will be small anyway.
     //   May recalibrate some time though. For other processors for example.
-    // *main_counter = 0;
     
     hpet_rdtsc_value = 0; // Reset previous value (if we call calibrate_tsc again for whatever reason)
-    *chosen_timer = *chosen_timer | 4; // Enable interrupts
+
+    *configuration = (*configuration & ~3LU) | 1;
+
+    // *main_counter = 0;
+    // *chosen_timer = (*chosen_timer % ~4LU); // Disable interrupts
     *chosen_comp = *main_counter + delay;
+    *chosen_timer = *chosen_timer | 4; // Enable interrupts
+    
+    u64 start = rdtsc();
+    // Keep reserved bits, disable/clear legacy replacment bit and enable main counter.
+    // *configuration = (*configuration & ~3LU) | 1;
+
+    // printf("Configuration %x\n", *configuration);
+    
 
     sti();
 
-    u64 start = rdtsc();
-
-    // Keep reserved bits, disable/clear legacy replacment bit and enable main counter.
-    *configuration = (*configuration & ~3LU) | 1;
-
     // Wait for interrupt to set this value
     while (hpet_rdtsc_value == 0) {
+        printf("Counter %u chosen %u\n", *main_counter, *chosen_comp);
         pause();
     }
+    printf("Finished counter %u chosen %u\n", *main_counter, *chosen_comp);
 
     CPU_set_irq(coreIndex, calculated_irq_number, calculated_irq_number, NULL);
 
@@ -690,10 +706,18 @@ void calibrate_tsc() {
 
     printf("HPET measured: %d MHz\n", tsc_per_sec/1000000);
 
+    while (1) pause();
+
 }
 void hpet_isr(u32 isr_number, InterruptFrame* frame) {
+    
+    const u64 capabilities = *(u64*)(acpi_hpet_address + 0x0);
+    volatile u64* configuration  = (u64*)(acpi_hpet_address + 0x10);
+    volatile u64* interrupt_status = (u64*)(acpi_hpet_address + 0x20);
+    volatile u64* main_counter     = (u64*)(acpi_hpet_address + 0xF0);
+
     hpet_rdtsc_value = rdtsc();
-    // printf("Triggered %d\n", hpet_rdtsc_value/1000);
+    printf("Triggered hpet_tick=%u tsc=%u K\n", *main_counter, hpet_rdtsc_value/1000);
     
     if (g_lapic_base)
         g_lapic_base[APIC_EOI/4] = 0; // clear EOI

@@ -25,19 +25,15 @@ typedef enum {
     _SYS_SHARED_MEMORY_INFO = 16,
     _SYS_REQUEST_USER_EVENT_BUFFER = 17,
     _SYS_EXIT = 18,
-    _SYS_THREAD_EXIT = 19,
-    _SYS_SPAWN_THREAD = 20,
-    _SYS_JOIN = 21,
-    _SYS_SELF = 22,
-    _SYS_SPAWN_PROCESS = 23,
-    _SYS_DEFAULT_AUDIO = 24,
-    _SYS_AUDIO_INFO = 25,
-    _SYS_CREATE_BUFFER = 26,
-    _SYS_AUDIO_CONTROL = 27,
-    _SYS_CREATE_ASYNC_RINGS = 28,
-    _SYS_DESTROY_ASYNC_RINGS = 29,
-    _SYS_SUBMIT_ASYNC_RING = 30,
-    _SYS_WAIT_ASYNC_RING = 31,
+    _SYS_DEFAULT_AUDIO = 19,
+    _SYS_AUDIO_INFO = 20,
+    _SYS_CREATE_AUDIO_BUFFER = 21,
+    _SYS_DESTROY_AUDIO_BUFFER = 22,
+    _SYS_AUDIO_CONTROL = 23,
+    _SYS_CREATE_ASYNC_RINGS = 24,
+    _SYS_DESTROY_ASYNC_RINGS = 25,
+    _SYS_SUBMIT_ASYNC_RING = 26,
+    _SYS_WAIT_ASYNC_RING = 27,
 } ELOS_SyscallID;
     
 #endif // ELOS_SYSCALL_IDS_INCLUDE
@@ -224,40 +220,6 @@ void SYS_exit(int exitCode)
     SYSCALL1(_SYS_EXIT, exitCode);
 }
 
-void SYS_thread_exit()
-{
-    int rax;
-    SYSCALL0(_SYS_THREAD_EXIT);
-}
-
-ELOS_Error SYS_spawn_thread(FN_thread_entry entry, ELOS_ThreadHandle* handle)
-{
-    ELOS_Error rax;
-    SYSCALL2(_SYS_SPAWN_THREAD, entry, handle);
-    return rax;
-}
-
-ELOS_Error SYS_join(ELOS_ThreadHandle handle)
-{
-    ELOS_Error rax;
-    SYSCALL1(_SYS_JOIN, handle);
-    return rax;
-}
-
-ELOS_ThreadID SYS_self()
-{
-    ELOS_ThreadID rax;
-    SYSCALL0(_SYS_SELF);
-    return rax;
-}
-
-ELOS_Error SYS_spawn_process(const char* path, const char* data, u32 data_len)
-{
-    ELOS_Error rax;
-    SYSCALL3(_SYS_SPAWN_PROCESS, path, data, data_len);
-    return rax;
-}
-
 ELOS_Error SYS_default_audio(ELOS_AudioDevice* device)
 {
     ELOS_Error rax;
@@ -272,10 +234,17 @@ ELOS_Error SYS_audio_info(ELOS_AudioDevice device, ELOS_AudioDeviceInfo* info)
     return rax;
 }
 
-ELOS_Error SYS_create_buffer(ELOS_AudioDevice device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer)
+ELOS_Error SYS_create_audio_buffer(ELOS_AudioDevice device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer)
 {
     ELOS_Error rax;
-    SYSCALL4(_SYS_CREATE_BUFFER, device, format, bufferSize, buffer);
+    SYSCALL4(_SYS_CREATE_AUDIO_BUFFER, device, format, bufferSize, buffer);
+    return rax;
+}
+
+ELOS_Error SYS_destroy_audio_buffer(ELOS_AudioDevice device, ELOS_AudioBuffer* buffer)
+{
+    ELOS_Error rax;
+    SYSCALL2(_SYS_DESTROY_AUDIO_BUFFER, device, buffer);
     return rax;
 }
 

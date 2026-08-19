@@ -205,19 +205,19 @@ void kernel_entry(BootAPI* in_boot_api) {
     }
 
 
-    // AUDIO_init(boot_api);
+    AUDIO_init(boot_api);
 
-    // AudioDevice audioDevices[8];
-    // int audioDevices_len = ARRAY_LENGTH(audioDevices);
-    // AUDIO_scan_devices(audioDevices, &audioDevices_len);
+    AudioDevice audioDevices[8];
+    int audioDevices_len = ARRAY_LENGTH(audioDevices);
+    AUDIO_scan_devices(audioDevices, &audioDevices_len);
 
-    // for (int i=0;i<audioDevices_len;i++) {
-    //     AudioDevice dev = audioDevices[i];
-    //     ELOS_AudioDeviceInfo audioInfo = {0};
-    //     AUDIO_get_info(dev, &audioInfo);
+    for (int i=0;i<audioDevices_len;i++) {
+        AudioDevice dev = audioDevices[i];
+        ELOS_AudioDeviceInfo audioInfo = {0};
+        AUDIO_get_info(dev, &audioInfo);
 
-    //     KCON_printf("Audio '%s'\n", audioInfo.name);
-    // }
+        KCON_printf("Audio[%d] '%s'\n", i, audioInfo.name);
+    }
 
 
     //###############################

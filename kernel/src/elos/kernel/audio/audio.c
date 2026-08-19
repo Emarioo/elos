@@ -82,6 +82,26 @@ AudioDevice_impl* AUDIO_reserve_device() {
 }
 
 void AUDIO_scan_devices(AudioDevice* devices, int* count) {
+
+    // @TODO Rescan in case new devices were added. I don't remember
+    //    If PCI allows it, probably not, BUT HDA might but probably not.
+    //    Rescanning will be much more relevant for USB.
+
+    if (impl_audioDevices->type != AUDIO_TYPE_NONE) {
+        int maxCount = *count;
+        int index = 0;
+        while (index<maxCount) {
+            AudioDevice_impl* dev = &impl_audioDevices[index];
+            if (dev->type == AUDIO_TYPE_NONE) {
+                break;
+            }
+            devices[index] = dev;
+            index++;
+        }
+        *count = index;
+        return;
+    }
+
     ScanInfo scanInfo = {
         .devices = devices,
         .maxCount = *count,
@@ -96,9 +116,21 @@ void AUDIO_scan_devices(AudioDevice* devices, int* count) {
     *count = scanInfo.count;
 }
 
-void AUDIO_get_info(AudioDevice _device, ELOS_AudioDeviceInfo* info) {
+
+AudioDevice AUDIO_default_device() {
+    for (int i=0;i<ARRAY_LENGTH(impl_audioDevices);i++) {
+        AudioDevice_impl* dev = &impl_audioDevices[i];
+        if (dev->type != AUDIO_TYPE_NONE) {
+            return (AudioDevice)dev;
+        }
+    }
+    return AUDIO_DEVICE_NULL;
+}
+
+bool AUDIO_get_info(AudioDevice _device, ELOS_AudioDeviceInfo* info) {
     AudioDevice_impl* device = (AudioDevice_impl*)_device;
     memcpy(info, &device->audioInfo, sizeof(*info));
+    return true;
 }
 
 u32 sizeMaskFromBufferSize(u32 size) {
@@ -125,6 +157,11 @@ u32 sizeMaskFromBufferSize(u32 size) {
 
 
 KernelAudioBuffer* makeAudioBuffer(u32 bufferSize) {
+    u32 sizeMask = sizeMaskFromBufferSize(bufferSize);
+    if (sizeMask+1 != sizeMask) {
+        return NULL;
+    }
+
     KernelAudioBuffer* newBuffer = NULL;
     for (int i=0;i<ARRAY_LENGTH(audioBuffers);i++) {
         KernelAudioBuffer* buf = &audioBuffers[i];
@@ -136,8 +173,6 @@ KernelAudioBuffer* makeAudioBuffer(u32 bufferSize) {
     if (!newBuffer) {
         return NULL;
     }
-
-    u32 sizeMask = sizeMaskFromBufferSize(bufferSize);
 
     u64 totalBufferSize = sizeof(ELOS_AudioBuffer) + sizeMask + 1;
 
@@ -156,25 +191,19 @@ KernelAudioBuffer* makeAudioBuffer(u32 bufferSize) {
     return newBuffer;
 }
 
-bool AUDIO_create_buffer(AudioDevice device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer) {
+bool AUDIO_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer) {
     bool returnValue = false;
     LOCK_INT(&g_audio_lock);
 
-    // @TODO Does process have enough memory for maxEntries?
+    AudioDevice_impl* device = (AudioDevice_impl*)_device;
+    switch (device->type) {
+        case AUDIO_TYPE_NONE: {
 
-    // @TODO Check if device supports format.
-
-    KernelAudioBuffer* kernelBuffer = makeAudioBuffer(bufferSize);
-    if (!kernelBuffer) {
-        goto exit;
+        } break;
+        case AUDIO_TYPE_HDA: {
+            returnValue = hda_create_buffer(device, format, bufferSize, buffer);
+        } break;
     }
-
-    int coreIndex = CPU_get_core_index();
-    EXEC_Core* core = &cores[coreIndex];
-    EXEC_Thread* activeThread = &core->threads[core->active_thread];
-    kernelBuffer->thread = activeThread;
-
-    returnValue = true;
 
 exit:
     UNLOCK_INT(&g_audio_lock);

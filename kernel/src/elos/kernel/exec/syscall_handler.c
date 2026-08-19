@@ -17,6 +17,7 @@
 #include "elos/service.h"
 #include "elos/user_event.h"
 #include "elos/async.h"
+#include "elos/audio.h"
 
 #include "elos/cpu.h"
 
@@ -246,12 +247,14 @@ exit_default_monitor:
 }
 
 u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 arg5) {
-    u64 returnValue = ELOS_GENERIC_ERROR;
-    u64 syscall_id;
+    u64 returnValue = ELOS_INVALID_SYSCALL;
+    u64 _syscall_id;
     asm volatile (
         "mov %%rax, %0"
-        : "=a" (syscall_id)
+        : "=a" (_syscall_id)
     );
+    ELOS_SyscallID syscall_id = _syscall_id;
+
     // @TODO Validate parameters! Accessible address by user process. Valid sizes and lengths?
 
     PageTable* userPageTable = (void*)(read_cr3() & ~0xFFFLU);
@@ -437,7 +440,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             // @TODO Check capability
 
-            *tps = CPU_tsc_per_sec();
+            *tps = CPU_ticks_per_second();
 
             returnValue = ELOS_OK;
         } break;
@@ -447,7 +450,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             // @TODO Check capability
 
             u64 nowTick = rdtsc();
-            u64 sleepTick = nowTick + (sleepTime_ns * CPU_tsc_per_sec()/100) / 10000000;
+            u64 sleepTick = nowTick + (sleepTime_ns * CPU_ticks_per_second()/100) / 10000000;
 
             int coreIndex = CPU_get_core_index();
             EXEC_Core* core = &cores[coreIndex];
@@ -841,9 +844,97 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             returnValue = ELOS_OK;
             
         } break;
-        default: {
-            returnValue = ELOS_INVALID_SYSCALL;
+
+        case _SYS_DEFAULT_AUDIO: {
+            ELOS_AudioDevice*  device = (void*)arg0;
+
+            // @TODO Check capability
+
+            write_cr3((u64)g_kernelPageTable);
+
+            ELOS_AudioDevice dev = AUDIO_default_device();
+
+            write_cr3((u64)userPageTable);
+            
+            if (dev) {
+                *device = dev;
+                returnValue = ELOS_OK;
+            } else {
+                returnValue = ELOS_GENERIC_ERROR;
+            }
+            
         } break;
+        
+        case _SYS_AUDIO_INFO: {
+            ELOS_AudioDevice      device     = (void*)arg0;
+            ELOS_AudioDeviceInfo* deviceInfo = (void*)arg1;
+
+            // @TODO Check capability
+            // @TODO Validate device and info pointer
+
+            write_cr3((u64)g_kernelPageTable);
+
+            ELOS_AudioDeviceInfo tmp_deviceInfo;
+
+            bool yes = AUDIO_get_info(device, &tmp_deviceInfo);
+
+            write_cr3((u64)userPageTable);
+
+            if (yes) {
+                *deviceInfo = tmp_deviceInfo;
+                returnValue = ELOS_OK;
+            } else {
+                returnValue = ELOS_GENERIC_ERROR;
+            }
+            
+        } break;
+
+        case _SYS_CREATE_AUDIO_BUFFER: {
+            ELOS_AudioDevice      device     = (void*)arg0;
+            ELOS_AudioFormat*     format     = (void*)arg1;
+            u32                   bufferSize = (u64)arg2;
+            ELOS_AudioBuffer**    buffer     = (void*)arg3;
+
+            // @TODO Check capability
+            // @TODO Validate device, buffer size, format pointer, buffer pointer
+
+            ELOS_AudioFormat tmp_format = *format;
+            
+            write_cr3((u64)g_kernelPageTable);
+
+            ELOS_AudioBuffer* tmp_buffer;
+
+            u32 memoryFootprint = sizeof(ELOS_AudioBuffer) + bufferSize;
+
+            bool yes = AUDIO_create_buffer(device, &tmp_format, bufferSize, &tmp_buffer);
+            if (!yes) {
+                returnValue = ELOS_GENERIC_ERROR;
+                break;
+            }
+
+            bool mapped = PMEM_map_memory(userPageTable, tmp_buffer, tmp_buffer, memoryFootprint, PMEM_FLAG_USER_SPACE);
+            if (!mapped) {
+                // @TODO Leaking audio buffer here.
+                returnValue = ELOS_GENERIC_ERROR;
+            } else {
+                returnValue = ELOS_OK;
+            }
+            write_cr3((u64)userPageTable);
+
+            *buffer = tmp_buffer;
+            
+        } break;
+
+        case _SYS_AUDIO_CONTROL: {
+            // @TODO Implement
+           returnValue = ELOS_INVALID_PARAM;
+        } break;
+
+        case _SYS_DESTROY_AUDIO_BUFFER: {
+            // @TODO Implement
+            returnValue = ELOS_GENERIC_ERROR;
+        } break;
+
     }
 
     return returnValue;

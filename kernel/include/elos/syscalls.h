@@ -36,6 +36,7 @@ typedef enum {
     ELOS_IPC_FULL,
 
     ELOS_UNSUPPORTED_AUDIO_FORMAT,
+    ELOS_BUSY,
 } ELOS_Error;
 
 typedef enum {
@@ -301,7 +302,7 @@ void SYS_exit(int exitCode);
 /*
     Terminate the thread. If no more threads then process is also terminated.
 */
-void SYS_thread_exit();
+// void SYS_thread_exit();
 
 /*
     Spawn a thread.
@@ -309,19 +310,19 @@ void SYS_thread_exit();
     @param entry  Entry point of the thread.
     @param handle Handle to the thread
 */
-ELOS_Error SYS_spawn_thread(FN_thread_entry entry, ELOS_ThreadHandle* handle);
+// ELOS_Error SYS_spawn_thread(FN_thread_entry entry, ELOS_ThreadHandle* handle);
 
 /*
     Join a thread into the thread that spawned it. 
 
     @param handle Handle to the thread
 */
-ELOS_Error SYS_join(ELOS_ThreadHandle handle);
+// ELOS_Error SYS_join(ELOS_ThreadHandle handle);
 
 /*
     @return ID of current thread.
 */
-ELOS_ThreadID SYS_self();
+// ELOS_ThreadID SYS_self();
 
 /*
     Spawn a process.
@@ -334,7 +335,7 @@ ELOS_ThreadID SYS_self();
     @param data     Data to pass to the executable. Process should parse flags from it. ()
     @param data_len Size of the data.
 */
-ELOS_Error SYS_spawn_process(const char* path, const char* data, u32 data_len);
+// ELOS_Error SYS_spawn_process(const char* path, const char* data, u32 data_len);
 
 // @TODO Spawn a process.
 
@@ -360,7 +361,7 @@ typedef struct {
 
 typedef struct {
     char name[32];
-    ELOS_AudioFormat format;
+    // ELOS_AudioFormat preferredFormat;
 } ELOS_AudioDeviceInfo;
 
 typedef struct {
@@ -393,7 +394,8 @@ ELOS_Error SYS_audio_info(ELOS_AudioDevice device, ELOS_AudioDeviceInfo* info);
 
 /*
     Returns an audio sample buffer for the audio device. Samples written to the buffer will be
-    transferred to the hardware device.
+    transferred to the hardware device. This will lock the audio device. Other create_buffer calls by
+    this or other processes will fail with ELOS_BUSY.
 
     @param device The device to make a buffer for.
     @param bufferSize Size in bytes of the buffer.
@@ -401,10 +403,23 @@ ELOS_Error SYS_audio_info(ELOS_AudioDevice device, ELOS_AudioDeviceInfo* info);
 
     @pre ELOS_CAP_AUDIO is required.
 
+    @exception ELOS_UNSUPPORTED_AUDIO_FORMAT ELOS_BUSY
+    
+*/
+ELOS_Error SYS_create_audio_buffer(ELOS_AudioDevice device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer);
+
+/*
+    Destroys and frees audio buffer.
+
+    @param device The device the buffer is from.
+    @param buffer The buffer to destroy.
+
+    @pre ELOS_CAP_AUDIO is required.
+
     @exception ELOS_UNSUPPORTED_AUDIO_FORMAT
     
 */
-ELOS_Error SYS_create_buffer(ELOS_AudioDevice device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer);
+ELOS_Error SYS_destroy_audio_buffer(ELOS_AudioDevice device, ELOS_AudioBuffer* buffer);
 
 typedef enum {
     AUDIO_IOCTL_PLAY,

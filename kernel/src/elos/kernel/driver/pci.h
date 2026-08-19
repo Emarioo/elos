@@ -188,7 +188,7 @@ typedef struct PCI_ConfigSpace {
         u16  _reserved0                         : 1;
         u16  serr_enable                        : 1;
         u16  fast_back_to_back_enable           : 1;
-        u16  interupt_disable                   : 1;
+        u16  interrupt_disable                   : 1;
     } command;
     struct {
         u16 _reserved0                : 1;

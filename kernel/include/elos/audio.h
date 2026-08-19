@@ -24,8 +24,14 @@ void AUDIO_init(BootAPI* boot_api);
 
 void AUDIO_scan_devices(AudioDevice* devices, int* count);
 
-void AUDIO_get_info(AudioDevice device, ELOS_AudioDeviceInfo* info);
+AudioDevice AUDIO_default_device();
 
-bool AUDIO_create_buffer(AudioDevice device, ELOS_AudioFormat* format, u32 maxBytes, ELOS_AudioBuffer** buffer);
+bool AUDIO_get_info(AudioDevice device, ELOS_AudioDeviceInfo* info);
+
+bool AUDIO_create_buffer(AudioDevice device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer);
+
+bool AUDIO_destroy_buffer(AudioDevice device,ELOS_AudioBuffer* buffer);
+
+bool AUDIO_control(AudioDevice device, ELOS_AudioOperation operation, size_t value);
 
 

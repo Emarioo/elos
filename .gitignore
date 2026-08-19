@@ -5,6 +5,8 @@ int
 logs
 out
 *.dis
+*.dat
+*.sym
 *.log
 
 /*.out

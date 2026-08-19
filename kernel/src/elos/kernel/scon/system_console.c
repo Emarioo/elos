@@ -427,7 +427,7 @@ void play_sound(const char* path) {
         .channels = 2,
     };
 
-    u32 bufferSize = 0x40000;
+    u32 bufferSize = 0x20000;
 
     bool yes = AUDIO_create_buffer(audioDevice, &format, bufferSize, &buffer);
     if (!yes) {
@@ -436,11 +436,27 @@ void play_sound(const char* path) {
     }
 
     // play a sound
-    
+    int audioOffset = 0;
+    int audioEnd = file->data_len;
+    while (true) {
+        if (audioOffset >= audioEnd) {
+            break;
+        }
 
-    // AUDIO_start();
+        if (buffer->head - buffer->tail >= bufferSize) {
+            printf("Audio full %d, %d\n", buffer->head, buffer->tail);
+            pause();
+            continue;
+        }
 
-    // AUDIO_stop();
+        *(u16*)(buffer->data + (buffer->head & buffer->sizeMask))       = *(u16*)(file->data + audioOffset);
+        *(u16*)(buffer->data + ((buffer->head + 2) & buffer->sizeMask)) = *(u16*)(file->data + audioOffset + 2);
+
+        buffer->head += 4;
+        audioOffset  += 4;
+    }
+
+    // Sound is done. Free buffers etc.
 
 }
 
