@@ -58,7 +58,9 @@ void hda_stream_buffers(HDA_Controller* dev);
 HDA_Controller* reserve_hda_controller() {
     if (g_hdaControllers_len >= g_hdaControllers_max)
         return NULL;
-    return &g_hdaControllers[g_hdaControllers_len];
+    HDA_Controller* controller = &g_hdaControllers[g_hdaControllers_len];
+    g_hdaControllers_len++;
+    return controller;
 }
 
 bool hda_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
@@ -472,7 +474,26 @@ exit:
 
 
 
-extern volatile u32* g_lapic_base;
+u32 sizeMaskFromBufferSize(u32 size) {
+    if (size == 1)
+        return 0;
+
+    u32 bit = 31;
+    while (bit >= 0) {
+        u32 shifted_bit = 1 << bit;
+        if (shifted_bit & size)  {
+            if (shifted_bit == size) {
+                return size-1;
+            } else if(bit == 31) {
+                return -1;
+            } else {
+                return (1 << (bit + 1)) - 1;
+            }
+        }
+        bit--;
+    }
+    return 0;
+}
 
 bool hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer) {
     AudioDevice_impl* device = (AudioDevice_impl*)_device;
@@ -520,34 +541,39 @@ bool hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 buffer
     hda_reset_stream(dev, streamIndex);
 
 
+    device->sizeMask = sizeMaskFromBufferSize(bufferSize);
+    u32 actualBufferSize = device->sizeMask+1;
 
-    void* audioMemory = PMEM_alloc_phys(bufferSize + PAGE_SIZE, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+    void* audioMemory = PMEM_alloc_phys(actualBufferSize + PAGE_SIZE, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
     // memset(audioMemory, 0, bufferSize + PAGE_SIZE);
-    
     void* rawAudioBuffer = audioMemory + PAGE_SIZE;
     ELOS_AudioBuffer* audioBufferHeader = (ELOS_AudioBuffer*)((char*)rawAudioBuffer - sizeof(ELOS_AudioBuffer));
+    audioBufferHeader->head = 0;
+    audioBufferHeader->tail = 0;
+    audioBufferHeader->sizeMask = device->sizeMask;
+
 
     
-    WAVFile* wav;
-    WAVError err = ReadWAVFile("/PKG/WAV/DREAM.WAV", &wav, true);
+    // WAVFile* wav;
+    // WAVError err = ReadWAVFile("/PKG/WAV/DREAM.WAV", &wav, true);
 
-    if (bufferSize > wav->data_len) {
-        memcpy(rawAudioBuffer, wav->data, wav->data_len);
-    } else {
-        memcpy(rawAudioBuffer, wav->data, bufferSize);
-    }
+    // if (bufferSize > wav->data_len) {
+    //     memcpy(rawAudioBuffer, wav->data, wav->data_len);
+    // } else {
+    //     memcpy(rawAudioBuffer, wav->data, bufferSize);
+    // }
 
     // The buffer should be cache aligned (128 HDA spec says).
     // We use pages for no particular reason other than the memory allocator
     // rounding up to nearest page.
 
-    int numPages = bufferSize / PAGE_SIZE;
+    int numPages = actualBufferSize / PAGE_SIZE;
     int halfNumPages = numPages / 2;
 
     // Size should be a multiple of channel*sample
 
     u32   streamBufferSize0 = halfNumPages * PAGE_SIZE;
-    u32   streamBufferSize1 = bufferSize - streamBufferSize0;
+    u32   streamBufferSize1 = actualBufferSize - streamBufferSize0;
     void* buffer0 = rawAudioBuffer;
     void* buffer1 = (char*)rawAudioBuffer + streamBufferSize0;
     
@@ -609,6 +635,8 @@ bool hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 buffer
 
     hda_stream_start(dev, streamIndex);
 
+    device->audioBuffer = audioBufferHeader;
+
     *buffer = audioBufferHeader;
 
 
@@ -637,18 +665,55 @@ bool hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 buffer
 
 
 void hda_interrupt(u32 vector, InterruptFrame* frame) {
-    // @NOCHECKIN Fix interrupts. Read PCI get interrupt pin/line and so on.
+    u64 prev_cr3 = read_cr3();
+    write_cr3((u64)g_kernelPageTable);
 
-    // @TODO Find which buffer descriptor completed.
+    // We have one interrupt handler for all HDA controllers.
+    // On interrupt we enumerate all controllers and all their devices and
+    // their streams if they have any. If they do we check BCIS which if set indicate 
+    // that a buffer descriptor finished. We update tail of audio buffer so user application
+    // can write new samples into buffer.
 
-    // Write BCIS (IOC completion) so we get interrupt on it again next time.
-    // What other bits do we need to clear.
+    // printf("HDA INTERRUPT!\n");
+    // printf("Controllers %d\n", g_hdaControllers_len);
 
-    // Enumerate all HDA controllers that belong to this IRQ.
-    // Find streams that have BCIS. Check their LPIB and update tail in elos audio buffer.
+    for (int ci=0;ci<g_hdaControllers_len;ci++) {
+        HDA_Controller* controller = &g_hdaControllers[ci];
 
-    printf("HDA INTERRUPT!!!!!!!!!!!!!!!!!!!!!!\n");
+        // printf("Devs %d\n", controller->audioDevices_len);
 
+        for (int ai=0;ai<controller->audioDevices_len;ai++) {
+            AudioDevice_impl* device = controller->audioDevices[ai];
+            if (device->type == AUDIO_TYPE_NONE) {
+                continue; // Unnecessary?
+            }
+            
+            volatile HDA_StreamDescriptor* stream = &controller->streamDescriptors[device->hda.streamIndex]; // 0 is reserved
+
+            #define HDA_STREAM_DESCRIPTOR_BCIS (1<<2)
+
+            if ((stream->CTL_STS >> 24) & HDA_STREAM_DESCRIPTOR_BCIS) {
+                // This stream had interrupt.
+                // Clear the bit for next time by writing to it.
+                ((u8*)&stream->CTL_STS)[3] = HDA_STREAM_DESCRIPTOR_BCIS;
+
+                ELOS_AudioBuffer* audioBuffer = device->audioBuffer;
+
+                int now_lpib = stream->LPIB;
+                if (now_lpib > device->hda.prev_lpib) {
+                    device->tail += now_lpib - device->hda.prev_lpib;
+                } else {
+                    device->tail += device->hda.prev_lpib - now_lpib;
+                }
+                device->hda.prev_lpib = now_lpib;
+                audioBuffer->tail = device->tail;
+
+                // printf("Update tail %u (head %u)\n", audioBuffer->tail, audioBuffer->head);
+            }
+        }
+    }
+
+    write_cr3(prev_cr3);
 }
 
 

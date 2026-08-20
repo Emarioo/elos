@@ -161,6 +161,8 @@ typedef volatile struct {
 typedef volatile struct {
     // offset 0x80 + 0x20 * N
     u32 CTL_STS;
+    // u32 CTL : 24;
+    // u32 STS : 8;
     u32 LPIB;
     u32 CBL;
     u16 LVI;

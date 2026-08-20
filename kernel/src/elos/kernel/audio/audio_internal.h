@@ -25,11 +25,17 @@ struct AudioDevice_impl {
     AudioDeviceType type;
     ELOS_AudioDeviceInfo audioInfo;
 
+    ELOS_AudioBuffer* audioBuffer;
+    // Owned by the kernel and should not be modified by user so we keep these here.
+    u32               sizeMask;
+    u32               tail;
+
     union {
         struct {
             HDA_Controller* controller;
             int streamNumber;
             int streamIndex;
+            u32 prev_lpib;
 
             // @TODO buffer
         } hda;

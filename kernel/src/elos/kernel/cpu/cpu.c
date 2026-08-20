@@ -389,9 +389,12 @@ void interrupt_handler(int vector, InterruptFrame* frame) {
     }
     u32 coreIndex = CPU_get_core_index();
     u32 local_irq = vector - IDT_START_OF_IRQS;
-    printf("IRQ HANDLER vec=%d core=%d loc=%d\n", vector, coreIndex, local_irq);
+    
+    // printf("IRQ HANDLER vec=%d core=%d loc=%d\n", vector, coreIndex, local_irq);
+
     FN_interrupt_handler handler = irq_table[coreIndex][local_irq];
     if (handler) {
+        // Handler should switch CR3 root page table if needed.
         handler(vector, frame);
     }
     

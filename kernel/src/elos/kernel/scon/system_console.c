@@ -430,13 +430,18 @@ void play_sound(const char* path) {
         .channels = 2,
     };
 
-    u32 bufferSize = 0x200000;
+    u32 bufferSize = 0x20000;
 
     bool yes = AUDIO_create_buffer(audioDevice, &format, bufferSize, &buffer);
     if (!yes) {
         printf("Could not create audio ring\n");
         return;
     }
+
+    printf("FileData %p - %p, %u\n", file->data, file->data + file->data_len, file->data_len);
+    printf("Buffer size/mask 0x%x 0x%x\n", bufferSize, buffer->sizeMask);
+
+    bool firstWrite = true;
 
     // play a sound
     int audioOffset = 0;
@@ -446,18 +451,37 @@ void play_sound(const char* path) {
             break;
         }
 
-        if (buffer->head - buffer->tail >= bufferSize) {
+        if (((buffer->head - buffer->tail)) >= bufferSize) {
+            firstWrite = true;
             // printf("Audio full %d, %d\n", buffer->head, buffer->tail);
             pause();
             continue;
         }
+        
+        if (firstWrite) {
+            // printf("Write %u %u\n", buffer->head, audioOffset);
+            firstWrite = false;
+        }
+        *(u16*)(buffer->data + (buffer->head & buffer->sizeMask))       = *(u16*)(file->data + audioOffset);
+        *(u16*)(buffer->data + ((buffer->head + 2) & buffer->sizeMask)) = *(u16*)(file->data + audioOffset + 2);
 
-        // *(u16*)(buffer->data + (buffer->head & buffer->sizeMask))       = *(u16*)(file->data + audioOffset);
-        // *(u16*)(buffer->data + ((buffer->head + 2) & buffer->sizeMask)) = *(u16*)(file->data + audioOffset + 2);
-
-        // buffer->head += 4;
-        // audioOffset  += 4;
+        buffer->head += 4;
+        audioOffset  += 4;
     }
+
+    // Wait for audio to finish
+    while (true) {
+        if ((int)(buffer->head - buffer->tail) <= 0) {
+            firstWrite = true;
+            break;
+        }
+        pause();
+    }
+
+    printf("DONE clearing audio buffer\n");
+
+    // Audio controller will keep playing audio so we zero it here.
+    memset(buffer->data, 0, bufferSize);
 
     // Sound is done. Free buffers etc.
 

@@ -133,63 +133,63 @@ bool AUDIO_get_info(AudioDevice _device, ELOS_AudioDeviceInfo* info) {
     return true;
 }
 
-u32 sizeMaskFromBufferSize(u32 size) {
-    if (size == 1)
-        return 1;
+// u32 sizeMaskFromBufferSize(u32 size) {
+//     if (size == 1)
+//         return 1;
 
-    u32 bit = 31;
-    while (bit >= 0) {
-        u32 shifted_bit = 1 << bit;
-        if (shifted_bit & size)  {
-            if (size-1 && (shifted_bit & size) == 0) {
-                return size-1;
-            } else if(bit == 31) {
-                return -1;
-            } else {
-                return (1 << (bit + 1)) - 1;
-            }
-        }
-        bit--;
-    }
-    return 0;
-}
+//     u32 bit = 31;
+//     while (bit >= 0) {
+//         u32 shifted_bit = 1 << bit;
+//         if (shifted_bit & size)  {
+//             if (size-1 && (shifted_bit & size) == 0) {
+//                 return size-1;
+//             } else if(bit == 31) {
+//                 return -1;
+//             } else {
+//                 return (1 << (bit + 1)) - 1;
+//             }
+//         }
+//         bit--;
+//     }
+//     return 0;
+// }
 
 
 
-KernelAudioBuffer* makeAudioBuffer(u32 bufferSize) {
-    u32 sizeMask = sizeMaskFromBufferSize(bufferSize);
-    if (sizeMask+1 != sizeMask) {
-        return NULL;
-    }
+// KernelAudioBuffer* makeAudioBuffer(u32 bufferSize) {
+//     u32 sizeMask = sizeMaskFromBufferSize(bufferSize);
+//     if (sizeMask+1 != sizeMask) {
+//         return NULL;
+//     }
 
-    KernelAudioBuffer* newBuffer = NULL;
-    for (int i=0;i<ARRAY_LENGTH(audioBuffers);i++) {
-        KernelAudioBuffer* buf = &audioBuffers[i];
-        if (!buf->used) {
-            newBuffer = buf;
-            break;
-        }
-    }
-    if (!newBuffer) {
-        return NULL;
-    }
+//     KernelAudioBuffer* newBuffer = NULL;
+//     for (int i=0;i<ARRAY_LENGTH(audioBuffers);i++) {
+//         KernelAudioBuffer* buf = &audioBuffers[i];
+//         if (!buf->used) {
+//             newBuffer = buf;
+//             break;
+//         }
+//     }
+//     if (!newBuffer) {
+//         return NULL;
+//     }
 
-    u64 totalBufferSize = sizeof(ELOS_AudioBuffer) + sizeMask + 1;
+//     u64 totalBufferSize = sizeof(ELOS_AudioBuffer) + sizeMask + 1;
 
-    void* bufferAddress = PMEM_alloc_phys(totalBufferSize, PMEM_FLAG_IDENTITY_MAPPED);
-    if (!bufferAddress) {
-        return NULL;
-    }
+//     void* bufferAddress = PMEM_alloc_phys(totalBufferSize, PMEM_FLAG_IDENTITY_MAPPED);
+//     if (!bufferAddress) {
+//         return NULL;
+//     }
 
-    memset(bufferAddress, 0, totalBufferSize);
+//     memset(bufferAddress, 0, totalBufferSize);
 
-    newBuffer->buffer = bufferAddress;
-    newBuffer->sizeMask = sizeMask;
-    *(u32*)&newBuffer->buffer->sizeMask = sizeMask;
+//     newBuffer->buffer = bufferAddress;
+//     newBuffer->sizeMask = sizeMask;
+//     *(u32*)&newBuffer->buffer->sizeMask = sizeMask;
 
-    newBuffer->used = true;
-    return newBuffer;
-}
+//     newBuffer->used = true;
+//     return newBuffer;
+// }
 
 bool AUDIO_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer) {
     bool returnValue = false;
