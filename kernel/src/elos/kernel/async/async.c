@@ -18,6 +18,8 @@
 #define MAX_ASYNC_RINGS 50
 
 typedef struct {
+    // @TODO tail and head in request and completion must be stored separately and copied into
+    //   the rings. Otherwise user space can modify them and mess things up.
     ELOS_AsyncRequestRing*    requestRing;
     ELOS_AsyncCompletionRing* completionRing;
     u32 ringMask;
@@ -307,7 +309,7 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
     ELOS_AsyncCompletion  completion = {0};
     completion.operation = request->operation;
     completion.userData = request->userData;
-    completion.error = ELOS_GENERIC_ERROR;
+    completion.error = ELOS_ERR_UNKNOWN;
     completion.flags = 0;
 
     /* @TODO We need to sanitise and verify all buffers and parameters are valid.
@@ -484,7 +486,7 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
         } break;
         default: {
             printf("ASYNC_request_handler: Unhandled operation %d (0 is invalid)\n", request->operation);
-            completion.error = ELOS_INVALID_OPERATION;
+            completion.error = ELOS_ERR_INVALID_SYSCALL;
         } break;
     }
 

@@ -28,10 +28,10 @@ AudioDevice AUDIO_default_device();
 
 bool AUDIO_get_info(AudioDevice device, ELOS_AudioDeviceInfo* info);
 
-bool AUDIO_create_buffer(AudioDevice device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer);
+ELOS_Error AUDIO_create_buffer(AudioDevice device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer);
 
 bool AUDIO_destroy_buffer(AudioDevice device,ELOS_AudioBuffer* buffer);
 
-bool AUDIO_control(AudioDevice device, ELOS_AudioOperation operation, size_t value);
+// bool AUDIO_control(AudioDevice device, ELOS_AudioOperation operation, size_t value);
 
 

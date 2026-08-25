@@ -28,15 +28,33 @@
 
 typedef enum {
     ELOS_OK = 0,
-    ELOS_GENERIC_ERROR,
-    ELOS_CAP_DENIED,
-    ELOS_INVALID_PARAM,
-    ELOS_INVALID_SYSCALL,
-    ELOS_INVALID_OPERATION,
-    ELOS_IPC_FULL,
 
-    ELOS_UNSUPPORTED_AUDIO_FORMAT,
-    ELOS_BUSY,
+    //####  Normal errors  ####
+
+    // Reserved, it means OS accidently used 'true' instead of ELOS_OK. What a silly OS am I right?
+    ELOS_ERR_RESERVED = 1,
+    // No specific information about the error is available.
+    // We should go out of our way to rid codebase from these.
+    // But there is a place for them.
+    ELOS_ERR_UNKNOWN,
+
+    ELOS_ERR_INVALID_PARAM,
+    // Syscall number was not known by the OS. Also used in AsyncCompletion.error if operation was invalid.
+    ELOS_ERR_INVALID_SYSCALL,
+    ELOS_ERR_CAP_DENIED,
+
+    ELOS_ERR_NOT_FOUND,
+    ELOS_ERR_BUSY,
+
+
+    // ELOS_ERR_IPC_FULL,
+
+    ELOS_ERR_UNSUPPORTED_AUDIO_FORMAT,
+    ELOS_ERR_BUFFER_SIZE_NOT_FRAME_ALIGNED,
+    ELOS_ERR_BUFFER_SIZE_TOO_BIG,
+    ELOS_ERR_BUFFER_SIZE_TOO_SMALL,
+    ELOS_ERR_NO_AUDIO_DEVICE,
+    
 } ELOS_Error;
 
 typedef enum {
@@ -140,6 +158,13 @@ typedef struct {
 } ELOS_UserEventBuffer;
 
 #define ELOS_NULL_HANDLE (NULL)
+
+
+
+/*
+    Returns error in string form.
+*/
+const char* elos_error(ELOS_Error err);
 
 
 /*
@@ -353,6 +378,8 @@ typedef enum {
     ELOS_AUDIO_32BIT_FLOAT,
 } ELOS_AudioSampleFormat;
 
+#define ELOS_BYTES_PER_AUDIO_SAMPLE(X) ( (X) == ELOS_AUDIO_32BIT_FLOAT ? 4 : (1 << (X)) )
+
 typedef struct {
     u32 sampleRate;
     u8  channels;
@@ -361,13 +388,12 @@ typedef struct {
 
 typedef struct {
     char name[32];
-    // ELOS_AudioFormat preferredFormat;
 } ELOS_AudioDeviceInfo;
 
 typedef struct {
     u32 head;
     u32 tail;
-    u32 sizeMask;
+    u32 size;
     u8  data[];
 } ELOS_AudioBuffer;
 
@@ -377,6 +403,8 @@ typedef struct {
     @param device The returned default device.
 
     @pre ELOS_CAP_AUDIO is required.
+
+    @exception ELOS_NO_AUDIO_DEVICE No audio device.
 */
 ELOS_Error SYS_default_audio(ELOS_AudioDevice* device);
 
@@ -389,6 +417,8 @@ ELOS_Error SYS_default_audio(ELOS_AudioDevice* device);
     @param info The information of the device.
 
     @pre ELOS_CAP_AUDIO is required.
+
+    @exception ELOS_ERR_UNKNOWN No audio device.
 */
 ELOS_Error SYS_audio_info(ELOS_AudioDevice device, ELOS_AudioDeviceInfo* info);
 
@@ -421,10 +451,10 @@ ELOS_Error SYS_create_audio_buffer(ELOS_AudioDevice device, ELOS_AudioFormat* fo
 */
 ELOS_Error SYS_destroy_audio_buffer(ELOS_AudioDevice device, ELOS_AudioBuffer* buffer);
 
-typedef enum {
-    AUDIO_IOCTL_PLAY,
-    AUDIO_IOCTL_STOP,
-} ELOS_AudioOperation;
+// typedef enum {
+//     AUDIO_IOCTL_PLAY,
+//     AUDIO_IOCTL_STOP,
+// } ELOS_AudioOperation;
 
 /*
     Perform an operation on the audio device.
@@ -433,7 +463,7 @@ typedef enum {
     @param operation The action to perform.
     @param value Specific to the operation. Some operations needs no value and ignores it.
 */
-ELOS_Error SYS_audio_control(ELOS_AudioDevice device, ELOS_AudioOperation operation, size_t value);
+// ELOS_Error SYS_audio_control(ELOS_AudioDevice device, ELOS_AudioOperation operation, size_t value);
 
 
 // We have ASYNC operations for these.

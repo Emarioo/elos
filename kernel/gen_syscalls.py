@@ -13,6 +13,62 @@ prototype_re = re.compile(
     re.S
 )
 
+error_re = re.compile(
+    r'([A-Za-z_][A-Za-z0-9_\s\*\t]*?)\s+'
+    r'(SYS_[A-Za-z0-9_]+)\s*'
+    r'\((.*?)\)\s*;',
+    re.S
+)
+
+
+
+
+def generate_error_string(source):
+    match = re.search(
+        r'typedef\s+enum\s*\{(.*?)\}\s*ELOS_Error\s*;',
+        source,
+        re.DOTALL,
+    )
+
+    if not match:
+        print("\033[31mERROR:\033[0m ELOS_Error enum not found")
+        raise ValueError()
+
+    entries = []
+
+    for entry in match.group(1).split(','):
+        entry = re.sub(r'/\*.*?\*/', '', entry, flags=re.DOTALL)
+        entry = re.sub(r'//.*', '', entry).strip()
+
+        if not entry:
+            continue
+
+        m = re.match(
+            r'^(ELOS_(?:ERR_[A-Za-z0-9_]+|OK))'
+            r'(?:\s*=\s*[^,]+)?$',
+            entry,
+        )
+
+        if m:
+            entries.append(m.group(1))
+
+    out = [
+        'const char *elos_error(ELOS_Error err) {',
+        '    switch (err) {',
+    ]
+
+    for name in entries:
+        out.append(f'        case {name}: return "{name}";')
+
+    out.extend([
+        '        default: return "ELOS_UNKNOWN_ERROR";',
+        '    }',
+        '}',
+    ])
+
+    return '\n'.join(out)
+
+
 
 def main(args):
 
@@ -43,11 +99,12 @@ def main(args):
     text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
 
     # Remove C++ style comments
-    text = re.sub(r'//.*', '', text)
-    text = prototype_re.findall(text)
+    source_text = re.sub(r'//.*', '', text)
+
+    prototypes = prototype_re.findall(source_text)
 
 
-    for ret, name, args in text:
+    for ret, name, args in prototypes:
         ret = " ".join(ret.split())
 
         arg_list = split_args(args)
@@ -61,8 +118,15 @@ def main(args):
 */
     '''
     
+    # syscalls_impl.h will almost always only be included by elos/syscalls.
+    # But to prevent errors from text editors we include it here.
 
     output += '''
+    
+#ifndef ELOS_SYSCALL_INCLUDE
+#include "elos/syscalls.h"
+#endif // ELOS_SYSCALL_INCLUDE
+
 #ifndef ELOS_SYSCALL_IDS_INCLUDE
 #define ELOS_SYSCALL_IDS_INCLUDE
 typedef enum {
@@ -81,6 +145,7 @@ typedef enum {
     output += '''
 
 #ifdef ELOS_SYSCALL_IMPL
+#undef ELOS_SYSCALL_IMPL
 
 #define SYSCALL0(ID)              \\
     asm volatile (                \\
@@ -165,8 +230,20 @@ typedef enum {
 
         output += "}\n\n"
 
+
     output += '''
 #endif // ELOS_SYSCALL_IMPL
+    '''
+
+
+    output += '''
+#ifdef ELOS_ERROR_STRING_IMPL
+#undef ELOS_ERROR_STRING_IMPL
+    '''
+    output += generate_error_string(source_text)
+    
+    output += '''
+#endif // ELOS_ERROR_STRING_IMPL
     '''
 
     with open(impl_header, "w") as f:

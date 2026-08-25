@@ -27,7 +27,7 @@ struct AudioDevice_impl {
 
     ELOS_AudioBuffer* audioBuffer;
     // Owned by the kernel and should not be modified by user so we keep these here.
-    u32               sizeMask;
+    u32               size;
     u32               tail;
 
     union {

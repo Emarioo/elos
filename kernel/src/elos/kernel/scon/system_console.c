@@ -106,8 +106,8 @@ void SCON_main() {
 
     printf("SCON main\n");
 
-    const char* path = "/pkg/wav/dream.wav";
-    play_sound(path);
+    // const char* path = "/pkg/wav/dream.wav";
+    // play_sound(path);
 
     u64 startBlink = rdtsc();
     #define BLINK_CYCLE 1000
@@ -395,7 +395,10 @@ void send_command(cstring text) {
     }
 }
 
-static AudioDevice audioDevice;
+static AudioDevice       audioDevice;
+static ELOS_AudioBuffer* audioBuffer;
+
+WAVFile* soundFile = NULL;
 
 void play_sound(const char* path) {
 
@@ -414,34 +417,44 @@ void play_sound(const char* path) {
     
     printf("Playing sound from %s\n", info.name);
 
-    WAVFile* file;
-    WAVError err = ReadWAVFile(path, &file, true);
-
-    if (err != WAV_SUCCESS) {
-        // @TODO Respond
-        printf("Could not read %s\n", path);
-        return;
+    if (!soundFile) {
+        WAVError err = ReadWAVFile(path, &soundFile, true);
+        if (err != WAV_SUCCESS) {
+            // @TODO Respond
+            printf("Could not read %s\n", path);
+            return;
+        }
     }
 
-    ELOS_AudioBuffer* buffer;
+    WAVFile* file = soundFile;
+
+
     ELOS_AudioFormat format = {
         .sampleRate = 48000,
         .sampleFormat = ELOS_AUDIO_16BIT_PCM,
         .channels = 2,
     };
 
-    u32 bufferSize = 0x20000;
+    u32 bufferSize = 0x20000; // 2 ms latency
+    // u32 bufferSize = ELOS_BYTES_PER_AUDIO_SAMPLE(format.sampleFormat) * format.channels * format.sampleRate / 50; // 2 ms latency
+    // u32 bufferSize = ELOS_BYTES_PER_AUDIO_SAMPLE(format.sampleFormat) * format.channels * format.sampleRate / 500; // 2 ms latency
 
-    bool yes = AUDIO_create_buffer(audioDevice, &format, bufferSize, &buffer);
-    if (!yes) {
-        printf("Could not create audio ring\n");
-        return;
+    if (!audioBuffer) {
+        ELOS_Error error = AUDIO_create_buffer(audioDevice, &format, bufferSize, &audioBuffer);
+        if (error != ELOS_OK) {
+            printf("Could not create audio ring, elos_err %s\n", elos_error(error));
+            return;
+        }
     }
 
+    ELOS_AudioBuffer* buffer = audioBuffer;
+
     printf("FileData %p - %p, %u\n", file->data, file->data + file->data_len, file->data_len);
-    printf("Buffer size/mask 0x%x 0x%x\n", bufferSize, buffer->sizeMask);
+    printf("Buffer size/mask 0x%x 0x%x\n", bufferSize, buffer->size);
 
     bool firstWrite = true;
+
+    buffer->head = buffer->tail;
 
     // play a sound
     int audioOffset = 0;
@@ -451,7 +464,7 @@ void play_sound(const char* path) {
             break;
         }
 
-        if (((buffer->head - buffer->tail)) >= bufferSize) {
+        if ((int)((buffer->head - buffer->tail)) >= (int)bufferSize) {
             firstWrite = true;
             // printf("Audio full %d, %d\n", buffer->head, buffer->tail);
             pause();
@@ -462,8 +475,8 @@ void play_sound(const char* path) {
             // printf("Write %u %u\n", buffer->head, audioOffset);
             firstWrite = false;
         }
-        *(u16*)(buffer->data + (buffer->head & buffer->sizeMask))       = *(u16*)(file->data + audioOffset);
-        *(u16*)(buffer->data + ((buffer->head + 2) & buffer->sizeMask)) = *(u16*)(file->data + audioOffset + 2);
+        *(u16*)(buffer->data + (buffer->head % buffer->size))       = *(u16*)(file->data + audioOffset);
+        *(u16*)(buffer->data + ((buffer->head + 2) % buffer->size)) = *(u16*)(file->data + audioOffset + 2);
 
         buffer->head += 4;
         audioOffset  += 4;

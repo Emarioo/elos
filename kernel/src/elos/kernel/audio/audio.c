@@ -24,18 +24,18 @@ AudioDevice_impl impl_audioDevices[MAX_AUDIO_DEVICES];
 
 #define MAX_AUDIO_BUFFERS 50
 
-typedef struct {
-    ELOS_AudioBuffer* buffer;
-    u32 tail;
-    u32 sizeMask;
-    bool used;
-    EXEC_Thread* thread; // refer to ID instead?
-} KernelAudioBuffer;
+// typedef struct {
+//     ELOS_AudioBuffer* buffer;
+//     u32 tail;
+//     u32 sizeMask;
+//     bool used;
+//     EXEC_Thread* thread; // refer to ID instead?
+// } KernelAudioBuffer;
 
 
 volatile u32 g_audio_lock;
 
-KernelAudioBuffer audioBuffers[MAX_AUDIO_BUFFERS];
+// KernelAudioBuffer audioBuffers[MAX_AUDIO_BUFFERS];
 
 
 void AUDIO_init(BootAPI* boot_api) {
@@ -191,8 +191,8 @@ bool AUDIO_get_info(AudioDevice _device, ELOS_AudioDeviceInfo* info) {
 //     return newBuffer;
 // }
 
-bool AUDIO_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer) {
-    bool returnValue = false;
+ELOS_Error AUDIO_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer) {
+    ELOS_Error returnValue = ELOS_ERR_UNKNOWN;
     LOCK_INT(&g_audio_lock);
 
     AudioDevice_impl* device = (AudioDevice_impl*)_device;

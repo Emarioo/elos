@@ -270,3 +270,158 @@ void generate_sine(void* buffer, int size, u64* frameOffset) {
     *frameOffset += frames;
 }
 
+
+
+#define DEFAULT_PCM_16BIT_48KHZ   0x0011
+#define DEFAULT_PCM_16BIT_44_1KHZ 0x4011
+#define DEFAULT_AUDIO_FORMAT DEFAULT_PCM_16BIT_44_1KHZ
+
+
+
+/*
+    Example on how to play sound.
+*/
+
+void hda_stream_buffers(HDA_Controller* dev) {
+    volatile HDA_Regs* regs = dev->regs;
+
+
+
+    u32   streamBufferSize;
+    void* buffer0;
+    void* buffer1;
+
+
+    WAVFile* wav;
+    WAVError err = ReadWAVFile("/PKG/WAV/DREAM.WAV", &wav, true);
+
+    if (err != WAV_SUCCESS) {
+        // These values are choosen to divide cleanly and
+        // provide smooth looping.
+        streamBufferSize = 10 * 4 * (48000/400);
+        buffer0 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+        buffer1 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+
+        u64 frameOffset = 0;
+        generate_sine(buffer0, streamBufferSize, &frameOffset);
+        generate_sine(buffer1, streamBufferSize, &frameOffset);
+        printf("Sine done\n");
+    } else {
+        
+        // Divide by 4 because 16-bit and 2 channels make up one sample.
+        // We don't want to split a sample.
+        streamBufferSize = (wav->data_len / 4) * 2;
+
+        buffer0 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+        buffer1 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+
+        memcpy(buffer0, wav->data, streamBufferSize);
+        memcpy(buffer1, wav->data + streamBufferSize, streamBufferSize);
+    }
+
+    KERNEL_PANIC(((u64)buffer0 >> 32) == 0, "High 32 bits of buffer0 are set");
+    KERNEL_PANIC(((u64)buffer1 >> 32) == 0, "High 32 bits of buffer1 are set");
+
+    int bufferDescriptors_max = PAGE_SIZE/sizeof(HDA_BufferDescriptor);
+    int bufferDescriptors_len = 0;
+    volatile HDA_BufferDescriptor* bufferDescriptors = PMEM_alloc_phys(PAGE_SIZE, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+    memset((HDA_BufferDescriptor*)bufferDescriptors, 0, bufferDescriptors_max * sizeof(*bufferDescriptors));
+
+    bufferDescriptors[bufferDescriptors_len].addressLow = (u64)buffer0;
+    bufferDescriptors[bufferDescriptors_len].addressHigh = (u64)0;
+    bufferDescriptors[bufferDescriptors_len].size = streamBufferSize;
+    bufferDescriptors_len++;
+    bufferDescriptors[bufferDescriptors_len].addressLow = (u64)buffer1;
+    bufferDescriptors[bufferDescriptors_len].addressHigh = (u64)0;
+    bufferDescriptors[bufferDescriptors_len].size = streamBufferSize;
+    bufferDescriptors_len++;
+
+    // @TODO When we submit buffers for reading by codec we need to ensure no data is left in cache.
+    //    We may notice these kinds of issues with real hardware, not QEMU.
+
+    u32 numOutputStreams        = (regs->GCAP >> 12) & 0xF;
+    u32 numInputStreams         = (regs->GCAP >> 8)  & 0xF;
+    u32 numBidirectionalStreams = (regs->GCAP >> 3)  & 0x1F;
+    KERNEL_PANIC(numOutputStreams != 0, "HDA has zero output streams");
+
+    int streamIndex;
+    if (dev->nextOutputStreamIndex == 0) {
+        streamIndex = numInputStreams;
+        dev->nextOutputStreamIndex = numInputStreams + 1;
+    } else {
+        streamIndex = dev->nextOutputStreamIndex;
+        dev->nextOutputStreamIndex++;
+    }
+
+
+    volatile HDA_StreamDescriptor* stream = &dev->streamDescriptors[streamIndex]; // 0 is reserved
+
+    printf("0x%p 0x%p %zx\n", stream ,dev->barAddress, (u64)stream - (u64)dev->barAddress);
+
+
+    hda_dump_stream(dev, streamIndex);
+
+    hda_stream_stop(dev, streamIndex);
+
+    hda_reset_stream(dev, streamIndex);
+
+    u32 streamNumber = 1;
+    u32 ctl = (streamNumber << 20);
+    // leave traffic priority, bidirectional control, stripe control and interrupt bits zero and disabled.
+    stream->CTL_STS = (stream->CTL_STS & ~0xFF00FFF0) | ctl;
+
+    stream->LVI = (stream->LVI & ~0xFF) | (bufferDescriptors_len - 1);
+
+    // u32 bits = 0b001; // 16-bits
+    // u32 channel = 0b1; // 2 channels
+    // leaving other fields as zero specifies 48kHz
+    // u16 fmt = (bits << 4) | (channel << 0);
+    u16 fmt = DEFAULT_AUDIO_FORMAT;
+    stream->FMT = (stream->FMT & ~0x80) | fmt;
+
+
+    KERNEL_PANIC(((u64)bufferDescriptors >> 32) == 0, "High 32 bits of bufferDescriptors are set");
+    stream->BDPL = (u64)bufferDescriptors;
+    stream->BDPU = 0;
+    stream->CBL = streamBufferSize * bufferDescriptors_len;
+    // @NOCHECKIN This should be bytes right? spec says "CBL must represent an integer number samples."
+    //    Bytes must align to an even sample count but the unit is still bytes?
+
+
+
+
+    // hda_mute(dev, true);
+
+    hda_stream_start(dev, streamIndex);
+
+    // printf("Dump done\n");
+
+    // hda_dump_stream(dev, streamIndex);
+
+    // int prev = stream->LPIB;
+    u32 timeout = 2000 * ticks_per_sec / 1000;
+    int muted = true;
+    u64 startTime = rdtsc();
+    while (1) {
+
+        // u64 now = rdtsc();
+        // if (muted && now - startTime > timeout) {
+        //     hda_mute(dev, true);
+        //     muted = false;
+        // }
+
+        // u32 bufferIndex = (stream->LPIB / streamBufferSize) % bufferDescriptors_len;
+        // if (readPointer != bufferIndex) {
+        //     readPointer = (readPointer + 1) % bufferDescriptors_len;
+        // }
+        // int now = stream->LPIB;
+
+        // if (now != prev) {
+        //     printf("LPIB %d\n", now);
+        //     prev = now;
+        // }
+        pause();
+    }
+    
+ }
+

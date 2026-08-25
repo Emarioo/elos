@@ -40,6 +40,7 @@ Async_RequestID async_submit(ELOS_AsyncRequest* req) {
     
     // Wait for free slot
     while ((g_requestRing->head - g_requestRing->tail) > g_requestRing->ringMask) {
+        // @TODO Sleep and yield thread instead.
         pause();
     }
     g_requestRing->entries[g_requestRing->head & g_requestRing->ringMask] = *req;
@@ -67,6 +68,7 @@ bool async_wait(Async_RequestID id, ELOS_AsyncCompletion* com, size_t timeout_ns
     while (1) {
         error = SYS_wait_async_ring(g_completionRing, timeout_ns);
         if (error != ELOS_OK) {
+            printf("async_wait: SYS_wait_async_ring '%s'\n", elos_error(error));
             return false;
         }
 

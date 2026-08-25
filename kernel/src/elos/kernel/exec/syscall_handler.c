@@ -199,11 +199,11 @@ exit:
 }
 
 ELOS_Error getDefaultMonitor(PageTable* userPageTable, MON_FrameBuffer* monitor) {
-    ELOS_Error returnValue = ELOS_GENERIC_ERROR;
+    ELOS_Error returnValue = ELOS_ERR_UNKNOWN;
     LOCK_INT(&frameBufferOwners_lock);
 
     if (frameBufferOwners_len + 1 >= frameBufferOwners_max) {
-        returnValue = ELOS_GENERIC_ERROR;
+        returnValue = ELOS_ERR_UNKNOWN;
         goto exit_default_monitor;
     }
 
@@ -212,13 +212,13 @@ ELOS_Error getDefaultMonitor(PageTable* userPageTable, MON_FrameBuffer* monitor)
     MON_scan_devices(devices, &count);
 
     if (count <= 0) {
-        returnValue = ELOS_GENERIC_ERROR;
+        returnValue = ELOS_ERR_UNKNOWN;
         goto exit_default_monitor;
     } 
 
     bool yes = MON_get_frame_buffer(devices[0], monitor);
     if (!yes) {
-        returnValue = ELOS_GENERIC_ERROR;
+        returnValue = ELOS_ERR_UNKNOWN;
         goto exit_default_monitor;
     }
 
@@ -230,7 +230,7 @@ ELOS_Error getDefaultMonitor(PageTable* userPageTable, MON_FrameBuffer* monitor)
     // @TODO Make it writethrough? Fully cached might be a bad idea?
     bool mapped = PMEM_map_memory(userPageTable, monitor->phys_address, physAddress, monitor->size, PMEM_FLAG_USER_SPACE);
     if (!mapped) {
-        returnValue = ELOS_GENERIC_ERROR;
+        returnValue = ELOS_ERR_UNKNOWN;
         goto exit_default_monitor;
     } else {
         FrameBufferOwner* frameBufferOwner = &frameBufferOwners[frameBufferOwners_len];
@@ -247,7 +247,7 @@ exit_default_monitor:
 }
 
 u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 arg5) {
-    u64 returnValue = ELOS_INVALID_SYSCALL;
+    u64 returnValue = ELOS_ERR_INVALID_SYSCALL;
     u64 _syscall_id;
     asm volatile (
         "mov %%rax, %0"
@@ -308,7 +308,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                     PMEM_free(address);
                     write_cr3((u64)userPageTable);
                     *newAddress = NULL;
-                    returnValue = ELOS_GENERIC_ERROR;
+                    returnValue = ELOS_ERR_UNKNOWN;
                     break;
                 }
 
@@ -318,7 +318,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 returnValue = ELOS_OK;
             } else {
                 *newAddress = NULL;
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             }
 
             // printf("MALLOC 0x%zx:0x%zx (%zu KB)\n", address, address + size, size / 1024);
@@ -353,7 +353,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 if (!address) {
                     write_cr3((u64)userPageTable);
                     *newAddress = NULL;
-                    returnValue = ELOS_GENERIC_ERROR;
+                    returnValue = ELOS_ERR_UNKNOWN;
                     break;
                 }
                     
@@ -384,7 +384,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             } else {
                 write_cr3((u64)userPageTable);
                 *newAddress = NULL;
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             }
 
             // printf("REALLOC %zx -> %zx:%zx (%zu KB)\n", oldAddress, address, address + size, size / 1024);
@@ -409,10 +409,10 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                     memset(virtAddress, 0x9A, size);
                     returnValue = ELOS_OK;
                 } else {
-                    returnValue = ELOS_GENERIC_ERROR;
+                    returnValue = ELOS_ERR_UNKNOWN;
                 }
             } else {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             }
         } break;
         case _SYS_DEFAULT_MONITOR: {
@@ -469,7 +469,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             int maxlen = 64;
             int name_len = strnlen(name, maxlen + 1);
             if (name_len > maxlen) {
-                returnValue = ELOS_INVALID_PARAM;
+                returnValue = ELOS_ERR_INVALID_PARAM;
                 break;
             }
 
@@ -481,7 +481,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)phys_name, (void*)phys_name, PAGE_SIZE, PMEM_FLAG_NONE);
             if (!mapped) {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
                 break;
             }
 
@@ -491,7 +491,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             write_cr3((u64)userPageTable);
             
             if (!result) {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             } else {
                 *endpoint = tmp_endpoint;
                 returnValue = ELOS_OK;
@@ -506,7 +506,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             int maxlen = 64;
             int name_len = strnlen(name, maxlen + 1);
             if (name_len > maxlen) {
-                returnValue = ELOS_INVALID_PARAM;
+                returnValue = ELOS_ERR_INVALID_PARAM;
                 break;
             }
 
@@ -518,7 +518,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)phys_name, (void*)phys_name, PAGE_SIZE, PMEM_FLAG_NONE);
             if (!mapped) {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
                 break;
             }
 
@@ -528,7 +528,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             write_cr3((u64)userPageTable);
             
             if (!result) {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             } else {
                 *endpoint = tmp_endpoint;
                 returnValue = ELOS_OK;
@@ -547,7 +547,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             
             bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)phys_data, (void*)phys_data, PAGE_SIZE, PMEM_FLAG_NONE);
             if (!mapped) {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
                 break;
             }
 
@@ -556,7 +556,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             write_cr3((u64)userPageTable);
 
             if (!result) {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             } else {
                 returnValue = ELOS_OK;
             }
@@ -591,7 +591,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             *size = tmp_size;
 
             if (!result) {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             } else {
                 returnValue = ELOS_OK;
             }
@@ -611,7 +611,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             write_cr3((u64)userPageTable);
 
             if (!result) {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             } else {
                 *handle = (void*)tmp_handle;
                 returnValue = ELOS_OK;
@@ -630,7 +630,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             write_cr3((u64)userPageTable);
 
             if (!result) {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             } else {
                 returnValue = ELOS_OK;
             }
@@ -651,7 +651,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             if (result) {
                 bool mapped = PMEM_map_memory(userPageTable, tmp_buffer, tmp_buffer, tmp_size, PMEM_FLAG_USER_SPACE);
                 if (!mapped) {
-                    returnValue = ELOS_GENERIC_ERROR;
+                    returnValue = ELOS_ERR_UNKNOWN;
                     write_cr3((u64)userPageTable);
                     break;
                 }
@@ -660,7 +660,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             write_cr3((u64)userPageTable);
 
             if (!result) {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             } else {
                 if (buffer) {
                     *buffer = tmp_buffer;
@@ -686,7 +686,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             if (result) {
                 bool mapped = PMEM_map_memory(userPageTable, tmp_buffer, tmp_buffer, wholeBufferSize, PMEM_FLAG_USER_SPACE);
                 if (!mapped) {
-                    returnValue = ELOS_GENERIC_ERROR;
+                    returnValue = ELOS_ERR_UNKNOWN;
                     write_cr3((u64)userPageTable);
                     break;
                 }
@@ -695,7 +695,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             write_cr3((u64)userPageTable);
 
             if (!result) {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             } else {
                 if (buffer) {
                     *buffer = (void*)tmp_buffer;
@@ -725,14 +725,14 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 bool mapped = PMEM_map_memory(userPageTable, tmp_requestRing, tmp_requestRing, requestRingSize, PMEM_FLAG_USER_SPACE);
                 if (!mapped) {
                     // @TODO Leaking created ring!
-                    returnValue = ELOS_GENERIC_ERROR;
+                    returnValue = ELOS_ERR_UNKNOWN;
                     write_cr3((u64)userPageTable);
                     break;
                 }
                 mapped = PMEM_map_memory(userPageTable, tmp_completionRing, tmp_completionRing, completionRingSize, PMEM_FLAG_USER_SPACE);
                 if (!mapped) {
                     // @TODO Leaking created ring!
-                    returnValue = ELOS_GENERIC_ERROR;
+                    returnValue = ELOS_ERR_UNKNOWN;
                     write_cr3((u64)userPageTable);
                     break;
                 }
@@ -745,7 +745,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 *completionRing = tmp_completionRing;
                 returnValue = ELOS_OK;
             } else {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             }
         } break;
         case _SYS_DESTROY_ASYNC_RINGS: {
@@ -759,7 +759,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             u32 actualMaxEntries = 0;
             int result = ASYNC_destroy_async_rings(requestRing, completionRing, &actualMaxEntries);
             if (result != ASYNC_OK) {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
                 break;
             }
 
@@ -774,7 +774,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             if (result == ASYNC_OK) {
                 returnValue = ELOS_OK;
             } else {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             }
             
         } break;
@@ -792,7 +792,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             if (result == ASYNC_OK) {
                 returnValue = ELOS_OK;
             } else {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             }
             
         } break;
@@ -802,6 +802,8 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             // @TODO Check capability
             // @TODO Validate completion ring pointer
+
+            // @TODO Handle timeout
             
             int coreIndex = CPU_get_core_index();
             EXEC_Core* core = &cores[coreIndex];
@@ -860,7 +862,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 *device = dev;
                 returnValue = ELOS_OK;
             } else {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_NO_AUDIO_DEVICE;
             }
             
         } break;
@@ -884,7 +886,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 *deviceInfo = tmp_deviceInfo;
                 returnValue = ELOS_OK;
             } else {
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             }
             
         } break;
@@ -906,16 +908,16 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             u32 memoryFootprint = sizeof(ELOS_AudioBuffer) + bufferSize;
 
-            bool yes = AUDIO_create_buffer(device, &tmp_format, bufferSize, &tmp_buffer);
-            if (!yes) {
-                returnValue = ELOS_GENERIC_ERROR;
+            ELOS_Error error = AUDIO_create_buffer(device, &tmp_format, bufferSize, &tmp_buffer);
+            if (error != ELOS_OK) {
+                returnValue = error;
                 break;
             }
 
             bool mapped = PMEM_map_memory(userPageTable, tmp_buffer, tmp_buffer, memoryFootprint, PMEM_FLAG_USER_SPACE);
             if (!mapped) {
                 // @TODO Leaking audio buffer here.
-                returnValue = ELOS_GENERIC_ERROR;
+                returnValue = ELOS_ERR_UNKNOWN;
             } else {
                 returnValue = ELOS_OK;
             }
@@ -925,14 +927,14 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             
         } break;
 
-        case _SYS_AUDIO_CONTROL: {
-            // @TODO Implement
-           returnValue = ELOS_INVALID_PARAM;
-        } break;
+        // case _SYS_AUDIO_CONTROL: {
+        //     // @TODO Implement
+        //    returnValue = ELOS_INVALID_PARAM;
+        // } break;
 
         case _SYS_DESTROY_AUDIO_BUFFER: {
             // @TODO Implement
-            returnValue = ELOS_GENERIC_ERROR;
+            returnValue = ELOS_ERR_UNKNOWN;
         } break;
 
     }

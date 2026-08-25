@@ -15,7 +15,8 @@
 
 
 #define printf(...) KCON_printf(__VA_ARGS__)
-#define debug(...) printf(__VA_ARGS__)
+// #define debug(...) printf(__VA_ARGS__)
+#define debug(...)
 
 //#####################
 //    CONSTANTS
@@ -74,9 +75,9 @@ bool hda_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
 
     ticks_per_sec = CPU_ticks_per_second();
 
-    printf("PCI vendor=0x%x device=0x%x\n", config->vendorID, config->deviceID);
-    printf(" int_pin=%d int_line=%d\n", config->header0.interrupt_pin, config->header0.interrupt_line);
-    printf(" has_cap_list=%d cap_ptr=%d\n", config->status.capabilities_list, config->header0.capabilities_pointer & ~0x3);
+    debug("PCI vendor=0x%x device=0x%x\n", config->vendorID, config->deviceID);
+    debug(" int_pin=%d int_line=%d\n", config->header0.interrupt_pin, config->header0.interrupt_line);
+    debug(" has_cap_list=%d cap_ptr=%d\n", config->status.capabilities_list, config->header0.capabilities_pointer & ~0x3);
 
     u32 coreIndex = CPU_get_core_index();
     u32 localIRQ = 5;
@@ -88,7 +89,7 @@ bool hda_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
         u32 cap_id   = (cap_data & 0xFF);
         u32 cap_next = (cap_data >> 8) & 0xFC;
 
-        printf("Cap %d\n", cap_id);
+        debug("Cap %d\n", cap_id);
 
         if (cap_id == 0x5) {
             u16 messageControl = (cap_data >> 16);
@@ -117,9 +118,9 @@ bool hda_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
             cap_next = (cap_data >> 8) & 0xFC;
             messageControl = (cap_data >> 16);
 
-            printf(" control 0x%x\n", messageControl);
-            printf(" address %p\n",   messageAddress);
-            printf(" data    0x%x\n", messageData);
+            debug(" control 0x%x\n", messageControl);
+            debug(" address %p\n",   messageAddress);
+            debug(" data    0x%x\n", messageData);
 
         } else if (cap_id == 0x11) {
             // HDA on QEMU does not support MSI-X
@@ -369,18 +370,18 @@ void hda_scan_widgets(HDA_Controller* controller) {
         int hasOutputAmp = (widgetCap >> 2) & 1;
         int hasEABD = (widgetCap >> 16) & 1;
 
-        print_supported_pcm(supportedPCM, supportedStreamFormats);
+        // print_supported_pcm(supportedPCM, supportedStreamFormats);
 
-        print_widget_caps(widgetCap);
+        // print_widget_caps(widgetCap);
 
-        print_pin_caps(pinCap);
+        // print_pin_caps(pinCap);
 
-        print_amp_caps(outputAmp);
+        // print_amp_caps(outputAmp);
 
         // Configuration defaults
         SEND(wi, 0xF1C, 0);
         u32 cfg = response.verb;
-        print_config_default(cfg);
+        // print_config_default(cfg);
 
 
         int hasConnectionList = (widgetCap >> 8) & 1;
@@ -388,7 +389,7 @@ void hda_scan_widgets(HDA_Controller* controller) {
         int connLength = (connectionListLength >> 0) & 0x3F;
         
         if (hasConnectionList) {
-            printf("Connection list:\n");
+            debug("Connection list:\n");
             for (int i = 0; i < connLength; ) {
 
                 SEND(wi, 0xF02, i);
@@ -396,12 +397,12 @@ void hda_scan_widgets(HDA_Controller* controller) {
                 u32 r = response.verb;
 
                 if (longForm) {
-                    printf("  -> NID %u\n", r & 0xffff);
-                    printf("  -> NID %u\n", (r >> 16) & 0xffff);
+                    debug("  -> NID %u\n", r & 0xffff);
+                    debug("  -> NID %u\n", (r >> 16) & 0xffff);
                     i += 2;
                 } else {
                     for (int j = 0; j < 4 && i < connLength; ++j, ++i) {
-                        printf("  -> NID %u\n", (r >> (j * 8)) & 0xff);
+                        debug("  -> NID %u\n", (r >> (j * 8)) & 0xff);
                     }
                 }
             }
@@ -472,7 +473,39 @@ exit:
     return;
 }
 
+ELOS_Error validateBufferSize(ELOS_AudioFormat* format, u32 bufferSize) {
+    int sampleSize = ELOS_BYTES_PER_AUDIO_SAMPLE(format->sampleFormat);
+    int frameSize  = format->channels * sampleSize;
 
+    int alignedSize = 128;
+    
+    if (0 != (bufferSize % frameSize)) {
+        // bufferSize must be a multiple of frame size.
+        return ELOS_ERR_BUFFER_SIZE_NOT_FRAME_ALIGNED;
+    }
+    
+    // @TODO Should memory for audio API count towards HEAP usage and capability.
+    //   We must check it here (or elsewhere) if so.
+
+    if (bufferSize > frameSize * format->sampleRate * 4) {
+        // We put an arbitrary limit of 4 seconds worth of frames.
+        // 
+        // A buffer worth 4 seconds of frames should be plenty.
+        // User will want to mix and stream the audio and have 1-4 ms latency.
+        return ELOS_ERR_BUFFER_SIZE_TOO_BIG;
+    }
+    
+    if (bufferSize < 2 * alignedSize) {
+        // We put an arbitrary limit of 4 seconds worth of frames.
+        // 
+        // A buffer worth 4 seconds of frames should be plenty.
+        // User will want to mix and stream the audio and have 1-4 ms latency.
+        return ELOS_ERR_BUFFER_SIZE_TOO_SMALL;
+    }
+
+
+    return ELOS_OK;
+}
 
 u32 sizeMaskFromBufferSize(u32 size) {
     if (size == 1)
@@ -495,20 +528,20 @@ u32 sizeMaskFromBufferSize(u32 size) {
     return 0;
 }
 
-bool hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer) {
+ELOS_Error hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer) {
     AudioDevice_impl* device = (AudioDevice_impl*)_device;
 
-    // @TODO Handle format.
+    // @NOCHECKIN Handle format.
     //    Deny it if device doesn't support it.
+
+    ELOS_Error validBufferSize = validateBufferSize(format, bufferSize);
+    if (validBufferSize != ELOS_OK) {
+        return validBufferSize;
+    }
 
     HDA_Controller* dev = device->hda.controller;
     volatile HDA_Regs* regs = dev->regs;
 
-    if (bufferSize < 4 * PAGE_SIZE) {
-        // For the math below we need at least 2 pages, one for each streamBuffer.
-        // We check 4 just to have some extra.
-        return false;
-    }
 
     
     u32 numOutputStreams        = (regs->GCAP >> 12) & 0xF;
@@ -518,7 +551,7 @@ bool hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 buffer
     if (numOutputStreams == 0) {
         // Why do we have zero output streams?
         // @TODO MEMORY LEAK, leaking physical memory allocated above.
-        return false;
+        return ELOS_ERR_UNKNOWN;
     }
     
     int streamIndex;
@@ -540,18 +573,20 @@ bool hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 buffer
 
     hda_reset_stream(dev, streamIndex);
 
+    device->size = bufferSize;
+    // int headerSize = sizeof(ELOS_AudioBuffer);
+    int headerSize = 128;
+    u32 totalBufferSize = bufferSize + headerSize;
 
-    device->sizeMask = sizeMaskFromBufferSize(bufferSize);
-    u32 actualBufferSize = device->sizeMask+1;
 
-    void* audioMemory = PMEM_alloc_phys(actualBufferSize + PAGE_SIZE, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
-    // memset(audioMemory, 0, bufferSize + PAGE_SIZE);
-    void* rawAudioBuffer = audioMemory + PAGE_SIZE;
+    void* audioMemory = PMEM_alloc_phys(totalBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+    void* rawAudioBuffer = audioMemory + headerSize;
     ELOS_AudioBuffer* audioBufferHeader = (ELOS_AudioBuffer*)((char*)rawAudioBuffer - sizeof(ELOS_AudioBuffer));
+    memset(audioMemory, 0, totalBufferSize);
+
     audioBufferHeader->head = 0;
     audioBufferHeader->tail = 0;
-    audioBufferHeader->sizeMask = device->sizeMask;
-
+    audioBufferHeader->size = device->size;
 
     
     // WAVFile* wav;
@@ -566,14 +601,15 @@ bool hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 buffer
     // The buffer should be cache aligned (128 HDA spec says).
     // We use pages for no particular reason other than the memory allocator
     // rounding up to nearest page.
+    int alignedSize = 128;
 
-    int numPages = actualBufferSize / PAGE_SIZE;
+    int numPages = bufferSize / alignedSize;
     int halfNumPages = numPages / 2;
 
     // Size should be a multiple of channel*sample
 
-    u32   streamBufferSize0 = halfNumPages * PAGE_SIZE;
-    u32   streamBufferSize1 = actualBufferSize - streamBufferSize0;
+    u32   streamBufferSize0 = halfNumPages * alignedSize;
+    u32   streamBufferSize1 = bufferSize - streamBufferSize0;
     void* buffer0 = rawAudioBuffer;
     void* buffer1 = (char*)rawAudioBuffer + streamBufferSize0;
     
@@ -637,6 +673,7 @@ bool hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 buffer
 
     device->audioBuffer = audioBufferHeader;
 
+
     *buffer = audioBufferHeader;
 
 
@@ -660,7 +697,7 @@ bool hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 buffer
     //     }
     // }
 
-    return true;
+    return ELOS_OK;
 }
 
 
@@ -716,152 +753,3 @@ void hda_interrupt(u32 vector, InterruptFrame* frame) {
     write_cr3(prev_cr3);
 }
 
-
-
-
-/*
-    Example on how to play sound.
-*/
-
-void hda_stream_buffers(HDA_Controller* dev) {
-    volatile HDA_Regs* regs = dev->regs;
-
-
-
-    u32   streamBufferSize;
-    void* buffer0;
-    void* buffer1;
-
-
-    WAVFile* wav;
-    WAVError err = ReadWAVFile("/PKG/WAV/DREAM.WAV", &wav, true);
-
-    if (err != WAV_SUCCESS) {
-        // These values are choosen to divide cleanly and
-        // provide smooth looping.
-        streamBufferSize = 10 * 4 * (48000/400);
-        buffer0 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
-        buffer1 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
-
-        u64 frameOffset = 0;
-        generate_sine(buffer0, streamBufferSize, &frameOffset);
-        generate_sine(buffer1, streamBufferSize, &frameOffset);
-        printf("Sine done\n");
-    } else {
-        
-        // Divide by 4 because 16-bit and 2 channels make up one sample.
-        // We don't want to split a sample.
-        streamBufferSize = (wav->data_len / 4) * 2;
-
-        buffer0 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
-        buffer1 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
-
-        memcpy(buffer0, wav->data, streamBufferSize);
-        memcpy(buffer1, wav->data + streamBufferSize, streamBufferSize);
-    }
-
-    KERNEL_PANIC(((u64)buffer0 >> 32) == 0, "High 32 bits of buffer0 are set");
-    KERNEL_PANIC(((u64)buffer1 >> 32) == 0, "High 32 bits of buffer1 are set");
-
-    int bufferDescriptors_max = PAGE_SIZE/sizeof(HDA_BufferDescriptor);
-    int bufferDescriptors_len = 0;
-    volatile HDA_BufferDescriptor* bufferDescriptors = PMEM_alloc_phys(PAGE_SIZE, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
-    memset((HDA_BufferDescriptor*)bufferDescriptors, 0, bufferDescriptors_max * sizeof(*bufferDescriptors));
-
-    bufferDescriptors[bufferDescriptors_len].addressLow = (u64)buffer0;
-    bufferDescriptors[bufferDescriptors_len].addressHigh = (u64)0;
-    bufferDescriptors[bufferDescriptors_len].size = streamBufferSize;
-    bufferDescriptors_len++;
-    bufferDescriptors[bufferDescriptors_len].addressLow = (u64)buffer1;
-    bufferDescriptors[bufferDescriptors_len].addressHigh = (u64)0;
-    bufferDescriptors[bufferDescriptors_len].size = streamBufferSize;
-    bufferDescriptors_len++;
-
-    // @TODO When we submit buffers for reading by codec we need to ensure no data is left in cache.
-    //    We may notice these kinds of issues with real hardware, not QEMU.
-
-    u32 numOutputStreams        = (regs->GCAP >> 12) & 0xF;
-    u32 numInputStreams         = (regs->GCAP >> 8)  & 0xF;
-    u32 numBidirectionalStreams = (regs->GCAP >> 3)  & 0x1F;
-    KERNEL_PANIC(numOutputStreams != 0, "HDA has zero output streams");
-
-    int streamIndex;
-    if (dev->nextOutputStreamIndex == 0) {
-        streamIndex = numInputStreams;
-        dev->nextOutputStreamIndex = numInputStreams + 1;
-    } else {
-        streamIndex = dev->nextOutputStreamIndex;
-        dev->nextOutputStreamIndex++;
-    }
-
-
-    volatile HDA_StreamDescriptor* stream = &dev->streamDescriptors[streamIndex]; // 0 is reserved
-
-    printf("0x%p 0x%p %zx\n", stream ,dev->barAddress, (u64)stream - (u64)dev->barAddress);
-
-
-    hda_dump_stream(dev, streamIndex);
-
-    hda_stream_stop(dev, streamIndex);
-
-    hda_reset_stream(dev, streamIndex);
-
-    u32 streamNumber = 1;
-    u32 ctl = (streamNumber << 20);
-    // leave traffic priority, bidirectional control, stripe control and interrupt bits zero and disabled.
-    stream->CTL_STS = (stream->CTL_STS & ~0xFF00FFF0) | ctl;
-
-    stream->LVI = (stream->LVI & ~0xFF) | (bufferDescriptors_len - 1);
-
-    // u32 bits = 0b001; // 16-bits
-    // u32 channel = 0b1; // 2 channels
-    // leaving other fields as zero specifies 48kHz
-    // u16 fmt = (bits << 4) | (channel << 0);
-    u16 fmt = DEFAULT_AUDIO_FORMAT;
-    stream->FMT = (stream->FMT & ~0x80) | fmt;
-
-
-    KERNEL_PANIC(((u64)bufferDescriptors >> 32) == 0, "High 32 bits of bufferDescriptors are set");
-    stream->BDPL = (u64)bufferDescriptors;
-    stream->BDPU = 0;
-    stream->CBL = streamBufferSize * bufferDescriptors_len;
-    // @NOCHECKIN This should be bytes right? spec says "CBL must represent an integer number samples."
-    //    Bytes must align to an even sample count but the unit is still bytes?
-
-
-
-
-    // hda_mute(dev, true);
-
-    hda_stream_start(dev, streamIndex);
-
-    // printf("Dump done\n");
-
-    // hda_dump_stream(dev, streamIndex);
-
-    // int prev = stream->LPIB;
-    u32 timeout = 2000 * ticks_per_sec / 1000;
-    int muted = true;
-    u64 startTime = rdtsc();
-    while (1) {
-
-        // u64 now = rdtsc();
-        // if (muted && now - startTime > timeout) {
-        //     hda_mute(dev, true);
-        //     muted = false;
-        // }
-
-        // u32 bufferIndex = (stream->LPIB / streamBufferSize) % bufferDescriptors_len;
-        // if (readPointer != bufferIndex) {
-        //     readPointer = (readPointer + 1) % bufferDescriptors_len;
-        // }
-        // int now = stream->LPIB;
-
-        // if (now != prev) {
-        //     printf("LPIB %d\n", now);
-        //     prev = now;
-        // }
-        pause();
-    }
-    
- }

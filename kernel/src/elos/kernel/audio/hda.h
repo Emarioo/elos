@@ -96,13 +96,13 @@ typedef enum {
 
 
 #define GET_PARAM(NODE, PARAM) \
-    got = hda_get_param(dev, codecAddress, NODE, PARAM, &response); \
-    printf("Send nod=%03d param=0x%03x resp=0x%x ext=0x%x\n", NODE, PARAM, response.verb, response.verb_ext);
+    got = hda_get_param(dev, codecAddress, NODE, PARAM, &response);
+    // printf("Send nod=%03d param=0x%03x resp=0x%x ext=0x%x\n", NODE, PARAM, response.verb, response.verb_ext);
 
 #define SEND(NODE, VERB, PAYLOAD) \
     verb = hda_make_verb(codecAddress, NODE, VERB, PAYLOAD); \
-    got = hda_send_verb_sync(dev, verb, &response); \
-    printf("Send nod=%03d verb=0x%03x payl=0x%03x resp=0x%x ext=0x%x\n", NODE, VERB, PAYLOAD, response.verb, response.verb_ext);
+    got = hda_send_verb_sync(dev, verb, &response);
+    // printf("Send nod=%03d verb=0x%03x payl=0x%03x resp=0x%x ext=0x%x\n", NODE, VERB, PAYLOAD, response.verb, response.verb_ext);
 
 
 typedef volatile struct {
@@ -269,4 +269,4 @@ void generate_sine(void* buffer, int size, u64* frameOffset);
 
 
 
-bool hda_create_buffer(ELOS_AudioDevice device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer);
+ELOS_Error hda_create_buffer(ELOS_AudioDevice device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer);

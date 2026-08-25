@@ -202,11 +202,6 @@ int fseek(FILE *stream, long offset, int whence) {
     if (cqe.error != ELOS_OK) {
         return -1;
     }
-
-    if (whence != SEEK_END) {
-        // Shouldn't happen.
-        return -1;
-    }
         
     stream->position = fileInfo.fileSize + offset;
 
@@ -829,7 +824,7 @@ ELOS_Error elos_readdir(const char* _path, u64* cookie, u64* entryCount, ELOS_Di
     requestID = async_submit(&req);
     bool res = async_wait(requestID, &cqe, 0);
     if (!res) {
-        return ELOS_GENERIC_ERROR;
+        return ELOS_ERR_UNKNOWN;
     }
 
     *cookie = cqe.readdir.cookie;

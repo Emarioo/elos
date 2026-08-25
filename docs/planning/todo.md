@@ -1,6 +1,6 @@
 
 # Table Of Contents
-Categories are standardized in singular and lower case.
+Categories marks are standardized in singular and lower case.
 
 The sections are:
 - **Operating System**
@@ -19,6 +19,8 @@ The categories are:
 Tasks related to kernel and operating system
 
 ## @current
+- [ ] Kernel audio syscalls.
+- [ ] Audio server.
 - [ ] Separate CPU architecture specific code to separate folder/files.
 - [ ] System console.
 - [ ] If a thread gets a fault then kernel should continue to run. At least user threads.
@@ -29,10 +31,10 @@ Tasks related to kernel and operating system
 - [ ] Driver for file system, disk device.
 - [ ] Give interrupt routines some structure. Functions enable/disable/set them. Add redirection entries etc.
 - [ ] Kernel mouse syscalls. (maybe generic input syscalls for keyboard, controller, mouse?)
-- [ ] Kernel audio syscalls.
-- [ ] Audio server.
 - [ ] API to read/write disk device directlty from user space. Requires special capability. Kernel handles AHCI, NVMe details.
       And ensures the device isn't used or mounted by anyone else.
+- [ ] [Kernel Modules](./problems.md#kernel-modules).
+- [ ] Plants VS Zombies port.
 - [x] DOOM port.
 
 ## @urgent

@@ -54,6 +54,8 @@ Tests
 
 #include "stdui.h"
 
+#include "wave.h"
+
 
 
 void editor_loop();
@@ -83,6 +85,7 @@ bool get_event(ELOS_UserEvent* event) {
 }
 
 
+void play_sound(const char* path);
 void dumpdir(const char* path, int depth);
 
 void _start() {
@@ -92,6 +95,8 @@ void _start() {
     
 
     SYS_ticks_per_second(&ticks_per_second);
+
+
 
     g_instance = prism_init();
     if (!g_instance) {
@@ -117,6 +122,8 @@ void _start() {
     }
 
     stdui_set_surface(&g_surfaceInfo);
+
+    play_sound("/pkg/wav/dream.wav");
 
     editor_loop();
 }
@@ -409,3 +416,114 @@ void dumpdir(const char* path, int depth) {
     }
 
 }
+
+
+
+
+
+static ELOS_AudioDevice  audioDevice;
+static ELOS_AudioBuffer* audioBuffer;
+
+WAVFile* soundFile = NULL;
+
+void play_sound(const char* path) {
+
+    ELOS_Error error;
+
+    error = SYS_default_audio(&audioDevice);
+
+    if (error != ELOS_OK) {
+        // @TODO Response
+        printf("No audio device\n");
+        return;
+    }
+
+    ELOS_AudioDeviceInfo info;
+    SYS_audio_info(audioDevice, &info);
+    
+    printf("Playing sound from %s\n", info.name);
+
+    if (!soundFile) {
+        WAVError err = ReadWAVFile(path, &soundFile, true);
+        if (err != WAV_SUCCESS) {
+            // @TODO Respond
+            printf("Could not read %s\n", path);
+            return;
+        }
+    }
+
+    WAVFile* file = soundFile;
+
+
+    ELOS_AudioFormat format = {
+        .sampleRate = 48000,
+        .sampleFormat = ELOS_AUDIO_16BIT_PCM,
+        .channels = 2,
+    };
+
+    u32 bufferSize = 0x20000; // 2 ms latency
+    // u32 bufferSize = ELOS_BYTES_PER_AUDIO_SAMPLE(format.sampleFormat) * format.channels * format.sampleRate / 50; // 2 ms latency
+    // u32 bufferSize = ELOS_BYTES_PER_AUDIO_SAMPLE(format.sampleFormat) * format.channels * format.sampleRate / 500; // 2 ms latency
+
+    if (!audioBuffer) {
+        ELOS_Error error = SYS_create_audio_buffer(audioDevice, &format, bufferSize, &audioBuffer);
+        if (error != ELOS_OK) {
+            printf("Could not create audio ring, elos_err %s\n", elos_error(error));
+            return;
+        }
+    }
+
+    ELOS_AudioBuffer* buffer = audioBuffer;
+
+    printf("FileData %p - %p, %u\n", file->data, file->data + file->data_len, file->data_len);
+    printf("Buffer size/mask 0x%x 0x%x\n", bufferSize, buffer->size);
+
+    bool firstWrite = true;
+
+    buffer->head = buffer->tail;
+
+    // play a sound
+    int audioOffset = 0;
+    int audioEnd = file->data_len;
+    while (true) {
+        if (audioOffset >= audioEnd) {
+            break;
+        }
+
+        if ((int)((buffer->head - buffer->tail)) >= (int)bufferSize) {
+            firstWrite = true;
+            // printf("Audio full %d, %d\n", buffer->head, buffer->tail);
+            pause();
+            continue;
+        }
+        
+        if (firstWrite) {
+            // printf("Write %u %u\n", buffer->head, audioOffset);
+            firstWrite = false;
+        }
+        *(u16*)(buffer->data + (buffer->head % buffer->size))       = *(u16*)(file->data + audioOffset);
+        *(u16*)(buffer->data + ((buffer->head + 2) % buffer->size)) = *(u16*)(file->data + audioOffset + 2);
+
+        buffer->head += 4;
+        audioOffset  += 4;
+    }
+
+    // Wait for audio to finish
+    while (true) {
+        if ((int)(buffer->head - buffer->tail) <= 0) {
+            firstWrite = true;
+            break;
+        }
+        pause();
+    }
+
+    printf("DONE clearing audio buffer\n");
+
+    // Audio controller will keep playing audio so we zero it here.
+    memset(buffer->data, 0, bufferSize);
+
+    // Sound is done. Free buffers etc.
+
+}
+
+
