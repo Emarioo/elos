@@ -255,7 +255,7 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
         printf(" ss=%x\n", iretFrame->ss);
 
     }
-    while (1) asm ( "cli\nhlt\n" );
+    while (1) asm volatile ( "cli\nhlt\n" );
 }
 
 
@@ -297,7 +297,7 @@ u8 tss_stack_space[CORE_LIMIT][0x1000];
 
 void init_gdt() {
     
-    asm ( "cli\n" );
+    asm volatile ( "cli\n" );
 
     for (int coreIndex=0;coreIndex<CORE_LIMIT;coreIndex++) {
         _tss_entry[coreIndex].rsp0 = (u64)&tss_stack_space[coreIndex] + sizeof(tss_stack_space[coreIndex]);
@@ -349,7 +349,7 @@ void init_gdt() {
     
     int currentCoreIndex = CPU_get_core_index();
 
-    asm ( "lgdt %0\n" : : "m" (_gdt_register[currentCoreIndex]) );
+    asm volatile ( "lgdt %0\n" : : "m" (_gdt_register[currentCoreIndex]) );
 
     // Load new descriptors.
     // We hardcode these in the inline assembly:
@@ -370,13 +370,13 @@ void init_gdt() {
     
     // Hardcoded values:
     //   0x30 = TASK_STATE_SEGMENT
-    asm (
+    asm volatile (
         "mov $0x30, %%ax\n"
         "ltr %%ax\n"
         :::"rax"
     );
 
-    asm ( "sti\n" );
+    asm volatile ( "sti\n" );
 }
 
 extern void timer_isr();
@@ -409,7 +409,7 @@ void interrupt_handler(int vector, InterruptFrame* frame) {
 
 void init_idt() {
     u32 coreIndex = CPU_get_core_index();
-    asm ( "cli\n" );
+    asm volatile ( "cli\n" );
 
     for (int vector = 0; vector < IDT_MAX_DESCRIPTORS; vector++) {
         // 0x8e = 64-bit interrupt gate, present bit, super privilege
@@ -420,9 +420,9 @@ void init_idt() {
 
     idt_set_descriptor(coreIndex, IDT_TIMER_ISR, timer_isr, 0x8e);
 
-    asm ( "lidt %0\n" : : "m"(_idt_register));
+    asm volatile ( "lidt %0\n" : : "m"(_idt_register));
 
-    asm ( "sti\n" );
+    asm volatile ( "sti\n" );
 }
 
 
@@ -947,7 +947,7 @@ void enable_extensions() {
     efer |= 1LU<<11; // NXE execute disable bit (for 64-bit intel)
     wrmsr(MSR_IA32_EFER, efer);
 
-    asm (
+    asm volatile (
         "mov %cr0, %rax\n"
         "or $(1 << 1), %rax\n"    // MP
         "and $~(1 << 2), %rax\n"  // EM
@@ -964,7 +964,7 @@ void enable_extensions() {
 
     // Enable AVX support.
     // Used by memcpy_fast.
-    // asm (
+    // asm volatile (
     //     "mov $1, %ecx\n"
     //     "xgetbv\n"
     //     "or $0x6, %eax\n" // Set XCR0.SSE, XCR0.AVX

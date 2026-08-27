@@ -69,7 +69,7 @@ long strtol(const char* ptr, char** endptr, int base) {
 size_t strlen(const char* ptr) {
     const char* base = ptr;
     while(*(ptr++)) ;
-    return (u64)ptr - (u64)base - 1;
+    return (uintptr_t)ptr - (uintptr_t)base - 1;
 }
 size_t strnlen(const char* ptr, size_t maxlen) {
     int index = 0;
@@ -84,27 +84,35 @@ size_t strnlen(const char* ptr, size_t maxlen) {
     return index;
 }
 
-// void memcpy(void* dst, const void* src, int size) {
-//     if (dst == src)
-//         return;
-//     for (int i=0;i<size;i++) {
-//         ((char*)dst)[i] = ((char*)src)[i];
-//     }
-// }
+void* memcpy(void* dst, const void* src, size_t size) {
+    if (dst == src)
+        return dst;
+    if ((uintptr_t)dst % 8 == 0 && (uintptr_t)src % 8 == 0 && size % 8 == 0) {
+        // aligned
+        for (int i=0;i<(int)size/8;i++) {
+            ((uintptr_t*)dst)[i] = ((uintptr_t*)src)[i];
+        }
+    } else {
+        for (int i=0;i<(int)size;i++) {
+            ((char*)dst)[i] = ((char*)src)[i];
+        }
+    }
+    return dst;
+}
 
 void* memmove(void* dst, const void* src, size_t size) {
     if (dst == src)
         return dst;
     
-    if ((u64)dst % 8 == 0 && (u64)src % 8 == 0 && size % 8 == 0) {
+    if ((uintptr_t)dst % 8 == 0 && (uintptr_t)src % 8 == 0 && size % 8 == 0) {
         // aligned
         if (dst < src) {
             for (int i=0;i<(int)size/8;i++) {
-                ((u64*)dst)[i] = ((u64*)src)[i];
+                ((uintptr_t*)dst)[i] = ((uintptr_t*)src)[i];
             }
         } else {
             for (int i=(int)size/8-1;i>=0;i--) {
-                ((u64*)dst)[i] = ((u64*)src)[i];
+                ((uintptr_t*)dst)[i] = ((uintptr_t*)src)[i];
             }
         }
     } else {

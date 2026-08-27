@@ -137,18 +137,18 @@ void disableDefaultMonitorForUsers() {
 
         if (count <= 0) {
             printf("KABOOM mon scan device disable default monitor\n");
-            while (1) asm ("hlt");
+            while (1) asm volatile ("hlt");
         } 
         
         bool yes = MON_get_frame_buffer(devices[0], &blankFrameBuffer);
         if (!yes) {
             printf("KABOOM mon get frame buffer disable default monitor\n");
-            while (1) asm ("hlt");
+            while (1) asm volatile ("hlt");
         }
         blankFrameBuffer.phys_address = PMEM_alloc_phys(blankFrameBuffer.size, 0);
         if (!blankFrameBuffer.phys_address) {
             printf("KABOOM alloc phys for blank framebuffer\n");
-            while (1) asm ("hlt");
+            while (1) asm volatile ("hlt");
         }
     }
 
@@ -156,14 +156,14 @@ void disableDefaultMonitorForUsers() {
         FrameBufferOwner* owner = &frameBufferOwners[i];
         if (owner->monitor.size != blankFrameBuffer.size) {
             printf("KABOOM owner->monitor.size != blankFrameBuffer.size %d %d\n", owner->monitor.size, blankFrameBuffer.size);
-            while (1) asm ("hlt");
+            while (1) asm volatile ("hlt");
         }
         bool mapped = PMEM_map_memory(owner->userPageTable,
             owner->monitor.phys_address, blankFrameBuffer.phys_address,
             owner->monitor.size, PMEM_FLAG_USER_SPACE);
         if (!mapped) {
             printf("KABOOM disableDefaultMonitorForUsers could not map\n");
-            while (1) asm ("hlt");
+            while (1) asm volatile ("hlt");
         }
         // @TODO Flush TLB for user pages? especially on other cores?
     }
@@ -181,14 +181,14 @@ void enableDefaultMonitorForUsers() {
         FrameBufferOwner* owner = &frameBufferOwners[i];
         if (owner->monitor.size != blankFrameBuffer.size) {
             printf("KABOOM owner->monitor.size != blankFrameBuffer.size\n");
-            while (1) asm ("hlt");
+            while (1) asm volatile ("hlt");
         }
         bool mapped = PMEM_map_memory(owner->userPageTable,
             owner->monitor.phys_address, owner->monitor.phys_address,
             owner->monitor.size, PMEM_FLAG_USER_SPACE);
         if (!mapped) {
             printf("KABOOM disableDefaultMonitorForUsers could not map\n");
-            while (1) asm ("hlt");
+            while (1) asm volatile ("hlt");
         }
         // @TODO Flush TLB for user pages? Especially on other cores?
     }

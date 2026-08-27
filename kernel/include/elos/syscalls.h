@@ -199,10 +199,10 @@ void SYS_debug_log(const char* text, u32 length);
 
     @pre ELOS_CAP_HEAP capability is required.
 */
-ELOS_Error SYS_heap_allocate(void** newAddress, u64 size);
+ELOS_Error SYS_heap_allocate(void** newAddress, size_t size);
 ELOS_Error SYS_heap_free(void* oldAddress);
-ELOS_Error SYS_heap_reallocate(void** newAddress, u64 size, void* oldAddress);
-ELOS_Error SYS_heap_map(void* virtAddress, u64 size);
+ELOS_Error SYS_heap_reallocate(void** newAddress, size_t size, void* oldAddress);
+ELOS_Error SYS_heap_map(void* virtAddress, size_t size);
 
 
 /*
@@ -242,7 +242,7 @@ void SYS_sleep_ns(u64 nanoseconds);
 
     @pre ELOS_CAP_SERVICE_SERVER capability is required.
 */
-ELOS_Error SYS_service_create(const char* name, ELOS_ServiceEndpoint* endpoint, u64 queueSize);
+ELOS_Error SYS_service_create(const char* name, ELOS_ServiceEndpoint* endpoint, u32 queueSize);
 
 
 /*
@@ -251,7 +251,7 @@ ELOS_Error SYS_service_create(const char* name, ELOS_ServiceEndpoint* endpoint, 
 
     @pre ELOS_CAP_SERVICE_CLIENT capability is required.
 */
-ELOS_Error SYS_service_connect(const char* name, ELOS_ServiceEndpoint* endpoint, u64 queueSize);
+ELOS_Error SYS_service_connect(const char* name, ELOS_ServiceEndpoint* endpoint, u32 queueSize);
 
 
 /*
@@ -265,7 +265,7 @@ ELOS_Error SYS_service_connect(const char* name, ELOS_ServiceEndpoint* endpoint,
     @param size Size of buffer to send.
     @return ELOS_IPC_FULL if service channel is full. ELOS_INVALID_PARAM if endpoint or data pointer are invalid.
 */
-ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, const void* data, u64 size);
+ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, const void* data, u32 size);
 
 
 /*
@@ -281,7 +281,7 @@ ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, const void* data, u64
         -1 to block until message is received.
     @return ELOS_INVALID_PARAM if handle or data pointer are invalid.
 */
-ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint* senderEndpoint, const void** data, u64* size, u64 timeout_ns);
+ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint* senderEndpoint, const void** data, u32* size, u64 timeout_ns);
 
 
 /*
@@ -289,7 +289,7 @@ ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint*
 
     @pre ELOS_CAP_SHARED_MEMORY capability is required.
 */
-ELOS_Error SYS_shared_memory_create(u64 size, ELOS_SharedMemory* handle);
+ELOS_Error SYS_shared_memory_create(size_t size, ELOS_SharedMemory* handle);
 
 
 /*
@@ -306,7 +306,7 @@ ELOS_Error SYS_shared_memory_grant(ELOS_SharedMemory handle, ELOS_ServiceEndpoin
 
     @pre ELOS_CAP_SHARED_MEMORY capability is required.
 */
-ELOS_Error SYS_shared_memory_info(ELOS_SharedMemory handle, void** buffer, u64* size);
+ELOS_Error SYS_shared_memory_info(ELOS_SharedMemory handle, void** buffer, size_t* size);
 
 
 /*
@@ -520,25 +520,25 @@ typedef enum {
 
 typedef struct {
     u64  fileSize;
+    u64  lastWriteTime_us;
     u32  blockSize;
     bool isDirectory;
     bool readOnly;
-    u64  lastWriteTime_us;
 } ELOS_FileInfo;
 
 typedef struct {
     char name[63];
     u8   name_len;
-    bool isDirectory;
-    bool isReadOnly;
     u64  fileSize;
     u64  lastWriteTime_us;
+    bool isDirectory;
+    bool isReadOnly;
 } ELOS_DirectoryEntry;
 
 typedef struct {
     ELOS_AsyncOperation operation;
     u16 flags;
-    u32 reserved;
+    u32 _reserved;
     u64 userData;
 
     union {

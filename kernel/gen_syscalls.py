@@ -107,10 +107,11 @@ def main(args):
     for ret, name, args in prototypes:
         ret = " ".join(ret.split())
 
-        arg_list = split_args(args)
-        arg_names = [arg_name(a) for a in arg_list]
+        arg_list = [ arg_type_name(a) for a in split_args(args) ]
+        arg_types = [ a[0] for a in arg_list]
+        arg_names = [ a[1] for a in arg_list]
 
-        functions.append((ret, name, arg_list, arg_names))
+        functions.append((ret, name, arg_types, arg_names))
 
     output = f'''
 /*
@@ -141,92 +142,79 @@ typedef enum {
 #endif // ELOS_SYSCALL_IDS_INCLUDE
     '''
 
-
     output += '''
 
 #ifdef ELOS_SYSCALL_IMPL
 #undef ELOS_SYSCALL_IMPL
-
-#define SYSCALL0(ID)              \\
-    asm volatile (                \\
-        "syscall"                 \\
-        : "=a" (rax)              \\
-        : "a" (ID)                \\
-        : "rcx", "r11", "memory"  \\
-    );
-
-#define SYSCALL1(ID, ARG0)        \\
-    asm volatile (                \\
-        "syscall"                 \\
-        : "=a" (rax)              \\
-        : "a" (ID), "D" (ARG0)    \\
-        : "rcx", "r11", "memory"  \\
-    );
-
-#define SYSCALL2(ID, ARG0, ARG1)            \\
-    asm volatile (                          \\
-        "syscall"                           \\
-        : "=a" (rax)                        \\
-        : "a" (ID), "D" (ARG0), "S" (ARG1)  \\
-        : "rcx", "r11", "memory"            \\
-    );
-    
-#define SYSCALL3(ID, ARG0, ARG1, ARG2)                  \\
-    asm volatile (                                      \\
-        "syscall"                                       \\
-        : "=a" (rax)                                    \\
-        : "a" (ID), "D" (ARG0), "S" (ARG1), "d" (ARG2)  \\
-        : "rcx", "r11", "memory"                        \\
-    )
-
-#define SYSCALL4(ID, ARG0, ARG1, ARG2, ARG3)                       \\
-    register u64 r10 asm ("r10") = (u64)(ARG3);                    \\
-    asm volatile (                                                 \\
-        "syscall"                                                  \\
-        : "=a" (rax)                                               \\
-        : "a" (ID), "D" (ARG0), "S" (ARG1), "d" (ARG2), "r" (r10)  \\
-        : "rcx", "r11", "memory"                                   \\
-    )
-
-#define SYSCALL5(ID, ARG0, ARG1, ARG2, ARG3, ARG4)                            \\
-    register u64 r10 asm ("r10") = (u64)(ARG3);                               \\
-    register u64 r8 asm ("r8") = (u64)(ARG4);                                 \\
-    asm volatile (                                                            \\
-        "syscall"                                                             \\
-        : "=a" (rax)                                                          \\
-        : "a" (ID), "D" (ARG0), "S" (ARG1), "d" (ARG2), "r" (r10), "r" (r8)   \\
-        : "rcx", "r11", "memory"                                              \\
-    )
-
     '''
 
 
-    for ret, name, arg_list, arg_names in functions:
+    for ret, name, arg_types, arg_names in functions:
 
         output += f"{ret} {name}("
-        output += ", ".join(arg_list)
+        output += ", ".join([ arg_types[i] + " " + arg_names[i] for i in range(len(arg_types))])
         output += ")\n{\n"
 
         if ret != "void":
-            output += f"    {ret} rax;\n"
+            output += f"    {ret} retv;\n"
         else:
-            output += f"    int rax;\n"
+            output += f"    int retv;\n"
 
         enum_name = "_SYS_" + name[4:].upper()
 
-        argc = len(arg_list)
+        arg_len = len(arg_types)
 
-        if argc == 0:
-            output += f"    SYSCALL0({enum_name});\n"
-        else:
-            output += (
-                f"    SYSCALL{argc}({enum_name}, "
-                + ", ".join(arg_names)
-                + ");\n"
-            )
+
+        #######################
+        #    x86 64-bit ABI
+        #######################
+        output += "#if defined(__x86_64__)\n"
+        
+
+        reg_list = [ "rdi", "rsi", "rdx", "r10", "r8", "r9" ]
+        for i in range(arg_len):
+            output += f'register size_t _arg{i} asm ("{reg_list[i]}") = (size_t){arg_names[i]};\n'
+
+        input_list = ", ".join( [f'"a" ({enum_name})'] + [ f'"r" (_arg{i})' for i in range(arg_len) ])
+
+        output += f'''
+            asm volatile (
+                "syscall"
+                : "=a" (retv)
+                : {input_list}
+                : "rcx", "r11", "memory"
+            );
+        '''
+
+        
+        #######################
+        #    x86 32-bit ABI
+        #######################
+        output += "#else\n" 
+
+        reg_list = [ "ebx", "ecx", "edx", "esi", "edi", "ebp" ]
+        for i in range(arg_len):
+            output += f'register size_t _arg{i} asm ("{reg_list[i]}") = (size_t){arg_names[i]};\n'
+
+            if "u64" == arg_types[i].strip():
+                print(f"WARNING: {name} {arg_types[i]} {arg_names[i]}, 64-bit type in 32-bit ABI is not handled.")
+
+        input_list = ", ".join( [f'"a" ({enum_name})'] + [ f'"r" (_arg{i})' for i in range(arg_len) ])
+
+        output += f'''
+            asm volatile (
+                "syscall"
+                : "=a" (retv)
+                : {input_list}
+                : "memory"
+            );
+        '''
+
+
+        output += "#endif\n"
 
         if ret != "void":
-            output += "    return rax;\n"
+            output += "    return retv;\n"
 
         output += "}\n\n"
 
@@ -280,22 +268,23 @@ def split_args(arg_string):
     return args
 
 
-def arg_name(arg):
+def arg_type_name(arg):
     arg = arg.strip()
 
     if arg == "void":
         return None
 
     # Remove array suffixes
-    arg = re.sub(r'\[[^\]]*\]', '', arg)
+    # syscall signatures don't use arrays
+    # arg = re.sub(r'\[[^\]]*\]', '', arg)
 
     # The last identifier is the variable name
     m = re.search(r'([A-Za-z_][A-Za-z0-9_]*)\s*$', arg)
 
     if not m:
         raise RuntimeError(f"Couldn't determine argument name: {arg}")
-
-    return m.group(1)
+    
+    return arg[:m.span()[0]].strip(), m.group(1)
 
 
 if __name__ == "__main__":

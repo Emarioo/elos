@@ -153,7 +153,7 @@ void kernel_panic(const char* format, ...) {
 
     // @TODO Tell other cores to halt too.
     while (1) {
-        asm(
+        asm volatile (
             "cli\n"
             "hlt\n"
         );

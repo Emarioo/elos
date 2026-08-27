@@ -1,6 +1,15 @@
 Images of done things
 
 
+**2026-08-25, Audio syscalls.**
+
+Can't really show sound... see commit history and check it out for sound?
+(assumes /pkg/wav/dream.wav was packaged in initrd)
+
+**2026-07-?, Doom port.**
+
+Images in README?
+
 **2026-06-01, Start of PRISM compositor.**
 
 ![Start of PRISM compositor](/docs/img/prism_compositor.png)

@@ -144,7 +144,7 @@ void init_pata() {
 
     u16* ptr = (u16*)identify_data;
     int count = 256;
-    asm (
+    asm volatile (
         "mov $0, %%eax\n"
         "mov %%eax, %%es\n"
         "rep insw\n"
@@ -203,7 +203,7 @@ start:
 
     u16* ptr = (u16*)buffer;
     int count = 256;
-    asm (
+    asm volatile (
         "mov $0, %%eax\n"
         "mov %%eax, %%es\n"
         "rep insw\n"

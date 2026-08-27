@@ -7,7 +7,7 @@
 
 #include "stdlib.h"
 #include "stdio.h"
-#include <errno.h>
+// #include <errno.h>
 
 
 
@@ -726,12 +726,12 @@ int remove(const char* _path) {
     requestID = async_submit(&req);
     bool res = async_wait(requestID, &cqe, 0);
     if (!res) {
-        errno = ENOENT;
+        // errno = ENOENT;
         return -1;
     }
 
     if (cqe.error != ELOS_OK) {
-        errno = ENOENT;
+        // errno = ENOENT;
         return -1;
     }
 
@@ -757,12 +757,12 @@ int rename(const char* _oldpath, const char* _newpath) {
     requestID = async_submit(&req);
     bool res = async_wait(requestID, &cqe, 0);
     if (!res) {
-        errno = ENOENT;
+        // errno = ENOENT;
         return -1;
     }
 
     if (cqe.error != ELOS_OK) {
-        errno = ENOENT;
+        // errno = ENOENT;
         return -1;
     }
 
@@ -783,7 +783,7 @@ int mkdir(const char* _path, mode_t mode) {
     requestID = async_submit(&req);
     bool res = async_wait(requestID, &cqe, 0);
     if (!res || cqe.error != ELOS_OK) {
-        errno = ENOENT;
+        // errno = ENOENT;
         printf("mkdir: Could not make %s\n", path);
         return -1;
     }

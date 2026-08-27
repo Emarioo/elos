@@ -238,6 +238,9 @@ def package_elos(release_dir, build_iso = False):
     prism_path      = f"{temp_folder_path}/initrd/pkg/prism/prism.elf"
     term_path       = f"{temp_folder_path}/initrd/pkg/term/term.elf"
     slate_path      = f"{temp_folder_path}/initrd/pkg/slate/slate.elf"
+    
+    win32_loader    = f"{temp_folder_path}/initrd/pkg/win32_loader/win32_loader.elf"
+    
     doom_path       = f"{temp_folder_path}/initrd/pkg/doom/doom.elf"
     wad_path        = f"{temp_folder_path}/initrd/pkg/doom/doom1.wad"
 
@@ -284,6 +287,10 @@ def package_elos(release_dir, build_iso = False):
     def sync5():
         cmd(f"OUTPUT={doom_path} make -f {DOOM_MAKEFILE}")
         cmd(f"objdump -S {doom_path} > doom.dis")
+
+    def sync6():
+        cmd(f"APP_OUTPUT={win32_loader} make -f apps/win32_loader/Makefile")
+        cmd(f"objdump -S {win32_loader} > win32.dis")
     
     threads.append(cmd_async(sync0))
     threads.append(cmd_async(sync1))
@@ -294,6 +301,7 @@ def package_elos(release_dir, build_iso = False):
     threads.append(cmd_async(sync2))
     threads.append(cmd_async(sync3))
     threads.append(cmd_async(sync4))
+    threads.append(cmd_async(sync6))
     if provide_doom:
         threads.append(cmd_async(sync5))
 
@@ -304,6 +312,7 @@ def package_elos(release_dir, build_iso = False):
         (prism_path, "PKG/PRISM/PRISM.ELF"),
         (term_path,  "PKG/TERM/TERM.ELF"),
         (slate_path, "PKG/SLATE/SLATE.ELF"),
+        (win32_loader, "PKG/win32_loader/win32_loader.ELF"),
     ]
     if provide_doom:
         DEPS_SPEC.append((doom_path, "PKG/DOOM/DOOM.ELF"))

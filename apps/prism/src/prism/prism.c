@@ -62,7 +62,7 @@ void prism_loop() {
     ELOS_Error error;
     while (1) {
         const PrismMessage* message;
-        u64 messageSize;
+        u32 messageSize;
         ELOS_ServiceEndpoint senderEndpoint;
 
         error = SYS_service_recv(serviceEndpoint, &senderEndpoint, (const void**)&message, &messageSize, 0);
@@ -155,7 +155,7 @@ Surface surfaces[MAX_SURFACES];
 Surface* create_surface(int width, int height) {
     ELOS_Error error;
 
-    u64 size = width * height * sizeof(u32);
+    size_t size = width * height * sizeof(u32);
     ELOS_SharedMemory handle;
     error = SYS_shared_memory_create(size, &handle);
     if (error != ELOS_OK) {

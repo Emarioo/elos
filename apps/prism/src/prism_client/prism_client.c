@@ -89,7 +89,7 @@ PrismSurface* prism_createSurface(PrismInstance* instance, int width, int height
     }
 
     const PrismMessage* response;
-    u64 responseSize;
+    u32 responseSize;
 
     // @TODO Timeout doesn't work at the moment. When it does use that instead of while loop.
     while (1) {
@@ -107,8 +107,8 @@ PrismSurface* prism_createSurface(PrismInstance* instance, int width, int height
         return NULL;
     }
 
-    void* buffer;
-    u64   size;
+    void*  buffer;
+    size_t size;
 
     error = SYS_shared_memory_info(response->createSurfaceResponse.sharedMemoryHandle, &buffer, &size);
     if (error != ELOS_OK) {

@@ -11,4 +11,19 @@ What I value in an operating system is:
 - Snappy, quick, flexible GUI. ALT+TAB windows on Windows is slow. Tiling managers on linux and workspaces are great. Question is how to go beyond this to more greatness. I can't help but awe at graphs and transparent windows you see in sci-fi movies.
 - Most important of all simplicity. If an operating system is small and simple then it is easy to code for, easy to maintain, easy to expand, easy to reason about security, harder to introduce bugs, and in general more performant because less stuff going on.
 
-A good quote from ChatGPT (or wherever it hallucinated it from): "What guarantees can I make that the desktop remains responsive when everything else is on fire?"
+A good quote from ChatGPT (or wherever it hallucinated it from): "What guarantees can I make so the desktop remains responsive when everything else is on fire?"
+
+
+What you want to do in an OS
+
+- Watch videos
+- Browse the web
+- Play games
+- Write text to file in an editor
+- Listen to music
+- Record audio
+- Record screen
+- Move around files
+- Configure OS (theme, font, user)
+- Download applications (compilers, browsers, games)
+- Write driver for new hardware like VR trackers, webcam.

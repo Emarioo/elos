@@ -19,7 +19,8 @@ The categories are:
 Tasks related to kernel and operating system
 
 ## @current
-- [ ] Kernel audio syscalls.
+- [ ] PvZ port.
+      - [ ] 32-bit user mode. GDT, syscalls, structures need to be updated.
 - [ ] Audio server.
 - [ ] Separate CPU architecture specific code to separate folder/files.
 - [ ] System console.
@@ -29,13 +30,14 @@ Tasks related to kernel and operating system
 - [ ] Terminal.
 - [ ] PRISM Compositor, moving and resizing windows, double buffering, transparent windows, input passthrough. Keyboard and mouse input.
 - [ ] Driver for file system, disk device.
-- [ ] Give interrupt routines some structure. Functions enable/disable/set them. Add redirection entries etc.
 - [ ] Kernel mouse syscalls. (maybe generic input syscalls for keyboard, controller, mouse?)
 - [ ] API to read/write disk device directlty from user space. Requires special capability. Kernel handles AHCI, NVMe details.
       And ensures the device isn't used or mounted by anyone else.
 - [ ] [Kernel Modules](./problems.md#kernel-modules).
 - [ ] Plants VS Zombies port.
 - [x] DOOM port.
+- [x] Kernel audio syscalls.
+- [x] Give interrupt routines some structure. Functions enable/disable/set them. Add redirection entries etc.
 
 ## @urgent
 - [ ] build.py clean, make clean do not work properly.
@@ -55,6 +57,7 @@ Tasks related to kernel and operating system
 ## @project
 - [x] Clearly state dependencies of this project. Do fresh Ubuntu install in VirtualBox and compile this project, see what you need.
 - [ ] A way to compile the project on Windows? Are there tools for it or is Linux the only?
+- [ ] A way to compile the project on ELOS.
 
 ## @optimize
 
@@ -65,6 +68,7 @@ Tasks related to kernel and operating system
 ## @feature
 - [ ] Provide C compiler in OS by default. (TinyCC? how do we compile it?)
 - [ ] Provide Git by default. (build from source using TinyCC?)
+- [ ] Provide Tar by default, or some archive/compression tool (libarchive is a good start).
 
 
 ## OS system settings

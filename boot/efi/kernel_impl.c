@@ -268,12 +268,3 @@ int netdrv_send(NetBoot_Device device, void* buffer, int size) {
     return size;
 }
 
-
-void* memcpy(void* dst, const void* src, size_t size) {
-    if (dst == src)
-        return dst;
-    for (int i=0;i<size;i++) {
-        ((char*)dst)[i] = ((char*)src)[i];
-    }
-    return dst;
-}

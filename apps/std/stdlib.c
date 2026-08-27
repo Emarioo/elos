@@ -8,10 +8,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdarg.h>
-#include <errno.h>
+// #include <errno.h>
 #include <stdio.h>
 
-#include <ctype.h>
+// #include <ctype.h>
 
 #include "async_io.h"
 
@@ -85,6 +85,8 @@ int atoi(const char *s)
 
     return value * sign;
 }
+
+#define isspace(C) ( (C) == ' ' || (C) == '\n' || (C) == '\r' || (C) == '\t' )
 
 double atof(const char *str) {
     while (isspace((unsigned char)*str))
@@ -186,7 +188,7 @@ const unsigned short int** __ctype_b_loc(void) {
 
 int system(const char* command) {
     printf("system(\"%s\")\n", command ? command : "(null)");
-    errno = ENOSYS;
+    // errno = ENOSYS;
     return -1;
 }
 

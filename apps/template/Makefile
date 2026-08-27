@@ -78,7 +78,7 @@ $(INT_DIR)/%.o: $(ROOT)/%.c | $(INT_DIR)
 
 $(INT_DIR)/%.o: $(ROOT)/%.s | $(INT_DIR)
 	$(SILENT) mkdir -p $(@D)
-	$(SILENT) $(AS) $(ASFLAGS) -c -MD $(patsubst %.o,%.d,$@) -o $@ $<
+	$(SILENT) $(AS) $(AFLAGS) -c -MD $(patsubst %.o,%.d,$@) -o $@ $<
 
 $(APP_OUTPUT): $(OBJ_FILES) | $(INT_DIR)
 	$(SILENT) mkdir -p $(@D)

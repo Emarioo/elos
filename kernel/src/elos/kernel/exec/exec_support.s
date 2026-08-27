@@ -189,6 +189,9 @@ syscall_handler:
     pop r11
     mov dil, gs:RESCHEDULE_OFFSET
 
+    // @TODO @SECURITY Before returning we must reset touched registers because
+    //   they may contain kernel information.
+
     cmp dil, 0
     jnz syscall_reschedule
 

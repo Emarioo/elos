@@ -299,7 +299,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
                 }
                 fmt_int(buf, &n, size, num, base, width, flags);
             } else if (c == 'p') {
-                num = (long long) va_arg(ap, void *);
+                num = (size_t) va_arg(ap, void *);
                 base = 16;
                 flags |= F_SMALL | F_ALTERNATE;
                 fmt_int(buf, &n, size, num, base, width, flags);
