@@ -269,28 +269,24 @@ def package_elos(release_dir, build_iso = False):
         cmd(f"make -f {ROOT}/kernel/Makefile INT_DIR={INT_DIR}/kernel KERNEL_IMAGE={kernel_path} KERNEL_ELF={kernel_elf_path}")
     
     def sync2():
-        # import apps.prism.build
-        # apps.prism.build.main(prism_path)
         cmd(f"APP_OUTPUT={prism_path} make -f apps/prism/Makefile")
-        cmd(f"objdump -S {prism_path} > prism.dis")
+        cmd_back(f"objdump -S {prism_path} > prism.dis")
         
     def sync3():
-        # import apps.terminal.build
-        # apps.terminal.build.main(term_path)
         cmd(f"APP_OUTPUT={term_path} make -f apps/terminal/Makefile")
-        cmd(f"objdump -S {term_path} > term.dis")
+        cmd_back(f"objdump -S {term_path} > term.dis")
 
     def sync4():
         cmd(f"APP_OUTPUT={slate_path} make -f apps/slate/Makefile")
-        cmd(f"objdump -S {slate_path} > slate.dis")
+        cmd_back(f"objdump -S {slate_path} > slate.dis")
 
     def sync5():
         cmd(f"OUTPUT={doom_path} make -f {DOOM_MAKEFILE}")
-        cmd(f"objdump -S {doom_path} > doom.dis")
+        cmd_back(f"objdump -S {doom_path} > doom.dis")
 
     def sync6():
         cmd(f"APP_OUTPUT={win32_loader} make -f apps/win32_loader/Makefile")
-        cmd(f"objdump -S {win32_loader} > win32.dis")
+        cmd_back(f"objdump -S {win32_loader} > win32.dis")
     
     threads.append(cmd_async(sync0))
     threads.append(cmd_async(sync1))
@@ -371,7 +367,7 @@ def package_elos(release_dir, build_iso = False):
         cmd(f"cp {bootx64_path} bin/boot.elf")
     if os.path.exists(kernel_elf_path):
         cmd(f"cp {kernel_elf_path} bin/kernel.elf")
-        cmd(f"objdump -Sr bin/kernel.elf > bin/kernel.dis")
+        cmd_back(f"objdump -Sr bin/kernel.elf > bin/kernel.dis")
 
     wait_pool(threads)
 
@@ -438,7 +434,8 @@ def make_fat(out_path: str, deps_spec: list[tuple[str,str]]):
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     os.makedirs(INT_DIR, exist_ok=True)
 
-    cmd(f"dd if=/dev/zero of={out_path} bs=1k count={math.ceil(fatSize/1024)} conv=fsync")
+    cmd(f"dd if=/dev/zero of={out_path} bs=1k count={math.ceil(fatSize/1024)}")
+    # cmd(f"truncate {out_path} -s {1024*math.ceil(fatSize/1024)}")
     cmd(f"mformat -i {out_path} ::")
 
     # Copy files
@@ -546,6 +543,11 @@ def cmd(c):
         os._exit(1)
 
     return 0
+
+def cmd_back(c):
+    def ext():
+        cmd(c)
+    cmd_async(ext)
 
 if __name__ == "__main__":
     main()

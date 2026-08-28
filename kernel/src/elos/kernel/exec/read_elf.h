@@ -12,6 +12,8 @@ struct ElfObject {
     u64   image_size;
     void* entry_point;
 
+    bool compatibilityMode;
+
     PageTable* pageTable;
 
     // void* text;

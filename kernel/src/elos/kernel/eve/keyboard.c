@@ -60,7 +60,7 @@ void keyboard_handler(u32 isr_number, InterruptFrame* frame) {
         if (keycode == g_superKey) {
             g_superKeyIsDown = pressed;
         }
-        // printf("%d=%d %d %d %d scan=%d\n", keyEvent.keycode, g_superKey, keyEvent.pressed, keyEvent.mods, g_superKeyIsDown, keyEvent.scancode);
+        // printf("code=%d sup=%d pres=%d isdo=%d scan=%d\n", keycode, g_superKey, pressed, g_superKeyIsDown, scancode);
         if (keycode == ELOSKEY_T && pressed && g_superKeyIsDown) {
             SCON_enable(!SCON_is_enabled());
             continue;

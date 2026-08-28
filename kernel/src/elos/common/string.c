@@ -87,13 +87,13 @@ size_t strnlen(const char* ptr, size_t maxlen) {
 void* memcpy(void* dst, const void* src, size_t size) {
     if (dst == src)
         return dst;
-    if ((uintptr_t)dst % 8 == 0 && (uintptr_t)src % 8 == 0 && size % 8 == 0) {
+    if ((size_t)dst % sizeof(size_t) == 0 && (size_t)src % sizeof(size_t) == 0 && size % sizeof(size_t) == 0) {
         // aligned
-        for (int i=0;i<(int)size/8;i++) {
-            ((uintptr_t*)dst)[i] = ((uintptr_t*)src)[i];
+        for (size_t i=0;i<size/sizeof(size_t);i++) {
+            ((size_t*)dst)[i] = ((size_t*)src)[i];
         }
     } else {
-        for (int i=0;i<(int)size;i++) {
+        for (size_t i=0;i<size;i++) {
             ((char*)dst)[i] = ((char*)src)[i];
         }
     }
@@ -104,24 +104,24 @@ void* memmove(void* dst, const void* src, size_t size) {
     if (dst == src)
         return dst;
     
-    if ((uintptr_t)dst % 8 == 0 && (uintptr_t)src % 8 == 0 && size % 8 == 0) {
+    if ((size_t)dst % sizeof(size_t) == 0 && (size_t)src % sizeof(size_t) == 0 && size % sizeof(size_t) == 0) {
         // aligned
         if (dst < src) {
-            for (int i=0;i<(int)size/8;i++) {
-                ((uintptr_t*)dst)[i] = ((uintptr_t*)src)[i];
+            for (size_t i=0;i<size/sizeof(size_t);i++) {
+                ((size_t*)dst)[i] = ((size_t*)src)[i];
             }
         } else {
-            for (int i=(int)size/8-1;i>=0;i--) {
-                ((uintptr_t*)dst)[i] = ((uintptr_t*)src)[i];
+            for (size_t i=size/sizeof(size_t)-1;i>=0;i--) {
+                ((size_t*)dst)[i] = ((size_t*)src)[i];
             }
         }
     } else {
         if (dst < src) {
-            for (int i=0;i<(int)size;i++) {
+            for (size_t i=0;i<size;i++) {
                 ((char*)dst)[i] = ((char*)src)[i];
             }
         } else {
-            for (int i=(int)size-1;i>=0;i--) {
+            for (size_t i=size-1;i>=0;i--) {
                 ((char*)dst)[i] = ((char*)src)[i];
             }
         }
@@ -130,7 +130,7 @@ void* memmove(void* dst, const void* src, size_t size) {
 }
 
 int memcmp(const void* dst, const void* src, size_t size) {
-    for(int i=0;i<size;i++) {
+    for(size_t i=0;i<size;i++) {
         if ( ((char*)dst)[i] != ((char*)src)[i] )
             // Did i flip the subtraction?
             return ((char*)dst)[i] - ((char*)src)[i];

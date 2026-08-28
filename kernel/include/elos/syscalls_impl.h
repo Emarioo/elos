@@ -61,7 +61,7 @@ register size_t _arg0 asm ("rdi") = (size_t)capabilities;
 register size_t _arg0 asm ("ebx") = (size_t)capabilities;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_CAPABILITIES), "r" (_arg0)
                 : "memory"
@@ -85,7 +85,7 @@ register size_t _arg0 asm ("rdi") = (size_t)capabilities;
 register size_t _arg0 asm ("ebx") = (size_t)capabilities;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_REQUEST_CAPABILITIES), "r" (_arg0)
                 : "memory"
@@ -111,7 +111,7 @@ register size_t _arg0 asm ("ebx") = (size_t)text;
 register size_t _arg1 asm ("ecx") = (size_t)length;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_DEBUG_LOG), "r" (_arg0), "r" (_arg1)
                 : "memory"
@@ -137,7 +137,7 @@ register size_t _arg0 asm ("ebx") = (size_t)newAddress;
 register size_t _arg1 asm ("ecx") = (size_t)size;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_HEAP_ALLOCATE), "r" (_arg0), "r" (_arg1)
                 : "memory"
@@ -162,7 +162,7 @@ register size_t _arg0 asm ("rdi") = (size_t)oldAddress;
 register size_t _arg0 asm ("ebx") = (size_t)oldAddress;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_HEAP_FREE), "r" (_arg0)
                 : "memory"
@@ -191,7 +191,7 @@ register size_t _arg1 asm ("ecx") = (size_t)size;
 register size_t _arg2 asm ("edx") = (size_t)oldAddress;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_HEAP_REALLOCATE), "r" (_arg0), "r" (_arg1), "r" (_arg2)
                 : "memory"
@@ -218,7 +218,7 @@ register size_t _arg0 asm ("ebx") = (size_t)virtAddress;
 register size_t _arg1 asm ("ecx") = (size_t)size;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_HEAP_MAP), "r" (_arg0), "r" (_arg1)
                 : "memory"
@@ -243,7 +243,7 @@ register size_t _arg0 asm ("rdi") = (size_t)frameBuffer;
 register size_t _arg0 asm ("ebx") = (size_t)frameBuffer;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_DEFAULT_MONITOR), "r" (_arg0)
                 : "memory"
@@ -268,7 +268,7 @@ register size_t _arg0 asm ("rdi") = (size_t)tps;
 register size_t _arg0 asm ("ebx") = (size_t)tps;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_TICKS_PER_SECOND), "r" (_arg0)
                 : "memory"
@@ -293,7 +293,7 @@ register size_t _arg0 asm ("rdi") = (size_t)nanoseconds;
 register size_t _arg0 asm ("ebx") = (size_t)nanoseconds;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_SLEEP_NS), "r" (_arg0)
                 : "memory"
@@ -321,7 +321,7 @@ register size_t _arg1 asm ("ecx") = (size_t)endpoint;
 register size_t _arg2 asm ("edx") = (size_t)queueSize;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_SERVICE_CREATE), "r" (_arg0), "r" (_arg1), "r" (_arg2)
                 : "memory"
@@ -350,7 +350,7 @@ register size_t _arg1 asm ("ecx") = (size_t)endpoint;
 register size_t _arg2 asm ("edx") = (size_t)queueSize;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_SERVICE_CONNECT), "r" (_arg0), "r" (_arg1), "r" (_arg2)
                 : "memory"
@@ -379,7 +379,7 @@ register size_t _arg1 asm ("ecx") = (size_t)data;
 register size_t _arg2 asm ("edx") = (size_t)size;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_SERVICE_SEND), "r" (_arg0), "r" (_arg1), "r" (_arg2)
                 : "memory"
@@ -412,7 +412,7 @@ register size_t _arg3 asm ("esi") = (size_t)size;
 register size_t _arg4 asm ("edi") = (size_t)timeout_ns;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_SERVICE_RECV), "r" (_arg0), "r" (_arg1), "r" (_arg2), "r" (_arg3), "r" (_arg4)
                 : "memory"
@@ -439,7 +439,7 @@ register size_t _arg0 asm ("ebx") = (size_t)size;
 register size_t _arg1 asm ("ecx") = (size_t)handle;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_SHARED_MEMORY_CREATE), "r" (_arg0), "r" (_arg1)
                 : "memory"
@@ -466,7 +466,7 @@ register size_t _arg0 asm ("ebx") = (size_t)handle;
 register size_t _arg1 asm ("ecx") = (size_t)endpoint;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_SHARED_MEMORY_GRANT), "r" (_arg0), "r" (_arg1)
                 : "memory"
@@ -495,7 +495,7 @@ register size_t _arg1 asm ("ecx") = (size_t)buffer;
 register size_t _arg2 asm ("edx") = (size_t)size;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_SHARED_MEMORY_INFO), "r" (_arg0), "r" (_arg1), "r" (_arg2)
                 : "memory"
@@ -522,7 +522,7 @@ register size_t _arg0 asm ("ebx") = (size_t)minimumEvents;
 register size_t _arg1 asm ("ecx") = (size_t)buffer;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_REQUEST_USER_EVENT_BUFFER), "r" (_arg0), "r" (_arg1)
                 : "memory"
@@ -547,7 +547,7 @@ register size_t _arg0 asm ("rdi") = (size_t)exitCode;
 register size_t _arg0 asm ("ebx") = (size_t)exitCode;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_EXIT), "r" (_arg0)
                 : "memory"
@@ -571,7 +571,7 @@ register size_t _arg0 asm ("rdi") = (size_t)device;
 register size_t _arg0 asm ("ebx") = (size_t)device;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_DEFAULT_AUDIO), "r" (_arg0)
                 : "memory"
@@ -598,7 +598,7 @@ register size_t _arg0 asm ("ebx") = (size_t)device;
 register size_t _arg1 asm ("ecx") = (size_t)info;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_AUDIO_INFO), "r" (_arg0), "r" (_arg1)
                 : "memory"
@@ -629,7 +629,7 @@ register size_t _arg2 asm ("edx") = (size_t)bufferSize;
 register size_t _arg3 asm ("esi") = (size_t)buffer;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_CREATE_AUDIO_BUFFER), "r" (_arg0), "r" (_arg1), "r" (_arg2), "r" (_arg3)
                 : "memory"
@@ -656,7 +656,7 @@ register size_t _arg0 asm ("ebx") = (size_t)device;
 register size_t _arg1 asm ("ecx") = (size_t)buffer;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_DESTROY_AUDIO_BUFFER), "r" (_arg0), "r" (_arg1)
                 : "memory"
@@ -687,7 +687,7 @@ register size_t _arg2 asm ("edx") = (size_t)requestRing;
 register size_t _arg3 asm ("esi") = (size_t)completionRing;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_CREATE_ASYNC_RINGS), "r" (_arg0), "r" (_arg1), "r" (_arg2), "r" (_arg3)
                 : "memory"
@@ -714,7 +714,7 @@ register size_t _arg0 asm ("ebx") = (size_t)requestRing;
 register size_t _arg1 asm ("ecx") = (size_t)completionRing;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_DESTROY_ASYNC_RINGS), "r" (_arg0), "r" (_arg1)
                 : "memory"
@@ -739,7 +739,7 @@ register size_t _arg0 asm ("rdi") = (size_t)requestRing;
 register size_t _arg0 asm ("ebx") = (size_t)requestRing;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_SUBMIT_ASYNC_RING), "r" (_arg0)
                 : "memory"
@@ -766,7 +766,7 @@ register size_t _arg0 asm ("ebx") = (size_t)completionRing;
 register size_t _arg1 asm ("ecx") = (size_t)timeout_ns;
 
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : "a" (_SYS_WAIT_ASYNC_RING), "r" (_arg0), "r" (_arg1)
                 : "memory"

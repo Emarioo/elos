@@ -56,7 +56,8 @@ u64 ticks_per_second;
 void _start() {
     SYS_ticks_per_second(&ticks_per_second);
 
-    printf("Hello world %llu MHz\n", ticks_per_second / 0x100000LU);
+    printf("Hello from 32-bit mode, %llu MHz\n", ticks_per_second / 0x100000LU);
 
+    SYS_exit(5);
 }
 

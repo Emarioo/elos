@@ -70,6 +70,11 @@ void init_paging(BootAPI* boot_api) {
     //   Marking kernel pages global means they don't get flushed when PCID differs since we
     //   want them to be the same for every page table in every process. (no need to flush)
 
+    // @TODO Implement higher-half kernel.
+    //    All physical pages are mapped at 0xFFFF00000000 (or wherver is reasonable).
+    //    Kernel can access user and core kernel physical pages at the same time without swithing page tables
+    //    and temporarily mapping in user pages in a dedicated kernel page table.
+
     g_kernelPageTable = get_fixed_table();
     Page* rootTable = g_kernelPageTable;
 

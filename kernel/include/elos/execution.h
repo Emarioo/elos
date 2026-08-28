@@ -15,6 +15,7 @@ typedef struct {
     bool            used;
     bool            userSpace;
     bool            waitingForIO;
+    bool            compatMode;
     u64             sleepUntilTick;
 
     const char*     elfBaseName;
@@ -23,8 +24,9 @@ typedef struct {
 
 } EXEC_Thread;
 
-#define THREAD_LIMIT 32
 #define CORE_LIMIT 32
+#define THREAD_LIMIT 32
+#define IDLE_THREAD_INDEX THREAD_LIMIT
 
 typedef struct {
     // @IMPORTANT DO NOT MOVE AROUND THESE FIELDS.
@@ -35,8 +37,7 @@ typedef struct {
     
     // Free to modify, not used by assembly
     u32   syscall_stack_size;
-    EXEC_Thread threads[THREAD_LIMIT];
-    EXEC_Thread idleThread; // kernel idle thread
+    EXEC_Thread threads[THREAD_LIMIT + 1];
     int active_thread;
     volatile u32 thread_lock;
 } EXEC_Core;
@@ -67,6 +68,7 @@ void EXEC_timer_handler(ContextFrame* frame);
 u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 arg5);
 
 void syscall_handler(); // defined in exec_support.s
+void syscall_handler32(); // defined in exec_support.s
 
 void kernel_thread_reschedule(); // defined in exec_support.s
 

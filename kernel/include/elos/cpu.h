@@ -12,10 +12,11 @@
 #define KERNEL_CODE_SEGMENT 0x8
 #define KERNEL_DATA_SEGMENT 0x10
 // Theoretical segment you might want, aligns nicely with syscall/sysret
-#define USER_CODE_COMPATIBILITY_SEGMENT   0x18
+#define USER_CODE_COMPATIBILITY_SEGMENT  0x18
 #define USER_DATA_SEGMENT   0x20
 #define USER_CODE_SEGMENT   0x28
-#define TASK_STATE_SEGMENT  0x30
+#define USER_DATA_COMPATIBILITY_SEGMENT  0x30
+#define TASK_STATE_SEGMENT  0x38
 #define LAST_SEGMENT TASK_STATE_SEGMENT
 // task state takes up two slots
 
@@ -48,11 +49,22 @@ typedef struct {
     u64 rax;
     u64 rbp;
 
-    u64 rip;
-    u64 cs;
-    u64 rflags;
-    u64 rsp;
-    u64 ss;
+    union {
+        struct {
+            u64 rip;
+            u64 cs;
+            u64 rflags;
+            u64 rsp;
+            u64 ss;
+        };
+        struct {
+            u32 eip;
+            u32 cs;
+            u32 eflags;
+            u32 esp;
+            u32 ss;
+        } compat;
+    };
 } ContextFrame;
 
 
@@ -104,6 +116,8 @@ extern u64 g_timer_frequency_ns;
 void CPU_schedule_timer_interrupt(u64 nanoseconds);
 
 
+void timer_isr();
+void timer_isr_ret32();
 
 
 // @TODO Move sync primitives elsewhere.

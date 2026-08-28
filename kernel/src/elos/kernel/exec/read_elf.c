@@ -91,6 +91,10 @@ exit:
     return returnValue;
 }
 
+#define EHDR_FIELD(V,F) (elfHeader->e_ident[EI_CLASS] == ELFCLASS64 ? ((Elf64_Ehdr*)(V))->F : ((Elf32_Ehdr*)(V))->F )
+#define SHDR_FIELD(V,F) (elfHeader->e_ident[EI_CLASS] == ELFCLASS64 ? ((Elf64_Shdr*)(V))->F : ((Elf32_Shdr*)(V))->F )
+#define SHDR_INDEX(A,I) (elfHeader->e_ident[EI_CLASS] == ELFCLASS64 ? ((Elf64_Shdr*)(A) + (I)) : (Elf64_Shdr*)((Elf32_Shdr*)(A) + (I)) )
+#define RELA_FIELD(V,F) (elfHeader->e_ident[EI_CLASS] == ELFCLASS64 ? ((Elf64_Rela*)(V))->F : ((Elf32_Rela*)(V))->F )
 
 bool parse_elf(ParseContext* ctx) {
     bool returnValue = false;
@@ -99,43 +103,44 @@ bool parse_elf(ParseContext* ctx) {
     if (memcmp(elfHeader->e_ident, ELFMAG,4)) {
         goto exit;
     }
-    if (elfHeader->e_ident[EI_CLASS] != ELFCLASS64) {
-        goto exit;
-    }
     if (elfHeader->e_ident[EI_DATA] != ELFDATA2LSB) {
+        printf("Bad elf header %s\n", ctx->path);
         goto exit;
     }
     if (elfHeader->e_ident[EI_VERSION] != EV_CURRENT) {
+        printf("Bad elf header %s\n", ctx->path);
         goto exit;
     }
     if (elfHeader->e_type != ET_EXEC && elfHeader->e_type != ET_DYN) {
+        printf("Bad elf header %s\n", ctx->path);
         goto exit;
     }
-    if (elfHeader->e_machine != EM_X86_64) {
+    if (elfHeader->e_machine != EM_X86_64 && elfHeader->e_machine != EM_386) {
+        printf("Bad elf header %s\n", ctx->path);
         goto exit;
     }
 
     // printf("etype=%d emach=%d shnum=%d\n", elfHeader->e_type, elfHeader->e_machine, elfHeader->e_shnum);
 
-    Elf64_Shdr* sections = (Elf64_Shdr*)(ctx->fileData + elfHeader->e_shoff);
+    Elf64_Shdr* sections = (Elf64_Shdr*)(ctx->fileData + EHDR_FIELD(elfHeader, e_shoff));
     
-    Elf64_Shdr* sctionStringTable = &sections[elfHeader->e_shstrndx];
+    Elf64_Shdr* sctionStringTable = SHDR_INDEX(sections, EHDR_FIELD(elfHeader, e_shstrndx));
 
-    char* sectionNames = (char*)(ctx->fileData + sctionStringTable->sh_offset);
+    char* sectionNames = (char*)(ctx->fileData + SHDR_FIELD(sctionStringTable, sh_offset));
 
     u64 vaddr_low = -1;
     u64 vaddr_high = 0;
-    for (int si = 1; si < elfHeader->e_shnum; si++) {
-        Elf64_Shdr* section = &sections[si];
-        const char* name = &sectionNames[section->sh_name];
+    for (int si = 1; si < EHDR_FIELD(elfHeader, e_shnum); si++) {
+        Elf64_Shdr* section = SHDR_INDEX(sections, si);
+        const char* name = &sectionNames[SHDR_FIELD(section, sh_name)];
 
         if (!strcmp(name, ".text")
             || !strcmp(name, ".rodata")
             || !strcmp(name, ".data")
             || !strcmp(name, ".bss")
         ) {
-            vaddr_low = min(vaddr_low, section->sh_addr);
-            vaddr_high = max(vaddr_high, section->sh_addr + section->sh_size);
+            vaddr_low = min(vaddr_low, SHDR_FIELD(section, sh_addr));
+            vaddr_high = max(vaddr_high, SHDR_FIELD(section, sh_addr) + SHDR_FIELD(section, sh_size));
         }
     }
 
@@ -189,58 +194,68 @@ bool parse_elf(ParseContext* ctx) {
     // #define MAPPED printf("ELFLOAD %zx:%zx\n", vaddr, vaddr + section->sh_size);
 
     // first section is NULL
-    for (int si = 1; si < elfHeader->e_shnum; si++) {
-        Elf64_Shdr* section = &sections[si];
+    for (int si = 1; si < EHDR_FIELD(elfHeader, e_shnum); si++) {
+        Elf64_Shdr* section = SHDR_INDEX(sections, si);
+        size_t sectionSize = SHDR_FIELD(section, sh_size);
 
-        const char* name = &sectionNames[section->sh_name];
-        // printf("%s: %d bytes\n", name, section->sh_size);
+        const char* name = &sectionNames[SHDR_FIELD(section, sh_name)];
+        // printf("%s: %d bytes\n", name, sectionSize);
 
-        u8* vaddr = (u8*)virt_image_base + section->sh_addr;
-        u8* paddr = (u8*)phys_image_base + section->sh_addr;
-        u8* src = ctx->fileData + section->sh_offset;
+        u8* vaddr = (u8*)virt_image_base + SHDR_FIELD(section, sh_addr);
+        u8* paddr = (u8*)phys_image_base + SHDR_FIELD(section, sh_addr);
+        u8* src = ctx->fileData + SHDR_FIELD(section, sh_offset);
 
         // @TODO Check that the virtual addresses for sections don't overlap in pages.
         //    Issues with exec/read only flags otherwise.
 
+
         if (!strcmp(name, ".text")) {
             MAPPED
-            PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE|PMEM_FLAG_READ_ONLY|PMEM_FLAG_EXECUTABLE);
-            memcpy(vaddr, src, section->sh_size);
+            PMEM_map_memory(pageTable, vaddr, paddr, sectionSize, PMEM_FLAG_USER_SPACE|PMEM_FLAG_READ_ONLY|PMEM_FLAG_EXECUTABLE);
+            memcpy(vaddr, src, sectionSize);
         } else if (!strcmp(name, ".rodata")) {
             MAPPED
-            PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE|PMEM_FLAG_READ_ONLY);
-            memcpy(vaddr, src, section->sh_size);
+            PMEM_map_memory(pageTable, vaddr, paddr, sectionSize, PMEM_FLAG_USER_SPACE|PMEM_FLAG_READ_ONLY);
+            memcpy(vaddr, src, sectionSize);
         } else if (!strcmp(name, ".data")) {
             MAPPED
-            PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE);
-            memcpy(vaddr, src, section->sh_size);
+            PMEM_map_memory(pageTable, vaddr, paddr, sectionSize, PMEM_FLAG_USER_SPACE);
+            memcpy(vaddr, src, sectionSize);
         } else if (!strcmp(name, ".data.rel.ro")) {
             MAPPED
-            PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE|PMEM_FLAG_READ_ONLY);
-            memcpy(vaddr, src, section->sh_size);
+            PMEM_map_memory(pageTable, vaddr, paddr, sectionSize, PMEM_FLAG_USER_SPACE|PMEM_FLAG_READ_ONLY);
+            memcpy(vaddr, src, sectionSize);
         } else if (!strcmp(name, ".bss")) {
             MAPPED
-            PMEM_map_memory(pageTable, vaddr, paddr, section->sh_size, PMEM_FLAG_USER_SPACE);
-            memset(vaddr, 0, section->sh_size);
+            PMEM_map_memory(pageTable, vaddr, paddr, sectionSize, PMEM_FLAG_USER_SPACE);
+            memset(vaddr, 0, sectionSize);
         } else if (strstr(name, ".rela")) {
             relSection = section;
         }
     }
 
     if (relSection) {
-        Elf64_Rela* relocations = (Elf64_Rela*)(ctx->fileData + relSection->sh_offset);
-        int relCount = relSection->sh_size / relSection->sh_entsize;
+        Elf64_Rela* relocations = (Elf64_Rela*)(ctx->fileData + SHDR_FIELD(relSection, sh_offset));
+        int relCount = SHDR_FIELD(relSection, sh_size) / SHDR_FIELD(relSection, sh_entsize);
         for (int i=0;i<relCount;i++) {
-            Elf64_Rela* rela = (Elf64_Rela*)((char*)relocations + relSection->sh_entsize * i);
-            int sym = ELF64_R_SYM(rela->r_info);
-            int type = ELF64_R_TYPE(rela->r_info);
+            Elf64_Rela* rela = (Elf64_Rela*)((char*)relocations + SHDR_FIELD(relSection, sh_entsize) * i);
+            int sym;
+            int type;
+
+            if (elfHeader->e_ident[EI_CLASS] == ELFCLASS64) {
+                sym = ELF64_R_SYM(RELA_FIELD(rela, r_info));
+                type = ELF64_R_TYPE(RELA_FIELD(rela, r_info));
+            } else {
+                sym = ELF32_R_SYM(RELA_FIELD(rela, r_info));
+                type = ELF32_R_TYPE(RELA_FIELD(rela, r_info));
+            }
             
 
             if (type == R_X86_64_RELATIVE) {
-                u64* pos = (u64*)((u8*)virt_image_base + rela->r_offset);
-                *pos = (u64)((u8*)virt_image_base + rela->r_addend);
+                u64* pos = (u64*)((u8*)virt_image_base + RELA_FIELD(rela, r_offset));
+                *pos = (u64)((u8*)virt_image_base + RELA_FIELD(rela, r_addend));
             } else {
-                printf("WARNING: Unhandled relocation sym=%d type=%d addend=%x off=%x\n", sym, type, (int)rela->r_addend, (int)rela->r_offset);
+                printf("WARNING: Unhandled relocation sym=%d type=%d addend=%x off=%x\n", sym, type, (int)RELA_FIELD(rela, r_addend), (int)RELA_FIELD(rela, r_offset));
             }
         }
     }
@@ -249,8 +264,9 @@ bool parse_elf(ParseContext* ctx) {
     ctx->object->virt_image_base = virt_image_base;
     ctx->object->phys_image_base = phys_image_base;
     ctx->object->image_size = image_size;
-    ctx->object->entry_point = (u8*)virt_image_base + elfHeader->e_entry;
+    ctx->object->entry_point = (u8*)virt_image_base + EHDR_FIELD(elfHeader, e_entry);
     ctx->object->pageTable = pageTable;
+    ctx->object->compatibilityMode = elfHeader->e_ident[EI_CLASS] == ELFCLASS32;
 
     returnValue = true;
 

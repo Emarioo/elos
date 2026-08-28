@@ -246,6 +246,9 @@ exit_default_monitor:
     return returnValue;
 }
 
+#define SET_ADDRESS_SIZE_TYPE(VAR, VAL) \
+    ( thread->compatMode ? (*(u32*)(VAR) = (u32)(size_t)(VAL)) : (*(size_t*)(VAR) = (size_t)VAL) )
+
 u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 arg5) {
     u64 returnValue = ELOS_ERR_INVALID_SYSCALL;
     u64 _syscall_id;
@@ -255,7 +258,17 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
     );
     ELOS_SyscallID syscall_id = _syscall_id;
 
+    // u32 coreIndex = CPU_get_core_index();
+    // EXEC_Core* core = &cores[coreIndex];
+    // EXEC_Thread* activeThread = &core->threads[core->active_thread];
+
+    // printf("Syscall %u (compat %d)\n", syscall_id, activeThread->compatMode);
+
     // @TODO Validate parameters! Accessible address by user process. Valid sizes and lengths?
+
+    int coreIndex = CPU_get_core_index();
+    EXEC_Core* core = &cores[coreIndex];
+    EXEC_Thread* thread = &core->threads[core->active_thread];
 
     PageTable* userPageTable = (void*)(read_cr3() & ~0xFFFLU);
 
@@ -294,7 +307,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         } break;
         case _SYS_HEAP_ALLOCATE: {
             void** newAddress = (void**)arg0;
-            u64    size = arg1;
+            size_t    size = arg1;
 
             // @TODO Check capability and heap limit
 
@@ -307,17 +320,17 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 if (!mapped) {
                     PMEM_free(address);
                     write_cr3((u64)userPageTable);
-                    *newAddress = NULL;
+                    SET_ADDRESS_SIZE_TYPE(newAddress, NULL);
                     returnValue = ELOS_ERR_UNKNOWN;
                     break;
                 }
 
                 write_cr3((u64)userPageTable);
                 memset(address, 0x9A, size);
-                *newAddress = address;
+                SET_ADDRESS_SIZE_TYPE(newAddress, address);
                 returnValue = ELOS_OK;
             } else {
-                *newAddress = NULL;
+                SET_ADDRESS_SIZE_TYPE(newAddress, NULL);
                 returnValue = ELOS_ERR_UNKNOWN;
             }
 
@@ -339,7 +352,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         } break;
         case _SYS_HEAP_REALLOCATE: {
             void** newAddress = (void**)arg0;
-            u64    size = arg1;
+            size_t    size = arg1;
             void*  oldAddress = (void*)arg2;
             
             // @TODO Check capability and heap limit
@@ -352,7 +365,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 void* address = PMEM_alloc_phys(size, PMEM_FLAG_USER_SPACE);
                 if (!address) {
                     write_cr3((u64)userPageTable);
-                    *newAddress = NULL;
+                    SET_ADDRESS_SIZE_TYPE(newAddress, NULL);
                     returnValue = ELOS_ERR_UNKNOWN;
                     break;
                 }
@@ -362,7 +375,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 
                 write_cr3((u64)userPageTable);
                 memset(address, 0x9A, size);
-                *newAddress = address;
+                SET_ADDRESS_SIZE_TYPE(newAddress, address);
                 returnValue = ELOS_OK;
                 break;
             }
@@ -379,11 +392,11 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 // @TODO Unmap the old memory
                 //    Free might do it already?
                 PMEM_free(oldAddress);
-                *newAddress = address;
+                SET_ADDRESS_SIZE_TYPE(newAddress, address);
                 returnValue = ELOS_OK;
             } else {
                 write_cr3((u64)userPageTable);
-                *newAddress = NULL;
+                SET_ADDRESS_SIZE_TYPE(newAddress, NULL);
                 returnValue = ELOS_ERR_UNKNOWN;
             }
 
@@ -464,7 +477,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         case _SYS_SERVICE_CREATE: {
             const char* name = (void*)arg0;
             ELOS_ServiceEndpoint* endpoint = (void*)arg1;
-            u64 queueSize = arg2;
+            u32 queueSize = arg2;
 
             int maxlen = 64;
             int name_len = strnlen(name, maxlen + 1);
@@ -493,7 +506,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             if (!result) {
                 returnValue = ELOS_ERR_UNKNOWN;
             } else {
-                *endpoint = tmp_endpoint;
+                SET_ADDRESS_SIZE_TYPE(endpoint, tmp_endpoint);
                 returnValue = ELOS_OK;
             }
 
@@ -501,7 +514,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         case _SYS_SERVICE_CONNECT: {
             const char* name = (void*)arg0;
             ELOS_ServiceEndpoint* endpoint = (void*)arg1;
-            u64 queueSize = arg2;
+            u32 queueSize = arg2;
             
             int maxlen = 64;
             int name_len = strnlen(name, maxlen + 1);
@@ -530,14 +543,14 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             if (!result) {
                 returnValue = ELOS_ERR_UNKNOWN;
             } else {
-                *endpoint = tmp_endpoint;
+                SET_ADDRESS_SIZE_TYPE(endpoint, tmp_endpoint);
                 returnValue = ELOS_OK;
             }
         } break;
         case _SYS_SERVICE_SEND: {
             ELOS_ServiceEndpoint endpoint = (void*)arg0;
             const u8* data = (void*)arg1;
-            u64 size = arg2;
+            u32 size = arg2;
 
             // @TODO Check capability
             
@@ -565,7 +578,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             ELOS_ServiceEndpoint endpoint = (void*)arg0;
             ELOS_ServiceEndpoint* senderEndpoint = (void*)arg1;
             u8** data = (void*)arg2;
-            u64* size = (void*)arg3;
+            u32* size = (void*)arg3;
             u64  timeout_ns = arg4;
 
             // @TODO Check capability
@@ -585,9 +598,9 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             write_cr3((u64)userPageTable);
 
             if (senderEndpoint) {
-                *senderEndpoint = (ELOS_ServiceEndpoint)tmp_senderEndpoint;
+                SET_ADDRESS_SIZE_TYPE(senderEndpoint, (ELOS_ServiceEndpoint)tmp_senderEndpoint);
             }
-            *data = tmp_data;
+            SET_ADDRESS_SIZE_TYPE(data, tmp_data);
             *size = tmp_size;
 
             if (!result) {
@@ -597,7 +610,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             }
         } break;
         case _SYS_SHARED_MEMORY_CREATE: {
-            u64 size = arg0;
+            size_t size = arg0;
             ELOS_SharedMemory* handle = (void*)arg1;
 
             // @TODO Check capability
@@ -613,7 +626,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             if (!result) {
                 returnValue = ELOS_ERR_UNKNOWN;
             } else {
-                *handle = (void*)tmp_handle;
+                SET_ADDRESS_SIZE_TYPE(handle, tmp_handle);
                 returnValue = ELOS_OK;
             }
         } break;
@@ -638,7 +651,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         case _SYS_SHARED_MEMORY_INFO: {
             ELOS_SharedMemory handle = (void*)arg0;
             void** buffer = (void**)arg1;
-            u64* size = (void*)arg2;
+            size_t* size = (void*)arg2;
 
             // @TODO Check capability
             
@@ -663,10 +676,10 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 returnValue = ELOS_ERR_UNKNOWN;
             } else {
                 if (buffer) {
-                    *buffer = tmp_buffer;
+                    SET_ADDRESS_SIZE_TYPE(buffer, tmp_buffer);
                 }
                 if (size) {
-                    *size = tmp_size;
+                    SET_ADDRESS_SIZE_TYPE(size, tmp_size);
                 }
                 returnValue = ELOS_OK;
             }
@@ -698,7 +711,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 returnValue = ELOS_ERR_UNKNOWN;
             } else {
                 if (buffer) {
-                    *buffer = (void*)tmp_buffer;
+                    SET_ADDRESS_SIZE_TYPE(buffer, (void*)tmp_buffer);
                 }
                 returnValue = ELOS_OK;
             }
@@ -741,8 +754,8 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             write_cr3((u64)userPageTable);
 
             if (result == ASYNC_OK) {
-                *requestRing    = tmp_requestRing;
-                *completionRing = tmp_completionRing;
+                SET_ADDRESS_SIZE_TYPE(requestRing, tmp_requestRing);
+                SET_ADDRESS_SIZE_TYPE(completionRing, tmp_completionRing);
                 returnValue = ELOS_OK;
             } else {
                 returnValue = ELOS_ERR_UNKNOWN;
@@ -859,7 +872,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             write_cr3((u64)userPageTable);
             
             if (dev) {
-                *device = dev;
+                SET_ADDRESS_SIZE_TYPE(device, dev);
                 returnValue = ELOS_OK;
             } else {
                 returnValue = ELOS_ERR_NO_AUDIO_DEVICE;
@@ -923,7 +936,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             }
             write_cr3((u64)userPageTable);
 
-            *buffer = tmp_buffer;
+            SET_ADDRESS_SIZE_TYPE(buffer, tmp_buffer);
             
         } break;
 

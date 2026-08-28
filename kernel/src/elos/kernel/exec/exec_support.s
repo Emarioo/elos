@@ -118,11 +118,9 @@
     pop rcx
     pop rbx
 
-    # mov rax, [rsp + 6 * 8] # extract SS from interrupt frame
     mov ax, 0x0
     mov ds, ax
     mov es, ax
-    # mov ax, 0
     mov fs, ax
     mov gs, ax
 
@@ -138,6 +136,7 @@ timer_isr:
     #   rflags
     #   rsp
     #   ss
+    # If 32-bit compatibility process is interrupted then 64-bit registers are pushed since we ENTER 64-bit long mode.
 
     SAVE_CONTEXT
 
@@ -164,6 +163,34 @@ timer_isr:
     RESTORE_CONTEXT    
 
     iretq
+
+.global timer_isr_ret32
+timer_isr_ret32:
+    
+    // @TODO Every 1 ms we want to schedule or execute something.
+    //   We are not making real-time OS but we may want to use periodic
+    //   timer interrupts using processor feature or schedule timer interrupt
+    //   for one-shot mode (TSC deadline) as soon as we get the interrupt.
+    mov rdi, [g_timer_frequency_ns]
+    call CPU_schedule_timer_interrupt
+
+    # The called function will memcpy the new process's registers into the stack (rdi) we gave it.
+    
+    # Clear EOI (end of interrupt), so next timer interrupt can arrive (and other interrupts like keyboard)
+    mov rbx, g_lapic_base
+    mov DWORD PTR [rbx + APIC_EOI], 0
+    
+    RESTORE_CONTEXT
+
+    // @TODO Optimize this. Can't put above RESTORE_CONTEXT because we need to compute SS offset in the ContextFrame struct.
+    push rax
+    mov rax, [rsp + (1 + 4) * 8] # extract SS from interrupt frame
+    mov ds, ax
+    pop rax
+
+    // When returning to 32-bit compatibility mode we use iret with 32-bit operand size.
+    // We also make sure registers (esp,eip,cs,ss,eflags) are 32-bit on the stack (handled in EXEC_timer_handler).
+    iretd
 
 
 .set SYSCALL_STACK_OFFSET, 0
@@ -221,10 +248,10 @@ syscall_reschedule:
 
     # Kernel is not allowed to make a syscall.
     # It's therefore fine to restore ring-3 privileges.
-    push 0x23  # ss
+    push 0x23  # ss   USER_DATA_SEGMENT
     push r8    # rsp
     push r11   # rflags
-    push 0x2B  # cs
+    push 0x2B  # cs   USER_CODE_SEGMENT
     push rcx   # rip
 
     SAVE_CONTEXT
@@ -240,6 +267,114 @@ syscall_reschedule:
 
     iretq
 
+
+.global syscall_handler32
+syscall_handler32:
+    /*
+        These were prepared by user process
+            eax - syscall id
+            ebx - arg 0
+            ecx -
+            edx -
+            esi -
+            edi -
+            ebp - arg 5
+
+        Software interrupt would have pushed
+            rip
+            cs
+            rflags
+            rsp
+            ss
+
+        We switched to task segment stack on the interrupt.
+    */
+
+    // Save non-volatile registers
+    push rbx
+    push rsi
+    push rdi
+    push rbp
+
+    // Save to temp register since ecx <-> esi need to swap places.
+    mov r10d, esi
+
+    // Convert from 32-bit syscall ABI to 64-bit syscall ABI
+    mov edi, ebx
+    mov esi, ecx
+    // mov edx, edx    no need to move to same register
+    mov ecx, r10d
+    mov r8d, edi
+    mov r9d, ebp
+    
+
+    call EXEC_syscall_handler
+
+    // @TODO @SECURITY Before returning we must reset touched registers because
+    //   they may contain kernel information.
+
+    swapgs
+    mov dil, gs:RESCHEDULE_OFFSET
+    swapgs
+
+    cmp dil, 0
+    jnz syscall_reschedule32
+
+    // Restore non-volatile registers
+    pop rbp
+    pop rdi
+    pop rsi
+    pop rbx
+
+    mov rcx, [rsp + 4 * 8] # extract SS from interrupt frame
+    mov ds, cx
+
+    // Convert 64-bit registers (rip,cs,rflags,rsp,ss) to 32-bit registers (eip,cs,eflags,esp,ss)
+    mov rcx, [rsp + 0]
+    mov [rsp + 0], ecx
+    mov rcx, [rsp + 8]
+    mov [rsp + 4], ecx
+    mov rcx, [rsp + 16]
+    mov [rsp + 8], ecx
+    mov rcx, [rsp + 24]
+    mov [rsp + 12], ecx
+    mov rcx, [rsp + 32]
+    mov [rsp + 16], ecx
+
+    iretd
+
+syscall_reschedule32:
+
+    // Restore non-volatile registers
+    pop rbp
+    pop rdi
+    pop rsi
+    pop rbx
+
+    # interrupt would have pushed
+    #   rip
+    #   cs
+    #   rflags
+    #   rsp
+    #   ss
+
+    SAVE_CONTEXT
+
+    mov rax, g_kernelPageTable
+    mov cr3, rax
+
+    mov rdi, rsp
+
+    call EXEC_timer_handler
+    // We will hop to timer_isr_ret32 if we restore 32-bit compatibility context.
+    // It's therefore fine to use iretq.
+
+    RESTORE_CONTEXT
+
+    iretq
+
+
+
 .global kernel_thread_reschedule
 kernel_thread_reschedule:
     push rbp # Ensure 16-byte alignment
@@ -254,10 +389,10 @@ kernel_thread_reschedule:
     lea r8,  [rsp + 16]   # Stack address minus the return address
     mov rcx, [rsp + 8]    # Return address (rip)
 
-    push 0x10  # ss
+    push 0x10  # ss  KERNEL_DATA_SEGMENT
     push r8    # rsp
     pushfq
-    push 0x8  # cs
+    push 0x8  # cs   KERNEL_CODE_SEGMENT
     push rcx   # rip
 
     SAVE_CONTEXT
@@ -269,11 +404,3 @@ kernel_thread_reschedule:
     RESTORE_CONTEXT
 
     iretq
-
-
-.global EXEC_terminate_self_end
-.global EXEC_terminate_self
-EXEC_terminate_self:
-    int 48
-EXEC_terminate_self_end:
-    jmp EXEC_terminate_self_end

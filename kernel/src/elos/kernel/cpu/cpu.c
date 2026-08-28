@@ -22,9 +22,10 @@
 #define printf(...) KCON_printf(__VA_ARGS__)
 
 #define IDT_MAX_DESCRIPTORS 256
-#define IDT_START_OF_IRQS 33
-#define IDT_TIMER_ISR 32
-#define MAX_IRQS (IDT_MAX_DESCRIPTORS - IDT_START_OF_IRQS)
+#define IDT_TIMER_ISR       32
+#define IDT_START_OF_IRQS   33
+#define IDT_32BIT_SYSCALL   128
+#define MAX_IRQS (IDT_32BIT_SYSCALL - IDT_START_OF_IRQS)
 
 #define APIC_APICID     (0x20>>2)
 #define APIC_APICVER    (0x30>>2)
@@ -59,6 +60,14 @@
 
 #define MSR_IA32_EFER 0xC0000080
 
+
+#define IDT_ATTRIBUTE_PRESENT      0x80
+#define IDT_ATTRIBUTE_64_INTERRUPT 0x0E
+#define IDT_ATTRIBUTE_64_TRAP      0x0F
+#define IDT_ATTRIBUTE_RING0        0x00
+#define IDT_ATTRIBUTE_RING3        0x60
+
+#define IDT_ATTRIBUTE_DEFAULT_KERNEL (IDT_ATTRIBUTE_PRESENT|IDT_ATTRIBUTE_RING0|IDT_ATTRIBUTE_64_INTERRUPT)
 
 
 void ap_trampoline(); // defined in assembly
@@ -305,38 +314,43 @@ void init_gdt() {
         // Null descriptor.
         _gdt[coreIndex][0] = 0;
 
-        #define GDT_PRESENT             0x80
-        #define GDT_CODE_OR_DATA        0x10
-        #define GDT_TSS                 0x00
-        #define GDT_RING0               0x00
-        #define GDT_RING3               0x60
-        #define GDT_EXEC_READ           0xA
-        #define GDT_WRITE_READ          0x2
-        #define GDT_TYPE_TSS_AVAILABLE  0x9
-        #define GDT_32_BIT_PROTECTED    0x4
+        #define GDT_ACCESS_PRESENT             0x80
+        
+        #define GDT_ACCESS_CODE_OR_DATA        0x10
+        #define GDT_ACCESS_TSS                 0x00
 
-        #define GDT_LONG_MODE   0x2
+        #define GDT_ACCESS_RING0               0x00
+        #define GDT_ACCESS_RING3               0x60
+        #define GDT_ACCESS_EXEC_READ           0x0A
+        #define GDT_ACCESS_WRITE_READ          0x02
+
+        #define GDT_TYPE_TSS_AVAILABLE         0x09
+
+        #define GDT_FLAGS_32_BIT_PROTECTED     0xC // granularity and size bit
+        #define GDT_FLAGS_LONG_MODE            0x2 // long mode bit (note that first bit is reserved)
         
         // Base and LIMIT are set to zero because they are ignored in 64-bit mode.
 
         _gdt[coreIndex][KERNEL_CODE_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
-            GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING0|GDT_EXEC_READ, GDT_LONG_MODE);
+            GDT_ACCESS_PRESENT|GDT_ACCESS_CODE_OR_DATA|GDT_ACCESS_RING0|GDT_ACCESS_EXEC_READ, GDT_FLAGS_LONG_MODE);
         
         _gdt[coreIndex][KERNEL_DATA_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
-            GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING0|GDT_WRITE_READ, 0);
+            GDT_ACCESS_PRESENT|GDT_ACCESS_CODE_OR_DATA|GDT_ACCESS_RING0|GDT_ACCESS_WRITE_READ, 0);
         
-        // THIS IS NOT USED but here for completeness? base/limit needs to be set for correctness.
-        _gdt[coreIndex][USER_CODE_COMPATIBILITY_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
-            GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING3|GDT_EXEC_READ, GDT_32_BIT_PROTECTED);
+        _gdt[coreIndex][USER_CODE_COMPATIBILITY_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0xFFFFF,
+            GDT_ACCESS_PRESENT|GDT_ACCESS_CODE_OR_DATA|GDT_ACCESS_RING3|GDT_ACCESS_EXEC_READ, GDT_FLAGS_32_BIT_PROTECTED);
 
         _gdt[coreIndex][USER_DATA_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
-            GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING3|GDT_WRITE_READ, 0);
+            GDT_ACCESS_PRESENT|GDT_ACCESS_CODE_OR_DATA|GDT_ACCESS_RING3|GDT_ACCESS_WRITE_READ, 0);
 
         _gdt[coreIndex][USER_CODE_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0,
-            GDT_PRESENT|GDT_CODE_OR_DATA|GDT_RING3|GDT_EXEC_READ, GDT_LONG_MODE);
+            GDT_ACCESS_PRESENT|GDT_ACCESS_CODE_OR_DATA|GDT_ACCESS_RING3|GDT_ACCESS_EXEC_READ, GDT_FLAGS_LONG_MODE);
+            
+        _gdt[coreIndex][USER_DATA_COMPATIBILITY_SEGMENT/8] = MAKE_SEGMENT_DESC(0, 0xFFFFF,
+            GDT_ACCESS_PRESENT|GDT_ACCESS_CODE_OR_DATA|GDT_ACCESS_RING3|GDT_ACCESS_WRITE_READ, GDT_FLAGS_32_BIT_PROTECTED);
 
         _gdt[coreIndex][TASK_STATE_SEGMENT/8] = MAKE_SEGMENT_DESC(&_tss_entry[coreIndex], sizeof(_tss_entry[coreIndex])-1,
-            GDT_PRESENT|GDT_TSS|GDT_TYPE_TSS_AVAILABLE, 0);
+            GDT_ACCESS_PRESENT|GDT_ACCESS_TSS|GDT_TYPE_TSS_AVAILABLE, 0);
 
         _gdt[coreIndex][TASK_STATE_SEGMENT/8 + 1] = 0; // @TODO _tss_entry exists in low 32-bit addess space so the "higher" part of TSS can just be zero.
 
@@ -369,9 +383,9 @@ void init_gdt() {
     );
     
     // Hardcoded values:
-    //   0x30 = TASK_STATE_SEGMENT
+    //   0x38 = TASK_STATE_SEGMENT
     asm volatile (
-        "mov $0x30, %%ax\n"
+        "mov $0x38, %%ax\n"
         "ltr %%ax\n"
         :::"rax"
     );
@@ -379,7 +393,6 @@ void init_gdt() {
     asm volatile ( "sti\n" );
 }
 
-extern void timer_isr();
 
 void interrupt_handler(int vector, InterruptFrame* frame) {
     if (vector < IDT_START_OF_IRQS) {
@@ -413,12 +426,12 @@ void init_idt() {
 
     for (int vector = 0; vector < IDT_MAX_DESCRIPTORS; vector++) {
         // 0x8e = 64-bit interrupt gate, present bit, super privilege
-        idt_set_descriptor(coreIndex, vector, isr_stub_table[vector], 0x8e);
+        idt_set_descriptor(coreIndex, vector, isr_stub_table[vector], IDT_ATTRIBUTE_DEFAULT_KERNEL);
     }
     _idt_register[coreIndex].base = (u64)&g_idt[coreIndex];
     _idt_register[coreIndex].limit = sizeof(*g_idt[coreIndex]) * IDT_MAX_DESCRIPTORS - 1;
 
-    idt_set_descriptor(coreIndex, IDT_TIMER_ISR, timer_isr, 0x8e);
+    idt_set_descriptor(coreIndex, IDT_TIMER_ISR, timer_isr, IDT_ATTRIBUTE_DEFAULT_KERNEL);
 
     asm volatile ( "lidt %0\n" : : "m"(_idt_register));
 
@@ -470,6 +483,10 @@ void init_syscall() {
     u64 efer = rdmsr(MSR_IA32_EFER);
     efer |= 1; // SYSCALL ENABLE (for 64-bit intel)
     wrmsr(MSR_IA32_EFER, efer);
+
+
+    u32 coreIndex = CPU_get_core_index();
+    idt_set_descriptor(coreIndex, IDT_32BIT_SYSCALL, syscall_handler32, IDT_ATTRIBUTE_PRESENT | IDT_ATTRIBUTE_RING3 | IDT_ATTRIBUTE_64_INTERRUPT);
 
 }
 
@@ -893,18 +910,15 @@ void ap_entry(int id) {
     int lapic_id = g_lapic_base[APIC_APICID] >> 24;
     printf("AP #%d started (edi=%d)\n", lapic_id, id);
     
-    int coreIndex = CPU_get_core_index();
-    EXEC_Core* core = &cores[coreIndex];
-
-    core->active_thread = 0;
-    core->threads[core->active_thread].used = true;
-    // @TODO I think every core needs an idle thread which is only chosen
-    //   If there's no other thread to execute.
-
     init_apic();
     init_syscall();
 
-    while (1) pause();
+    EXEC_init();
+
+    // We don't want to do anymore work here.
+    // The main kernel thread spins up async and system console threads then idles
+    // in case you want to add some test/debug stuff.
+    EXEC_terminate_self();
 }
 
 

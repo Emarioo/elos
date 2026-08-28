@@ -25,7 +25,7 @@ EXEC_Core cores[CORE_LIMIT];
 
 bool scheduling_enabled;
 
-void EXEC_terminate_self_end();
+void thread_idle_loop();
 void thread_bootstrap(FN_ThreadEntry entry);
 
 void EXEC_timer_handler(ContextFrame* frame) {
@@ -46,35 +46,36 @@ void EXEC_timer_handler(ContextFrame* frame) {
 
     LOCK(&core->thread_lock);
 
+
     int currentThread_index = core->active_thread;
     EXEC_Thread* currentThread = &core->threads[currentThread_index];
     EXEC_Thread* nextThread = NULL;
 
-    if (currentThread->used && frame->rip == (u64)EXEC_terminate_self_end) {
-        currentThread->used = false;
-    }
+    // printf("Not going %d %d\n", currentThread_index, core->active_thread);
 
     u64 nowTick = rdtsc();
 
+    int limit = THREAD_LIMIT;
     while (1) {
+        limit--;
+        if (limit < 0) {
+            core->active_thread = IDLE_THREAD_INDEX;
+            nextThread = &core->threads[IDLE_THREAD_INDEX];
+            break;
+        }
+
         core->active_thread = (core->active_thread + 1) % THREAD_LIMIT;
         EXEC_Thread* thread = &core->threads[core->active_thread];
-        // if (thread->sleepUntilTick) {
-        //     printf("Try reschedule %d io=%d now=%d sleep=%d\n", core->active_thread, thread->waitingForIO, (int)(nowTick/1000), (int)(thread->sleepUntilTick/1000));
+        // if (thread->used) {
+        //     printf("Try reschedule %d io=%d now=%zu sleep=%zu\n", core->active_thread, thread->waitingForIO, (nowTick/1000), (thread->sleepUntilTick/1000));
         // }
-        if (currentThread_index == core->active_thread && !currentThread->used) {
-            // Did not find any. Use idle thread.
-            // @TODO Idle thread is not initialized.
-            printf("AHH, can't use idle thread\n");
-            nextThread = &core->idleThread;
-            break;
-        } else if (thread->used && !thread->waitingForIO && nowTick > thread->sleepUntilTick) {
+        if (thread->used && !thread->waitingForIO && nowTick > thread->sleepUntilTick) {
             nextThread = thread;
             thread->sleepUntilTick = 0;
             break;
         }
     }
-
+    // printf("Timer int cur=%d act=%d next=%p\n", currentThread_index, core->active_thread, nextThread);
     if (currentThread == nextThread) {
         // printf("Single thread\n");
         // There's only one thread.
@@ -100,6 +101,17 @@ void EXEC_timer_handler(ContextFrame* frame) {
         // printf(" cs=%x, from %x\n", frame->cs, currentThread->frame.cs);
     }
 
+    if (nextThread->compatMode) {
+        // Change return address. So we use iret with 32-bit operand size instead.
+        *(u64*)((char*)frame - 8) = (u64)timer_isr_ret32;
+
+        frame->compat.eip    = frame->rip;
+        frame->compat.cs     = frame->cs;
+        frame->compat.eflags = frame->rflags;
+        frame->compat.esp    = frame->rsp;
+        frame->compat.ss     = frame->ss;
+    }
+
 exit:
     UNLOCK(&core->thread_lock);
     return;
@@ -109,12 +121,42 @@ void EXEC_init() {
     int coreIndex = CPU_get_core_index();
     EXEC_Core* core = &cores[coreIndex];
 
-    EXEC_Thread* this_thread = &core->threads[0];
-    this_thread->used = true;
-    core->active_thread = 0;
+    {
+        core->active_thread = 0;
+        EXEC_Thread* this_thread = &core->threads[core->active_thread];
+        this_thread->used = true;
+    }
 
-    printf("Enable scheduling\n");
-    scheduling_enabled = true;
+    {
+        EXEC_Thread* idle_thread = &core->threads[IDLE_THREAD_INDEX];
+        idle_thread->entry = thread_idle_loop;
+        idle_thread->used = false; // used is irrelevant for idle_thread, it always exists.
+        
+        int stack_size = 0x2000;
+        void* stack = PMEM_alloc(stack_size);
+        KERNEL_PANIC(stack, "Cannot make stack for idle thread\n");
+        
+        idle_thread->stack_size = stack_size;
+        idle_thread->stack = stack;
+
+        u64 rsp = (u64)idle_thread->stack + idle_thread->stack_size;
+        rsp -= 0x8; // So that we at _start when we push rbp have 16-byte aligned stack.
+
+        ContextFrame* frame = &idle_thread->frame;
+        memset(frame, 0, sizeof(*frame));
+        frame->cs = KERNEL_CODE_SEGMENT;
+        frame->ss = KERNEL_DATA_SEGMENT;
+        frame->rsp = rsp;
+        frame->rflags = 0x200; // interrupt flag
+        frame->rip = (u64)idle_thread->entry;
+        frame->cr3 = (u64)g_kernelPageTable;
+    }
+    
+    // @TODO Is this the first core?
+    if (coreIndex == 0) {
+        printf("Enable scheduling\n");
+        scheduling_enabled = true;
+    }
 }
 
 EXEC_Thread* EXEC_get_active_thread() {
@@ -239,14 +281,20 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex) {
     found_thread->used = true;
     found_thread->userSpace = true;
     found_thread->entry = object.entry_point;
+    found_thread->compatMode = object.compatibilityMode;
 
     u64 rsp = (u64)found_thread->stack + found_thread->stack_size;
     rsp -= 0x8; // So that we at _start when we push rbp have 16-byte aligned stack.
 
     ContextFrame* frame = &found_thread->frame;
     memset(frame, 0, sizeof(*frame));
-    frame->cs = USER_CODE_SEGMENT | 3;
-    frame->ss = USER_DATA_SEGMENT | 3;
+    if (object.compatibilityMode) {
+        frame->cs = USER_CODE_COMPATIBILITY_SEGMENT | 3;
+        frame->ss = USER_DATA_COMPATIBILITY_SEGMENT | 3;
+    } else {
+        frame->cs = USER_CODE_SEGMENT | 3;
+        frame->ss = USER_DATA_SEGMENT | 3;
+    }
     frame->rsp = rsp;
     frame->rflags = 0x202; // interrupt flag, disable IOPL
     frame->rip = (u64)object.entry_point;
@@ -273,21 +321,54 @@ void thread_bootstrap(FN_ThreadEntry entry) {
     EXEC_terminate_self();
 }
 
+void thread_idle_loop() {
+    while (1) {
+        int coreIndex = CPU_get_core_index();
+        // printf("Idle core %d\n", coreIndex);
+        // Halts execution until an interrupt.
+        // On timer interrupt we will check if a
+        // thread is done sleeping and switch to it,
+        // otherwise keep idling.
+        asm volatile ( "hlt" );
+    }
+}
+
+
+void EXEC_terminate_self() {
+    CPU_disable_interrupt();
+
+    u32 coreIndex = CPU_get_core_index();
+    EXEC_Core* core = &cores[coreIndex];
+    EXEC_Thread* activeThread = &core->threads[core->active_thread];
+    activeThread->used = false;
+
+    CPU_enable_interrupt();
+
+    // printf("Terminating\n");
+
+    while (1) {
+        asm volatile ( "hlt" );
+    }
+}
+
 
 void EXEC_sleep(u64 sleepTime_ns) {
     CPU_disable_interrupt();
 
-    u64 nowTick = rdtsc();
-    u64 sleepTick = nowTick + (sleepTime_ns * CPU_ticks_per_second()/100) / 10000000;
-
     int coreIndex = CPU_get_core_index();
     EXEC_Core* core = &cores[coreIndex];
     EXEC_Thread* activeThread = &core->threads[core->active_thread];
+
+    u64 nowTick = rdtsc();
+    u64 sleepTick = nowTick + (sleepTime_ns * CPU_ticks_per_second()/100) / 10000000;
     activeThread->sleepUntilTick = sleepTick;
 
+    // printf("Sleep at %zu\n", nowTick);
     kernel_thread_reschedule();
-
     u64 endTick = rdtsc();
+
+    // printf("Sleep at %zu, %zu\n", endTick, endTick - nowTick);
+
     u64 ms = (endTick - nowTick) / (CPU_ticks_per_second()/1000);
     // In QEMU on my laptop with power cable in if we sleep for 16.66 ms we seem to
     // sleep for about 18-20ms.

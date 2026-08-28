@@ -26,6 +26,15 @@
 #include "elos/common/types.h"
 #include "elos/keycode.h"
 
+#if defined(__x86_64__)
+#define ELOS_PADDING
+#else
+#define ELOS_LINETHING(X,Y) X##Y
+#define ELOS_LINETHING2(Y) ELOS_LINETHING(_reserved, Y)
+#define ELOS_PADDING u32 ELOS_LINETHING2(__LINE__);
+#endif
+
+
 typedef enum {
     ELOS_OK = 0,
 
@@ -102,6 +111,7 @@ typedef struct {
     u32  size;
     u32  pixels_per_scan_line;
     u32* pixels;
+    ELOS_PADDING
 } ELOS_FrameBuffer;
 
 // @TODO Can endpoint handles be reused? Services want a way to map an endpoint to an internal struct.
@@ -544,46 +554,62 @@ typedef struct {
     union {
         struct {
             const char* path;
+            ELOS_PADDING
             ELOS_FileOpenFlag flags;
         } open;
         struct {
             ELOS_File file;
+            ELOS_PADDING
         } close;
         struct {
             ELOS_File file;
+            ELOS_PADDING
             u64       offset;
             u64       size;
             void*     buffer;
+            ELOS_PADDING
         } read;
         struct {
             ELOS_File file;
+            ELOS_PADDING
             u64       offset;
             u64       size;
             const void*     buffer;
+            ELOS_PADDING
         } write;
         struct {
             ELOS_File      file;
+            ELOS_PADDING
             ELOS_FileInfo* fileInfo;
+            ELOS_PADDING
         } info;
         struct {
             const char* path;
+            ELOS_PADDING
         } remove;
         struct {
             const char* oldPath;
+            ELOS_PADDING
             const char* newPath;
+            ELOS_PADDING
         } rename;
         struct {
             const char* srcPath;
+            ELOS_PADDING
             const char* dstPath;
+            ELOS_PADDING
         } copy;
         struct {
             const char* path;
+            ELOS_PADDING
         } mkdir;
         struct {
             const char*          path;
+            ELOS_PADDING
             u64                  cookie;
             u64                  maxEntries;
             ELOS_DirectoryEntry* buffer;
+            ELOS_PADDING
         } readdir;
     };
 } ELOS_AsyncRequest;
@@ -596,6 +622,7 @@ typedef struct {
     union {
         struct {
             ELOS_File file;
+            ELOS_PADDING
         } open;
         struct {
             u64 readBytes;

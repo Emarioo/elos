@@ -197,13 +197,13 @@ typedef enum {
             output += f'register size_t _arg{i} asm ("{reg_list[i]}") = (size_t){arg_names[i]};\n'
 
             if "u64" == arg_types[i].strip():
-                print(f"WARNING: {name} {arg_types[i]} {arg_names[i]}, 64-bit type in 32-bit ABI is not handled.")
+                print(f"\033[33mWARNING:\033[0m {name} {arg_types[i]} {arg_names[i]}, 64-bit type in 32-bit ABI is not handled.")
 
         input_list = ", ".join( [f'"a" ({enum_name})'] + [ f'"r" (_arg{i})' for i in range(arg_len) ])
 
         output += f'''
             asm volatile (
-                "syscall"
+                "int $0x80"
                 : "=a" (retv)
                 : {input_list}
                 : "memory"
