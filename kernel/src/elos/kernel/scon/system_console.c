@@ -364,8 +364,8 @@ void send_command(cstring text) {
             char msg[256];
             for (int i=0;i<entryCount;i++) {
                 ELOS_DirectoryEntry* entry = &dirEntries[i];
-                int len = snprintf(msg, sizeof(msg), "%s\n", entry->name);
-                printf("%s\n", entry->name);
+                int len = snprintf(msg, sizeof(msg), "%s  %d bytes\n", entry->name, entry->fileSize);
+                printf("%.*s", len, msg);
                 respond_message((cstring){ msg, len });
             }
             if (entryCount != dirEntries_cap) {

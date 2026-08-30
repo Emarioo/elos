@@ -79,6 +79,7 @@ void EXEC_timer_handler(ContextFrame* frame) {
     if (currentThread == nextThread) {
         // printf("Single thread\n");
         // There's only one thread.
+        frame->ss |= frame->cs & 3;
     } else {
         memcpy(&currentThread->frame, frame, sizeof(*frame));
         memcpy(frame, &nextThread->frame, sizeof(*frame));

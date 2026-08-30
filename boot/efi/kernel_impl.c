@@ -67,6 +67,7 @@ void KCON_printf(const char* format, ...) {
     (void)status;
 }
 
+
 void* PMEM_allocate(u64 size, void* old_ptr) {
     EFI_STATUS Status;
     if (size && !old_ptr) {
@@ -268,3 +269,29 @@ int netdrv_send(NetBoot_Device device, void* buffer, int size) {
     return size;
 }
 
+#undef printf
+
+int printf(const char* format, ...) {
+   char buffer[256];
+    unsigned short w_buffer[256];
+
+    va_list va;
+    va_start(va, format);
+    const int len = vsnprintf(buffer, sizeof(buffer), format, va);
+    va_end(va);
+
+    int head=0;
+    int dst_head=0;
+    while(head < len + 1) {
+        if (buffer[head] == '\n' && (head-1 < 0 || buffer[head-1] != '\r')) {
+            w_buffer[dst_head] = '\r';
+            dst_head++;
+        }
+        w_buffer[dst_head] = buffer[head];
+        head++;
+        dst_head++;
+    }
+    EFI_STATUS status = ST->ConOut->OutputString(ST->ConOut, w_buffer);
+    (void)status;
+    return len;
+}

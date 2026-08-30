@@ -169,7 +169,9 @@ void editor_loop() {
         exit(1);
     }
 
-    const char* defaultPath = "/boot/TEMPLATE.CFG";
+    // Normally we want to edit /boot/TEMPLATE.CFG but it exists on USB drive which
+    // we don't have disk support for so we edit this one from initrd instead.
+    const char* defaultPath = "/TEMPLATE.CFG";
 
     slate_open(session, defaultPath);
 
@@ -177,7 +179,9 @@ void editor_loop() {
     memcpy(session->commandBuffer, defaultPath, session->commandBuffer_len);
     session->commandBuffer[session->commandBuffer_len] = 0;
 
-    ASSERT(session->lines_len != 0);
+    // We should have at least one line even if file is empty or
+    // couldn't be found.
+    // ASSERT(session->lines_len != 0);
 
 
     int text_height = 20;
@@ -238,7 +242,7 @@ void editor_loop() {
                         if (session->commandCursor_x > 0) {
                             memmove(session->commandBuffer + session->commandCursor_x - 1,
                                 session->commandBuffer + session->commandCursor_x,
-                                session->commandBuffer_len - (session->commandCursor_x+1));
+                                session->commandBuffer_len - session->commandCursor_x);
                             session->commandCursor_x--;
                             session->commandBuffer_len--;
                             session->commandBuffer[session->commandBuffer_len] = '\0';
@@ -309,31 +313,33 @@ void editor_loop() {
             session->scroll_y = session->cursor_y < 3 ? 0 : session->cursor_y - 3;
         }
 
-        for (int li=session->scroll_y;li<slateSession.lines_len && li < session->scroll_y + maxLinesOnScreen;li++) {
-            Line* line = &slateSession.lines[li];
-            int text_y = text_height * (li - session->scroll_y);
+        if(session->lines) {
+            for (int li=session->scroll_y;li<session->lines_len && li < session->scroll_y + maxLinesOnScreen;li++) {
+                Line* line = &session->lines[li];
+                int text_y = text_height * (li - session->scroll_y);
 
-            if(config->showLineNumbers) {
-                char lineNumber[20];
-                int len = snprintf(lineNumber, sizeof(lineNumber), "%d", li + 1);
-                cstring lineNrText = { lineNumber, len };
-                draw_glyphs_from_text_bcolor(0, text_y + 3, text_lineNumberHeight, lineNrText, g_default_font, session->config.color_lineNumber, 0);
+                if(config->showLineNumbers) {
+                    char lineNumber[20];
+                    int len = snprintf(lineNumber, sizeof(lineNumber), "%d", li + 1);
+                    cstring lineNrText = { lineNumber, len };
+                    draw_glyphs_from_text_bcolor(0, text_y + 3, text_lineNumberHeight, lineNrText, g_default_font, session->config.color_lineNumber, 0);
+                }
+
+                if (LINE_LENGTH(line) == 0)
+                    continue;
+
+                cstring text = { .ptr = line->text.ptr, .len = LINE_LENGTH(line) };
+                
+                int textWidth = draw_text_width(text, text_height, g_default_font);
+                
+                if (textWidth > textContent_width ) {
+                    text.len = (textContent_width) / characterWidth;
+                }
+
+
+                
+                draw_glyphs_from_text_bcolor(textContent_x, text_y, text_height, text, g_default_font, session->config.color_text, 0);
             }
-
-            if (LINE_LENGTH(line) == 0)
-                continue;
-
-            cstring text = { .ptr = line->text.ptr, .len = LINE_LENGTH(line) };
-            
-            int textWidth = draw_text_width(text, text_height, g_default_font);
-            
-            if (textWidth > textContent_width ) {
-                text.len = (textContent_width) / characterWidth;
-            }
-
-
-            
-            draw_glyphs_from_text_bcolor(textContent_x, text_y, text_height, text, g_default_font, session->config.color_text, 0);
         }
         
         // We require monospace font here

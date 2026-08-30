@@ -686,27 +686,27 @@ cstring get_basename(const cstring path) {
 
 FAT_ID fat_walk(VFS_Mount* mount, const cstring subpath, FAT_ID* parent_dir) {
     int componentIndex = 0;
-    FAT_ID directory = fat_get_root(mount);
-    if (parent_dir)
-        *parent_dir = FAT_ID_NULL;
-    while (directory != FAT_ID_NULL) {
-        if (parent_dir)
-            *parent_dir = directory;
+    FAT_ID parent = FAT_ID_NULL;
+    FAT_ID child = fat_get_root(mount);
+        
+    while (child != FAT_ID_NULL) {
         cstring subname = get_component(subpath, componentIndex);
         if (subname.len == 0) {
             // no more components, end of path, no more directory to create.
             break;
         }
-        FAT_ID foundEntry = fat_lookup(mount, directory, subname);
-        if (foundEntry == FAT_ID_NULL) {
-            return FAT_ID_NULL;
-        } else {
-            directory = foundEntry;
-
+        parent = child;
+        child = fat_lookup(mount, parent, subname);
+        if (child == FAT_ID_NULL) {
+            break;
         }
         componentIndex++;
     }
-    return directory;
+
+exit:
+    if (parent_dir)
+        *parent_dir = parent;
+    return child;
 }
 
 

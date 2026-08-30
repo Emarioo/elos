@@ -46,10 +46,17 @@
 #define APIC_TMRCURRCNT	(0x390>>2)
 #define APIC_TMRDIV	    (0x3E0>>2)
 #define APIC_LAST	    (0x38F>>2)
-#define APIC_DISABLE	(0x10000>>2)
-#define APIC_SW_ENABLE	(0x100>>2)
-#define APIC_CPUFOCUS	(0x200>>2)
+
+// these might be wrong?
+// #define APIC_SW_ENABLE	(0x100)
+// #define APIC_CPUFOCUS	(0x200)
 #define APIC_NMI	 (4<<8)
+
+#define APIC_ONESHOT       (0 << 17)
+#define APIC_PERIODIC      (1 << 17)
+#define APIC_TSC_DEADLINE  (2 << 17)
+
+#define APIC_TIMER_MASKED  (1 << 16)
 
 
 #define MSR_GS_BASE        0xC0000101
@@ -96,6 +103,9 @@ void cpuWriteIoApic(void *ioapicaddr, uint32_t reg, uint32_t value);
 volatile u32* g_lapic_base;
 
 u64 tsc_per_sec;
+u64 apic_ticks_per_sec;
+
+bool use_tsc_deadline = false;
 
 u64 g_timer_frequency_ns = TIMER_FREQUENCY_NS;
 
@@ -117,10 +127,15 @@ static void disable_pit() {
     outb(0xA1, 0xFF);
 }
 
+
+void pit_sleep_us(u32 us);
+
 void CPU_init(BootAPI* boot_api) {
     enable_extensions();
     
     init_gdt();
+    
+
     init_idt();
 
     // Disable PIT (gives out some stray IRQ2 in the beginning which interfers with HPET interrupt)
@@ -131,14 +146,16 @@ void CPU_init(BootAPI* boot_api) {
     g_lapic_base = (void*)acpi_lapic_address;
 
     init_apic();
+    
+
     init_syscall();
 
     u32 coreIndex = CPU_get_core_index();
 
-
-    // @TODO Calibration per core
     calibrate_tsc_with_pit();
     // calibrate_tsc_with_hpet();
+
+    // @TODO Calibration per core
 
     CPU_schedule_timer_interrupt(TIMER_FREQUENCY_NS);
 
@@ -154,14 +171,16 @@ void CPU_init(BootAPI* boot_api) {
 
     // Starting cores requires some sleep and precise timings.
     // We must calibrate TSC first.
-    for (int i=0;i<acpi_lapic_ids_len;i++) {
-        u32 apic_id = acpi_lapic_ids[i];
-        if (apic_id == lapic_id)
-            continue; // don't start yourself
 
-        // printf("APIC id: %d\n", apic_id);
-        start_core(apic_id);
-    }
+    // @NOCHECKIN Not starting other cores for now.
+    // for (int i=0;i<acpi_lapic_ids_len;i++) {
+    //     u32 apic_id = acpi_lapic_ids[i];
+    //     if (apic_id == lapic_id)
+    //         continue; // don't start yourself
+
+    //     // printf("APIC id: %d\n", apic_id);
+    //     start_core(apic_id);
+    // }
 }
 
 
@@ -548,9 +567,12 @@ void init_apic() {
         return;
     }
 
-    KERNEL_PANIC(tsc_deadline_support, "CPU is missing TSC deadline timer.");
-    
-    
+    // My laptop doesn't have this so we always use apic timer one-shot so we
+    // get more test time with it.
+    // if (tsc_deadline_support) {
+    //     use_tsc_deadline = true;
+    // }
+
 
     // printf("APIC support: apic=%d x2apic=%d\n", apic_support, x2apic_support);
 
@@ -576,22 +598,33 @@ void init_apic() {
     tmp &= 0x00FFFFFF;
     tmp |= 1;
     g_lapic_base[APIC_LDR] = tmp;
-    g_lapic_base[APIC_LVT_TMR] = APIC_DISABLE;
+    g_lapic_base[APIC_LVT_TMR] = APIC_TIMER_MASKED;
     g_lapic_base[APIC_LVT_PERF] = APIC_NMI;
-    g_lapic_base[APIC_LVT_LINT0] = APIC_DISABLE;
-    g_lapic_base[APIC_LVT_LINT1] = APIC_DISABLE;
+    g_lapic_base[APIC_LVT_LINT0] = APIC_TIMER_MASKED;
+    g_lapic_base[APIC_LVT_LINT1] = APIC_TIMER_MASKED;
     g_lapic_base[APIC_TASKPRIOR] = 0;
 
     g_lapic_base[APIC_EOI] = 0; // clear EOI
 
-    g_lapic_base[APIC_LVT_TMR] = IDT_TIMER_ISR | (2 << 17); // TSC deadline
 
+    if (!use_tsc_deadline) {
+        g_lapic_base[APIC_TMRDIV] = 0x3;
+        g_lapic_base[APIC_LVT_TMR] = IDT_TIMER_ISR | APIC_ONESHOT;
+        g_lapic_base[APIC_TMRINITCNT] = 0xFFFFFFFF;
 
-    //  @TODO Fallback to one-shot or periodic mode if TSC deadline doesn't exist.
-    //     We need to measure APIC timer counter with PIT or HPET without TSC deadline.
-    // g_lapic_base[APIC_TMRDIV] = 0x3;
-    // g_lapic_base[APIC_LVT_TMR] = IDT_TIMER_ISR | (1 << 17); // periodic mode
-    // g_lapic_base[APIC_TMRINITCNT] = 100000;
+        pit_sleep_us(10000);
+        
+        g_lapic_base[APIC_LVT_TMR] = APIC_TIMER_MASKED;
+
+        u32 ticksPerTime = 0xFFFFFFFF - g_lapic_base[APIC_TMRCURRCNT];
+
+        apic_ticks_per_sec = (u64)ticksPerTime * 100;
+
+        // printf("Apic ticks/sec %zu other %zu\n", (u64)apic_ticks_per_sec);
+    } else {
+        g_lapic_base[APIC_LVT_TMR] = IDT_TIMER_ISR | APIC_TSC_DEADLINE;
+    }
+
 
 
     // printf("LVT timer=%x\n", g_lapic_base[APIC_LVT_TMR / 4]);
@@ -606,9 +639,21 @@ void CPU_schedule_timer_interrupt(u64 nanoseconds) {
     //    nanoseconds <= 1e9 (1 second)
     //    CPU_ticks_per_second() <= 10e9 (10 Ghz)
 
-    u64 now = CPU_ticks();
-    u64 tick = now + (CPU_ticks_per_second() * nanoseconds) / 1000000000;
-    wrmsr(IA32_TSC_DEADLINE, tick);
+    if (use_tsc_deadline) {
+        u64 now = CPU_ticks();
+        u64 tick = now + (CPU_ticks_per_second() * nanoseconds) / 1000000000;
+        wrmsr(IA32_TSC_DEADLINE, tick);
+    } else {
+        u64 ticks = (apic_ticks_per_sec * nanoseconds) / 1000000000;
+        if (ticks > 0xFFFFFFFFLU) {
+            printf("%s ns=%zu ticks=%zu\n", __func__, nanoseconds, ticks);
+            KERNEL_PANIC(ticks <= 0xFFFFFFFFLU, "Schedule too long for 32-bit integer");
+        }
+
+        g_lapic_base[APIC_LVT_TMR] = APIC_TIMER_MASKED;
+        g_lapic_base[APIC_LVT_TMR] = IDT_TIMER_ISR | APIC_ONESHOT;
+        g_lapic_base[APIC_TMRINITCNT] = ticks;
+    }
 
     // Can't do much work here (like writing to framebuffer) because it will already be time
     // for the next timer interrupt causing continous timer interrupts.
@@ -650,6 +695,30 @@ void calibrate_tsc_with_pit() {
 
     tsc_per_sec = (end - start) * (1000 / duration_ms);
     printf("PIT measured: %llu MHz (%llu ticks in %d ms)\n", tsc_per_sec/1000000, end - start, duration_ms);
+}
+
+void pit_sleep_us(u32 us) {
+    const u32 pit_hz = 1193182;
+    const u32 duration_us = us; // Maximum duration we can measure is about 54 ms. (0xFFFF/pit_hz)
+
+    u32 count = ((u64)pit_hz * (u64)duration_us) / 1000000;
+
+    // printf("Count %u\n", count);
+
+    // PIT channel 0, lobyte/hibyte, mode 0
+    outb(0x43, 0x30);
+
+    // Load count
+    outb(0x40, count & 0xff);
+    outb(0x40, count >> 8);
+
+    // Wait for PIT channel 0 OUT
+    while (1) {
+        outb(0x43, 0xE2);
+        if (inb(0x40) & 0x80)
+            break;
+        pause();
+    }
 }
 
 void calibrate_tsc_with_hpet() {

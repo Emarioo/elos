@@ -876,6 +876,7 @@ fill_entries:
                 }
 
                 FLUSH_PREVIOUS_READ()
+                prev_readByteOffset = 0;
 
                 if (attributes & fat__DIRECTORY) {
                     // Clear directory entries of newly made directory
@@ -1221,21 +1222,70 @@ u64 fat_write(VFS_Mount* mount, FAT_ID file, u64 offset, u64 size, const void* b
 
 update_entry:
 
-    fat__DirectoryEntry* direntryBlock = (fat__DirectoryEntry*)(context->tempSector);
+    u64 returnValue = 0; // @TODO Value to indicate failure.
+    u64 prev_readByteOffset = 0;
 
-    res = DISK_read(mount->diskDevice, (mount->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE, SECTOR_SIZE, direntryBlock);
-    if (!res) return 0;
+    // If this fails then we will have written an incomplete entry.
+    // We could try to undo our previous write (if any) but it may also fail.
+    // Perhaps we should try to undo anyway.
+    #define FLUSH_PREVIOUS_READ() if (prev_readByteOffset) { \
+        res = DISK_write(context->device, prev_readByteOffset, SECTOR_SIZE, context->tempSector); \
+        if (!res) { \
+            printf("fat_remove_entry: Disk write failed\n"); \
+            goto exit; \
+        } \
+    }
 
-    fat__DirectoryEntry* direntry = &direntryBlock[subEntryIndex];
 
-    // @TODO Update access time
-    //       Modified time
-    direntry->file_size = offset + buffer_offset;
+    while (1) {
+        if (context->sector_start + context->sector_index >= context->sector_end) {
+            if (context->current_cluster == FAT_CLUSTER_INVALID) {
+                // Root directory on FAT12/FAT16 has limited entires in root.
+                goto exit;
+            }
+            u32 nextCluster = fat__get_fat(context, context->current_cluster);
+            if (!VALID_CLUSTER(nextCluster)) {
+                goto exit;
+            }
+            context->current_cluster = nextCluster;
+            context->sector_start = fat__cluster_to_sector_offset(context, nextCluster);
+            context->sector_end = context->sector_start + context->bpb->sectors_per_cluster;
+            context->sector_index = 0;
 
-    res = DISK_write(mount->diskDevice, (mount->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE, SECTOR_SIZE, direntryBlock);
-    if (!res) return 0;
+        }
 
-    return buffer_offset;
+        prev_readByteOffset = (mount->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE;
+        res = DISK_read(mount->diskDevice, prev_readByteOffset, SECTOR_SIZE, context->tempSector);
+        if (res == 0) {
+            printf("fat_remove_entry: Could not read\n");
+                goto exit;
+        }
+
+    
+        fat__DirectoryEntry* entries = (fat__DirectoryEntry*)context->tempSector;
+        int entries_len = SECTOR_SIZE / sizeof(fat__DirectoryEntry);
+
+        for (;subEntryIndex<entries_len;subEntryIndex++) {
+            fat__DirectoryEntry* entry = &entries[subEntryIndex];
+
+            if (entry->attributes == fat__LFN) {
+                continue;
+            } else {
+                // @TODO Update access time
+                //       Modified time
+                entry->file_size = offset + buffer_offset;
+
+                FLUSH_PREVIOUS_READ();
+
+                returnValue = buffer_offset;
+                goto exit;
+            }
+        }
+        subEntryIndex = 0;
+        context->sector_index++;
+    }
+exit:
+    return returnValue;
 }
 
 

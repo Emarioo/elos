@@ -22,7 +22,7 @@ void* slate_font_allocator(Allocator* allocator, u64 size, void* old_ptr) {
 }
 
 bool slate_load_font() {
-    const char* path = "/boot/STDFONT.PSF";
+    const char* path = "/pkg/slate/STDFONT.PSF";
     FILE* handle = fopen(path, "rb");
     if (!handle) {
         printf("Couldn't open %s\n", path);
@@ -79,8 +79,27 @@ void slate_open(SlateSession* session, const char* path) {
     char* buffer;
 
     // printf("slate_open: Opening %s\n", path);
+    
+    // First reset editor state in case we can't find the file.
 
-    file = fopen(path, "r");
+    // Reset buffer that store line data
+    reset_chunks();
+
+    session->cursor_x = 0;
+    session->cursor_y = 0;
+    session->modified = false;
+    strncpy(session->currentFile, path, sizeof(session->currentFile));
+    session->lines = NULL;
+    session->lines_max = 0;
+    session->lines_len = 0;
+
+    if (path == NULL) {
+        // Empty editor.
+        goto exit;
+    }
+
+
+    file = fopen(path, "rb");
     if (!file) {
         printf("slate_open: Could not open %s\n", path);
         goto exit;
@@ -102,16 +121,6 @@ void slate_open(SlateSession* session, const char* path) {
     }
     buffer[fileSize] = '\0';
 
-    // Reset buffer that store line data
-    reset_chunks();
-
-    session->cursor_x = 0;
-    session->cursor_y = 0;
-    session->modified = false;
-    strncpy(session->currentFile, path, sizeof(session->currentFile));
-    session->lines = NULL;
-    session->lines_max = 0;
-    session->lines_len = 0;
 
     int head = 0;
     int lineStart = 0;
@@ -165,6 +174,13 @@ void slate_open(SlateSession* session, const char* path) {
     printf("Opened %s (%d lines)\n", path, session->lines_len);
 
 exit:
+    if (session->lines_len == 0) {
+        reserve_lines(session, 1);
+        Line* nextLine = &session->lines[session->lines_len];
+        line_init(nextLine, "", 0);
+        session->lines_len++;
+    }
+
     if (buffer) {
         free(buffer);
     }
@@ -176,7 +192,7 @@ exit:
 void slate_save(SlateSession* session, const char* path) {
     FILE* file;
 
-    file = fopen(path, "w");
+    file = fopen(path, "wb");
     if (!file) {
         printf("slate_save: Could not open %s\n", path);
         goto exit;

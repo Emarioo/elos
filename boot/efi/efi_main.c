@@ -541,7 +541,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     }
 
     // Comment out to disable network boot.
-    // init_network();
+    init_network();
     // Or set this:
     // can_load_kernel_from_network = false;
 

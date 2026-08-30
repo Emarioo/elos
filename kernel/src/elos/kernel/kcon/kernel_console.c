@@ -55,6 +55,24 @@ void KCON_printf(const char* format, ...) {
 }
 
 
+int printf(const char* format, ...) {
+    char buffer[512];
+
+    va_list va;
+    va_start(va, format);
+    int len = vsnprintf(buffer, sizeof(buffer), format, va);
+    va_end(va);
+
+
+
+    for (int i=0;i<ARRAY_LENGTH(_write_hooks);i++) {
+        if (_write_hooks[i]) {
+            _write_hooks[i](buffer, len);
+        }
+    }
+    return len;
+}
+
 
 
 #define COM1 0x3F8

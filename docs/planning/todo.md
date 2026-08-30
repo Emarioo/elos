@@ -19,12 +19,12 @@ The categories are:
 Tasks related to kernel and operating system
 
 ## @current
-- [ ] PvZ port.
-      - [ ] 32-bit user mode. GDT, syscalls, structures need to be updated.
+- [ ] Fix NetBoot for QEMU. It's broken? Also it waits 1-2 seconds to start in QEMU which is too long.
 - [ ] Audio server.
+- [ ] Networking ASYNC operations. classic berkley sockets API?
+- [ ] My laptop has 3-4 unknown PCI audio devices. Check if we still detect HDA and if playing sound works.
 - [ ] Separate CPU architecture specific code to separate folder/files.
 - [ ] System console.
-- [ ] If a thread gets a fault then kernel should continue to run. At least user threads.
 - [ ] Process manager. If process exits gets terminated then free resources. Memory, created services, rings, buffers.
 - [ ] Text editor. Try to port https://github.com/martanne/vis?
 - [ ] Terminal.
@@ -34,10 +34,12 @@ Tasks related to kernel and operating system
 - [ ] API to read/write disk device directlty from user space. Requires special capability. Kernel handles AHCI, NVMe details.
       And ensures the device isn't used or mounted by anyone else.
 - [ ] [Kernel Modules](./problems.md#kernel-modules).
-- [ ] Plants VS Zombies port.
+- [ ] Plants VS Zombies port. A lot of working, implementing win32 wrappers, directsound, COM api eugh...
+      - [ ] 32-bit user mode. GDT, syscalls, structures need to be updated.
 - [x] DOOM port.
 - [x] Kernel audio syscalls.
 - [x] Give interrupt routines some structure. Functions enable/disable/set them. Add redirection entries etc.
+- [x] If a thread gets a fault then kernel should continue to run. At least user threads.
 
 ## @urgent
 - [ ] build.py clean, make clean do not work properly.
@@ -47,6 +49,7 @@ Tasks related to kernel and operating system
      Some push and doens't push error codes and other information.
 
 ## @bug
+- [ ] Investigate why multiple cores don't work on laptop. (might not work on qemu anymore either, haven't run qemu with multiple cores in a while).
 
 ## @feature
 - [ ] Support multiple mice and keyboards (might be a while but this would be cool and i'm excited for the implementation)

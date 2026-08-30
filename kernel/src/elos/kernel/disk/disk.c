@@ -163,7 +163,7 @@ bool DISK_read(DiskDevice _device, u64 offset, u64 size, void* buffer) {
                 return false;
             }
             if (offset + size > device->ram.size) {
-                printf("DISK_read: out of bounds read on (0x%zx:0x%zx, 0x%zx) from %s\n", offset, size, device->ram.size, device->diskInfo.name);
+                printf("DISK_read: out of bounds read on (off=0x%zx sz=0x%zx diskSize=0x%zx) from %s\n", offset, size, device->ram.size, device->diskInfo.name);
                 return false;
             }
             memcpy(buffer, (char*)device->ram.data + offset, size);

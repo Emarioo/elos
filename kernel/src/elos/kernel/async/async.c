@@ -389,6 +389,8 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
             GET_SANITIZED_BUFFER(&safeConstBuffer, &safeBufferSize, request->write.buffer, request->write.size);
             GET_SANITIZED_FILE(&safeVFSHandle, request->write.file);
             
+            // printf("Write %zu %zu\n", request->write.offset, safeBufferSize);
+
             u64 result = VFS_write(safeVFSHandle, request->write.offset, safeBufferSize, safeConstBuffer);
 
             if (result != request->write.size) {
@@ -401,6 +403,8 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
         case ELOS_ASYNC_FILE_CLOSE: {
             GET_SANITIZED_FILE(&safeVFSHandle, request->write.file);
             
+            // printf("Close\n");
+
             VFS_close(safeVFSHandle);
 
             completion.error = ELOS_OK;

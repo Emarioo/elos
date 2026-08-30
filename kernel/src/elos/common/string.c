@@ -1,7 +1,7 @@
 
 #include "elos/common/string.h"
 
-
+int printf(const char* fmt, ...);
 
 int snprintf(char* buffer, size_t size, const char* format, ...) {
     va_list va;
@@ -111,8 +111,8 @@ void* memmove(void* dst, const void* src, size_t size) {
                 ((size_t*)dst)[i] = ((size_t*)src)[i];
             }
         } else {
-            for (size_t i=size/sizeof(size_t)-1;i>=0;i--) {
-                ((size_t*)dst)[i] = ((size_t*)src)[i];
+            for (size_t i=size/sizeof(size_t);i>0;i--) {
+                ((size_t*)dst)[i-1] = ((size_t*)src)[i-1];
             }
         }
     } else {
@@ -121,8 +121,8 @@ void* memmove(void* dst, const void* src, size_t size) {
                 ((char*)dst)[i] = ((char*)src)[i];
             }
         } else {
-            for (size_t i=size-1;i>=0;i--) {
-                ((char*)dst)[i] = ((char*)src)[i];
+            for (size_t i=size;i>0;i--) {
+                ((char*)dst)[i-1] = ((char*)src)[i-1];
             }
         }
     }

@@ -314,8 +314,10 @@ def package_elos(release_dir, build_iso = False):
         (prism_path, "PKG/PRISM/PRISM.ELF"),
         (term_path,  "PKG/TERM/TERM.ELF"),
         (slate_path, "PKG/SLATE/SLATE.ELF"),
+        ("res/Lat2-Terminus16.psf", "PKG/SLATE/STDFONT.PSF"),
         (win32_loader, "PKG/win32_loader/win32_loader.ELF"),
         (wintest, "PKG/win32_loader/wintest.exe"),
+        ("boot/template.cfg", "TEMPLATE.CFG"),
     ]
     if provide_doom:
         DEPS_SPEC.append((doom_path, "PKG/DOOM/DOOM.ELF"))
@@ -333,9 +335,6 @@ def package_elos(release_dir, build_iso = False):
         (kernel_path, "KERNEL.IMG"),
         (initrd_path, "INITRD.IMG"),
         ("boot/template.cfg", "TEMPLATE.CFG"),
-        ("res/Lat2-Terminus16.psf", "STDFONT.PSF"),  # baked into kernel image and not needed.
-                                                     # We currently don't package files with user apps
-                                                     # so we provide this default font in a file.
     ]
 
     fat_size, ISO_DIR = make_fat(fat_path, DEPS_SPEC)
@@ -365,6 +364,8 @@ def package_elos(release_dir, build_iso = False):
     def sync3():
         cmd(f"cd {os.path.dirname(temp_folder_path)} && tar -czf {temp_folder_name}.tar.gz {temp_folder_name}")
 
+    wait_pool(threads)
+    
     cmd_async(sync3)
 
     # Copy latest images to bin for quick access (we could make symlinks)
@@ -376,7 +377,6 @@ def package_elos(release_dir, build_iso = False):
         cmd(f"cp {kernel_elf_path} bin/kernel.elf")
         cmd_back(f"objdump -Sr bin/kernel.elf > bin/kernel.dis")
 
-    wait_pool(threads)
 
     print(f"Successfully built \033[32m{temp_folder_path}\033[0m")
 
