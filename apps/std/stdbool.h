@@ -3,6 +3,7 @@
 
 
 // #ifdef __x86_64__
+#define __bool_true_false_are_defined
 
 typedef unsigned char      bool;
 

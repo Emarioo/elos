@@ -248,21 +248,38 @@ typedef struct {
 void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     write_cr3((u64)g_kernelPageTable);
 
-    int coreIndex = CPU_get_core_index(); // a little dangerous if APIC address caused fault
+    u32 coreIndex = CPU_get_core_index(); // a little dangerous if APIC address caused fault
+    EXEC_Core* core = &cores[coreIndex];
+    EXEC_Thread* activeThread = &core->threads[core->active_thread];
 
+    if (frame->cs != KERNEL_CODE_SEGMENT) {
+        u64 fault_address = 0;
+        if (isr_number == 14) {
+            fault_address = read_cr2();
+        }
+        printf("Crashed %s, ISR=%d (rip=0x%x err=0x%x core=%d rsp=0x%x addr=0x%x)\n", activeThread->elfBaseName, isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp, fault_address);
+
+        // @TODO If user process installed exception handler then set RIP to that.
+        //   If it isn't installed then terminate the process.
+        activeThread->used = false;
+        kernel_thread_reschedule();
+        return;
+    }
+
+    u64 fault_address = 0;
     if (isr_number == 14) {
-        u64 fault_address = read_cr2();
-        printf("EXCEPTION #%d (rip=0x%x err=0x%x core=%d rsp=0x%x addr=0x%x)\n", isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp, fault_address);
-    } else {
-        printf("EXCEPTION #%d (rip=0x%x err=0x%x core=%d rsp=0x%x)\n", isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp);
+        fault_address = read_cr2();
+    }
+    printf("EXCEPTION #%d (rip=0x%x err=0x%x core=%d rsp=0x%x addr=0x%x)\n", isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp, fault_address);
 
+    if (isr_number == 13) {
         IretFrame* iretFrame = (void*)((char*)frame + 8 + sizeof(PageFaultFrame));
-        printf(" rip=%x\n", iretFrame->rip);
-        printf(" cs=%x\n", iretFrame->cs);
-        printf(" rflags=%x\n", iretFrame->rflags);
-        printf(" rsp=%x\n", iretFrame->rsp);
-        printf(" ss=%x\n", iretFrame->ss);
-
+        printf(" iret frame:\n", iretFrame->rip);
+        printf("  rip=%x\n", iretFrame->rip);
+        printf("  cs=%x\n", iretFrame->cs);
+        printf("  rflags=%x\n", iretFrame->rflags);
+        printf("  rsp=%x\n", iretFrame->rsp);
+        printf("  ss=%x\n", iretFrame->ss);
     }
     while (1) asm volatile ( "cli\nhlt\n" );
 }

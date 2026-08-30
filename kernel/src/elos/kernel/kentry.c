@@ -325,10 +325,10 @@ void os_entry() {
     EXEC_create_kernel_thread(SCON_main, 0);
     EXEC_create_kernel_thread(ASYNC_main, 0);
 
-    EXEC_create_user_thread("/pkg/win32_loader/win32_loader.elf", 0);
+    // EXEC_create_user_thread("/pkg/win32_loader/win32_loader.elf", 0);
 
     EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
-    // EXEC_create_user_thread("/pkg/slate/slate.elf", 0);
+    EXEC_create_user_thread("/pkg/slate/slate.elf", 0);
     // EXEC_create_user_thread("/pkg/doom/doom.elf", 0);
 
 

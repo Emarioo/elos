@@ -9,6 +9,13 @@
 
 #include "elos/kernel_console.h"
 
+#define printf(...) KCON_printf(__VA_ARGS__)
+
+typedef struct {
+    ELOS_UserEventBuffer* userEventBuffer;    
+    u32 maxEvents;
+    volatile u32 head;
+} KernelEventBuffer;
 
 void EVE_init(BootAPI* boot_api) {
     KBD_init(boot_api);
@@ -18,16 +25,17 @@ volatile u32 g_userEventLock;
 
 #define MAX_EVENT_BUFFERS 64
 
-ELOS_UserEventBuffer* g_eventBuffers[MAX_EVENT_BUFFERS];
+KernelEventBuffer g_eventBuffers[MAX_EVENT_BUFFERS];
 
+#define EVENT_BUFFER_PRESENT(BUF) ((BUF)->userEventBuffer)
 
-bool EVE_request_user_event_buffer(u32 maxEvents, ELOS_UserEventBuffer** buffer, u64* wholeBufferSize) {
+bool EVE_request_user_event_buffer(u32 maxEvents, ELOS_UserEventBuffer** buffer, u32* wholeBufferSize) {
     bool returnValue = false;
     LOCK_INT(&g_userEventLock);
 
     int freeIndex = -1;
     for (int i = 0; i < ARRAY_LENGTH(g_eventBuffers); i++) {
-        if (!g_eventBuffers[i]) {
+        if (!EVENT_BUFFER_PRESENT(&g_eventBuffers[i])) {
             freeIndex = i;
             break;
         }
@@ -35,8 +43,19 @@ bool EVE_request_user_event_buffer(u32 maxEvents, ELOS_UserEventBuffer** buffer,
     if (freeIndex == -1) {
         goto exit;
     }
+
+    if (maxEvents > 10000) {
+        // @TODO Return ELOS_Error not bool.
+        printf("User tried requesting buffer with %d events.\n", maxEvents);
+        goto exit;
+    }
+
+    KernelEventBuffer* eventBuffer = &g_eventBuffers[freeIndex];
     
-    u64 bufferSize = (sizeof(ELOS_UserEventBuffer) + maxEvents * sizeof(ELOS_UserEvent) + (PAGE_SIZE-1)) & (PAGE_SIZE-1);
+    u32 bufferSize = (sizeof(ELOS_UserEventBuffer) + maxEvents * sizeof(ELOS_UserEvent) + (PAGE_SIZE-1)) & (PAGE_SIZE-1);
+
+    eventBuffer->maxEvents = (bufferSize - sizeof(ELOS_UserEventBuffer)) / sizeof(ELOS_UserEvent);
+    eventBuffer->head = 0;
 
     ELOS_UserEventBuffer* newBuffer = PMEM_alloc_phys(bufferSize, PMEM_FLAG_IDENTITY_MAPPED);
     if (!newBuffer) {
@@ -46,10 +65,9 @@ bool EVE_request_user_event_buffer(u32 maxEvents, ELOS_UserEventBuffer** buffer,
     memset(newBuffer, 0, bufferSize);
     newBuffer->head = 0;
     newBuffer->tail = 0;
-    // Should we round up maxEvents or provide the exact amount user requested?
-    // We round up for now. It's easier to change API later to provide exact amount if needed.
-    *(u64*)&newBuffer->maxEvents = (bufferSize - sizeof(ELOS_UserEventBuffer)) / sizeof(ELOS_UserEvent);
-    g_eventBuffers[freeIndex] = newBuffer;
+    *(u32*)&newBuffer->maxEvents = eventBuffer->maxEvents;
+
+    eventBuffer->userEventBuffer = newBuffer;
 
     *wholeBufferSize = bufferSize;
     *buffer = newBuffer;
@@ -65,8 +83,8 @@ void EVE_push_event(ELOS_UserEvent* newEvent) {
     LOCK_INT(&g_userEventLock);
 
     for (int i = 0; i < ARRAY_LENGTH(g_eventBuffers); i++) {
-        ELOS_UserEventBuffer* buffer = g_eventBuffers[i];
-        if (!buffer) {
+        KernelEventBuffer* buffer = &g_eventBuffers[i];
+        if (!EVENT_BUFFER_PRESENT(buffer)) {
             continue;
         }
 
@@ -78,11 +96,19 @@ void EVE_push_event(ELOS_UserEvent* newEvent) {
         // @TODO We can't trust maxEvents. user may have put a wierd value there.
 
         u64 index = buffer->head % buffer->maxEvents;
-        ELOS_UserEvent* event = &buffer->events[index];
+        ELOS_UserEvent* event = &buffer->userEventBuffer->events[index];
         *event = *newEvent;
         buffer->head++;
-        if (buffer->head % buffer->maxEvents == buffer->tail % buffer->maxEvents) {
-            buffer->tail++;
+        buffer->userEventBuffer->head = buffer->head;
+
+        // @TODO The idea behind this is to increment tail so it "drags" behind the head
+        //   But I am pretty sure this doesn't work in practise with multiple threads because user
+        //   May have an old tail and a new head. Maybe we need to update tail first then head to make
+        //   sure tail is never behind head? User must then read head first and then tail?
+        //   Any other good way to handle event overflow? Requiring user to process them and not overflow
+        //   doesn't seem nice.
+        if (buffer->head % buffer->maxEvents == buffer->userEventBuffer->tail % buffer->maxEvents) {
+            buffer->userEventBuffer->tail++;
         }
     }
 

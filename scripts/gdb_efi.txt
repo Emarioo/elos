@@ -8,10 +8,8 @@ set $base = *(unsigned long long*)0x10008
 add-symbol-file bin/boot.elf -o $base
 add-symbol-file bin/kernel.elf
 # add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/doom/doom.elf -o 0xC1000000
-add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/win32_loader/win32_loader.elf -o 0xC0000000
-# hb exception_handler
+add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/slate/slate.elf -o 0xC1000000
+# add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/win32_loader/win32_loader.elf -o 0xC0000000
 
-# hb syscall_handler32
-hb *0xC00021a8
-hb *0x00401006
+hb dummy
 c

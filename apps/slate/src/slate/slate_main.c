@@ -74,8 +74,8 @@ SlateSession slateSession;
 
 bool get_event(ELOS_UserEvent* event) {
     // @TODO Not thread or context switch safe.
-    u64 tail = userEvents->tail % userEvents->maxEvents;
-    u64 head = userEvents->head % userEvents->maxEvents;
+    u32 tail = userEvents->tail % userEvents->maxEvents;
+    u32 head = userEvents->head % userEvents->maxEvents;
     if (tail == head) {
         return false;
     }
@@ -123,7 +123,7 @@ void _start() {
 
     stdui_set_surface(&g_surfaceInfo);
 
-    play_sound("/pkg/wav/dream.wav");
+    // play_sound("/pkg/wav/dream.wav");
 
     editor_loop();
 }
@@ -206,10 +206,10 @@ void editor_loop() {
             if (event.type != ELOS_USER_EVENT_KEY || event.key.value == 0) {
                 continue;
             }
-            
+            // printf("scan=0x%x code=%d chr=%c pressed=%d\n", event.key.scancode, event.key.keycode, (char)event.key.character, event.key.value);
+
             apply_numpad(&event.key.keycode, event.key.mods);
 
-            // printf("scan=0x%x code=%d chr=%c pressed=%d\n", event.key.scancode, event.key.keycode, event.key.character, event.key.value);
 
             ELOS_UserEvent_Key key = event.key;
             

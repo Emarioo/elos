@@ -174,7 +174,7 @@ static void fmt_str(char *buf, size_t *pos, size_t max, char *s,
             bputc(buf, pos, max, *s++);
     } else {
         char* origin_s = s;
-        while (*s && s - origin_s < precision)
+        while (s - origin_s < precision)
             bputc(buf, pos, max, *s++);
     }
 
@@ -311,6 +311,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
             } else if (c == 'c') {
                 c = va_arg(ap, int);
                 fmt_chr(buf, &n, size, c, width, flags);
+                c = 1; // Make sure c isn't 0 because we don't want to break
             } else if (c == '%') {
                 bputc(buf, &n, size, c);
             } else {

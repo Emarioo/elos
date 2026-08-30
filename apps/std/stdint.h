@@ -17,6 +17,10 @@ typedef signed long long   int64_t;
 typedef unsigned long      uintptr_t;
 typedef long               intptr_t;
 
+
+typedef unsigned long      uintmax_t;
+typedef long               intmax_t;
+
 // #else
 
 // typedef unsigned char      uint8_t;

@@ -158,12 +158,9 @@ typedef struct {
 } ELOS_UserEvent;
 
 typedef struct {
-    // We won't have more than 4 billion events at once so 32-bit integers would work however
-    // u64 means we can increment head and tail without worrying about wrap around.
-    // unless program runs for a really long time with many events.
-    const    u64 maxEvents;
-    volatile u64 head; // @TODO reserve, commit head/tail?
-    volatile u64 tail;
+    const    u32 maxEvents;
+    volatile u32 head; // @TODO reserve, commit head/tail?
+    volatile u32 tail;
     ELOS_UserEvent events[];
 } ELOS_UserEventBuffer;
 
