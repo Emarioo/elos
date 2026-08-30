@@ -1,3 +1,14 @@
+/*
+
+    A COFF object file begins with COFF_File_Header.
+
+    An executable begins with dos stub and signature.
+    At 0x3c is a u32 offset to the signature in the file.
+    After the 4-byte signature (PE\0\0) is the COFF_File_Header.
+
+*/
+
+
 #pragma once
 
 
@@ -15,7 +26,7 @@ typedef enum _Machine_Type {
 } _Machine_Type;
 typedef uint16_t Machine_Type;
 
-typedef enum COFF_Header_Flag {
+typedef enum _COFF_Header_Flag {
     CHARACTERISTICS_ZERO=0,
     IMAGE_FILE_RELOCS_STRIPPED = 0x0001, // Image only, Windows CE, and Microsoft Windows NT and later. This indicates that the file does not contain base relocations and must therefore be loaded at its preferred base address. If the base address is not available, the loader reports an error. The default behavior of the linker is to strip base relocations from executable (EXE) files.
     IMAGE_FILE_EXECUTABLE_IMAGE = 0x0002, // Image only. This indicates that the image file is valid and can be run. If this flag is not set, it indicates a linker error.
@@ -32,8 +43,8 @@ typedef enum COFF_Header_Flag {
     IMAGE_FILE_DLL = 0x2000, // The image file is a dynamic-link library (DLL). Such files are considered executable files for almost all purposes, although they cannot be directly run.
     IMAGE_FILE_UP_SYSTEM_ONLY = 0x4000, // The file should be run only on a uniprocessor machine.
     IMAGE_FILE_BYTES_REVERSED_HI = 0x8000, // Big endian: the MSB precedes the LSB in memory. This flag is deprecated and should be zero.
-} COFF_Header_Flag;
-typedef uint16_t COFF_Header_Flags;
+} _COFF_Header_Flag;
+typedef uint16_t COFF_Header_Flag;
 
 #pragma pack(push, 1)
 #define COFF_File_Header_SIZE 20
@@ -44,8 +55,139 @@ typedef struct COFF_File_Header {
     uint32_t PointerToSymbolTable;
     uint32_t NumberOfSymbols;
     uint16_t SizeOfOptionalHeader; // always zero for object files (not executables)
-    COFF_Header_Flags Characteristics;
+    COFF_Header_Flag Characteristics;
 } COFF_File_Header;
+#pragma pack(pop)
+
+#define COFF_OPTIONAL_HEADER_MAGIC_PE32      0x10b
+#define COFF_OPTIONAL_HEADER_MAGIC_PE32_PLUS 0x20b
+
+#pragma pack(push, 1)
+#define COFF_Optional_Header_32_SIZE 28
+#define COFF_Optional_Header_64_SIZE 24
+typedef struct COFF_Optional_Header {
+    uint16_t Magic;
+    uint8_t  MajorLinkerVersion;
+    uint8_t  MinorLinkerVersion;
+    uint32_t SizeOfCode;
+    uint32_t SizeOfUninitializedData;
+    uint32_t AddressOfEntryPoint;
+    uint32_t BaseOfCode;
+    uint32_t BaseOfData; // Only available for PE32
+} COFF_Optional_Header;
+#pragma pack(pop)
+
+typedef enum COFF_Subsystem {
+    IMAGE_SUBSYSTEM_UNKNOWN = 0,                    // An unknown subsystem
+    IMAGE_SUBSYSTEM_NATIVE = 1,                     // Device drivers and native Windows processes
+    IMAGE_SUBSYSTEM_WINDOWS_GUI = 2,                // The Windows graphical user interface (GUI) subsystem
+    IMAGE_SUBSYSTEM_WINDOWS_CUI = 3,                // The Windows character subsystem
+    IMAGE_SUBSYSTEM_OS2_CUI = 5,                    // The OS/2 character subsystem
+    IMAGE_SUBSYSTEM_POSIX_CUI = 7,                  // The Posix character subsystem
+    IMAGE_SUBSYSTEM_NATIVE_WINDOWS = 8,             // Native Win9x driver
+    IMAGE_SUBSYSTEM_WINDOWS_CE_GUI = 9,             // Windows CE
+    IMAGE_SUBSYSTEM_EFI_APPLICATION = 10,           // An Extensible Firmware Interface (EFI) application
+    IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER = 11,  // An EFI driver with boot services
+    IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER = 12,       // An EFI driver with run-time services
+    IMAGE_SUBSYSTEM_EFI_ROM = 13,                   // An EFI ROM image
+    IMAGE_SUBSYSTEM_XBOX = 14,                      // XBOX
+    IMAGE_SUBSYSTEM_WINDOWS_BOOT_APPLICATION = 16,  // Windows boot application.
+} _COFF_Subsystem;
+typedef uint16_t COFF_Subsystem;
+
+typedef enum _COFF_DLL_Characteristics {
+    IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA  = 0x0020,         // Image can handle a high entropy 64-bit virtual address space.
+    IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE  = 0x0040,            // DLL can be relocated at load time.
+    IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY  = 0x0080,         // Code Integrity checks are enforced.
+    IMAGE_DLLCHARACTERISTICS_NX_COMPAT  = 0x0100,               // Image is NX compatible.
+    IMAGE_DLLCHARACTERISTICS_NO_ISOLATION  = 0x0200,            // Isolation aware, but do not isolate the image.
+    IMAGE_DLLCHARACTERISTICS_NO_SEH  = 0x0400,                  // Does not use structured exception (SE) handling. No SE handler may be called in this image.
+    IMAGE_DLLCHARACTERISTICS_NO_BIND  = 0x0800,                 // Do not bind the image.
+    IMAGE_DLLCHARACTERISTICS_APPCONTAINER  = 0x1000,            // Image must execute in an AppContainer.
+    IMAGE_DLLCHARACTERISTICS_WDM_DRIVER  = 0x2000,              // A WDM driver.
+    IMAGE_DLLCHARACTERISTICS_GUARD_CF  = 0x4000,                // Image supports Control Flow Guard.
+    IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE  = 0x8000,   // Terminal Server aware.
+} _COFF_DLL_Characteristics;
+typedef uint16_t COFF_DLL_Characteristics;
+
+#pragma pack(push, 1)
+#define COFF_Optional_Windows_Header_32_SIZE      68
+typedef struct COFF_Optional_Windows_Header_32 {
+    uint32_t ImageBase;
+    uint32_t SectionAlignment;
+    uint32_t FileAlignment;
+    uint16_t MajorOperatingSystemVersion;
+    uint16_t MinorOperatingSystemVersion;
+    uint16_t MajorImageVersion;
+    uint16_t MinorImageVersion;
+    uint16_t MajorSubsystemVersion;
+    uint16_t MinorSubsystemVersion;
+    uint32_t Win32VersionValue;
+    uint32_t SizeOfImage;
+    uint32_t SizeOfHeaders;
+    uint32_t CheckSum;
+    COFF_Subsystem Subsystem;
+    uint16_t DllCharacteristics;
+    uint32_t SizeOfStackReserve;
+    uint32_t SizeOfStackCommit;
+    uint32_t SizeOfHeapReserve;
+    uint32_t SizeOfHeapCommit;
+    uint32_t LoaderFlags;
+    uint32_t NumberOfRvaAndSizes;
+} COFF_Optional_Windows_Header_32;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+#define COFF_Optional_Windows_Header_64_SIZE 88
+typedef struct COFF_Optional_Windows_Header_64 {
+    uint64_t ImageBase;
+    uint32_t SectionAlignment;
+    uint32_t FileAlignment;
+    uint16_t MajorOperatingSystemVersion;
+    uint16_t MinorOperatingSystemVersion;
+    uint16_t MajorImageVersion;
+    uint16_t MinorImageVersion;
+    uint16_t MajorSubsystemVersion;
+    uint16_t MinorSubsystemVersion;
+    uint32_t Win32VersionValue;
+    uint32_t SizeOfImage;
+    uint32_t SizeOfHeaders;
+    uint32_t CheckSum;
+    COFF_Subsystem Subsystem;
+    uint16_t DllCharacteristics;
+    uint64_t SizeOfStackReserve;
+    uint64_t SizeOfStackCommit;
+    uint64_t SizeOfHeapReserve;
+    uint64_t SizeOfHeapCommit;
+    uint32_t LoaderFlags;
+    uint32_t NumberOfRvaAndSizes;
+} COFF_Optional_Windows_Header_64;
+#pragma pack(pop)
+
+typedef struct COFF_Image_Data_Directory {
+    uint32_t VirtualAddress;
+    uint32_t Size;
+} COFF_Image_Data_Directory;
+
+#pragma pack(push, 1)
+typedef struct COFF_Optional_Data_Directories {
+    COFF_Image_Data_Directory ExportTable;
+    COFF_Image_Data_Directory ImportTable;
+    COFF_Image_Data_Directory ResourceTable;
+    COFF_Image_Data_Directory ExceptionTable;
+    COFF_Image_Data_Directory CertificateTable;
+    COFF_Image_Data_Directory BaseRelocationTable;
+    COFF_Image_Data_Directory Debug;
+    COFF_Image_Data_Directory Architecture;
+    COFF_Image_Data_Directory GlobalPtr;
+    COFF_Image_Data_Directory TLSTable;
+    COFF_Image_Data_Directory LoadConfigTable;
+    COFF_Image_Data_Directory BoundImport;
+    COFF_Image_Data_Directory IAT;
+    COFF_Image_Data_Directory DelayImportDescriptor;
+    COFF_Image_Data_Directory CLRRuntimeHeader;
+    COFF_Image_Data_Directory _zero;
+} COFF_Optional_Data_Directories;
 #pragma pack(pop)
 
 typedef enum Section_Flag {
@@ -91,8 +233,8 @@ typedef uint32_t Section_Flags;
 
 #pragma pack(push, 1)
 // section table entry
-#define Section_Header_SIZE 40
-typedef struct Section_Header {
+#define COFF_Section_Header_SIZE 40
+typedef struct COFF_Section_Header {
     char Name[8]; // null terminated unless name is exactly 8 bytes. Longer names exist in the string table. They are referred to like this "/index\0" (ex, "/23\0")
     uint32_t VirtualSize; // 0 for object files
     uint32_t VirtualAddress; // should be 0 for simplicity, it offsets relocations but isn't necessary.
@@ -103,9 +245,9 @@ typedef struct Section_Header {
     uint16_t NumberOfRelocations;
     uint16_t NumberOfLineNumbers;
     Section_Flags Characteristics;
-} Section_Header;
-
+} COFF_Section_Header;
 #pragma pack(pop)
+
 typedef enum _Type_Indicator {
     TYPE_INDICATOR_ZERO = 0,
     IMAGE_REL_AMD64_ABSOLUTE = 0x0000, // The relocation is ignored.
@@ -185,8 +327,8 @@ typedef enum _Type_Representation_MSB {
 typedef uint8_t Type_Representation_MSB;
 
 #pragma pack(push,1)
-#define Symbol_Record_SIZE 18
-typedef struct Symbol_Record {
+#define COFF_Symbol_Record_SIZE 18
+typedef struct COFF_Symbol_Record {
     union {
         char ShortName[8];
         struct {
@@ -203,7 +345,7 @@ typedef struct Symbol_Record {
     uint16_t Type;
     Storage_Class StorageClass;
     uint8_t NumberOfAuxSymbols;
-} Symbol_Record;
+} COFF_Symbol_Record;
 
 #define Aux_Format_5_SIZE Symbol_Record_SIZE
 typedef struct Aux_Format_5 {
@@ -279,3 +421,14 @@ typedef enum UnwindOpRegister {
     UWOP_R8 = 8, // To get R13 do: UWOP_R8 + (8 - N), where N = 13
     // 8 to 15	R8 to R15
 } UnwindOpRegister;
+
+
+#pragma pack(push, 1)
+typedef struct COFF_Import_Directory_Table {
+    uint32_t ImportLookupTableRVA;
+    uint32_t TimeDateStamp;
+    uint32_t ForwarderChain;
+    uint32_t NameRVA;
+    uint32_t ImportAddressTableRVA;
+} COFF_Import_Directory_Table;
+#pragma pack(pop)

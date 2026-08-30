@@ -638,16 +638,16 @@ typedef struct {
 } ELOS_AsyncCompletion;
 
 typedef struct {
-    volatile u64 head;
-    volatile u64 tail;
-    const    u64 ringMask;
+    volatile u32 head;
+    volatile u32 tail;
+    const    u32 ringMask;
              u32 reserved;
     volatile ELOS_AsyncRequest entries[];
 } ELOS_AsyncRequestRing;
 
 typedef struct {
-    volatile u64 head;
-    volatile u64 tail;
+    volatile u32 head;
+    volatile u32 tail;
     const    u32 ringMask;
              u32 reserved;
     volatile ELOS_AsyncCompletion entries[];

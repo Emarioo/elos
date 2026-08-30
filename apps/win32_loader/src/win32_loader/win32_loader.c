@@ -49,6 +49,8 @@ Tests
 #include <stdlib.h>
 #include <string.h>
 
+#include "win32_loader/coff_parser.h"
+
 
 
 u64 ticks_per_second;
@@ -57,6 +59,14 @@ void _start() {
     SYS_ticks_per_second(&ticks_per_second);
 
     printf("Hello from 32-bit mode, %llu MHz\n", ticks_per_second / 0x100000LU);
+
+    const char* path = "/pkg/win32_loader/wintest.exe";
+
+    // @TODO Parse COFF/PE (wintest program) and allocate sections
+    //   fix relocations, fix import table. Provide win32->elos functions to the import table.
+    //   Then start executing.
+
+    dump_coff(path);
 
     SYS_exit(5);
 }

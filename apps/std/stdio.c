@@ -98,7 +98,7 @@ FILE *fopen(const char *restrict _path, const char *restrict mode) {
 
     GET_ABS_PATH(path, _path);
 
-    ELOS_AsyncRequest req;
+    ELOS_AsyncRequest req = {0};
     ELOS_AsyncCompletion cqe;
     Async_RequestID requestID;
 
@@ -145,7 +145,7 @@ int fclose(FILE *file) {
 
     ELOS_Error error;
     
-    ELOS_AsyncRequest req;
+    ELOS_AsyncRequest req = {0};
     ELOS_AsyncCompletion cqe;
     Async_RequestID requestID;
 
@@ -182,7 +182,7 @@ int fseek(FILE *stream, long offset, int whence) {
 
     ELOS_Error error;
 
-    ELOS_AsyncRequest req;
+    ELOS_AsyncRequest req = {0};
     ELOS_AsyncCompletion cqe;
     Async_RequestID requestID;
     ELOS_FileInfo fileInfo;
@@ -219,7 +219,7 @@ static bool flush_read_cache(FILE *restrict stream) {
 
     ELOS_Error error;
 
-    ELOS_AsyncRequest req;
+    ELOS_AsyncRequest req = {0};
     ELOS_AsyncCompletion cqe;
     Async_RequestID requestID;
 
@@ -287,7 +287,7 @@ static size_t cached_read(void* ptr, size_t size, FILE *restrict stream) {
     
     if (stream->rcache && stream->rcache_len == 0 && size - cachedBytesToRead < stream->cache_max) {
         stream->rcache_pos = stream->position;
-        ELOS_AsyncRequest req;
+        ELOS_AsyncRequest req = {0};
         ELOS_AsyncCompletion cqe;
         Async_RequestID requestID;
 
@@ -318,7 +318,7 @@ static size_t cached_read(void* ptr, size_t size, FILE *restrict stream) {
         u32 readBytes = cachedBytesToRead + size - cachedBytesToRead + cqe.read.readBytes;
         return readBytes;
     } else {
-        ELOS_AsyncRequest req;
+        ELOS_AsyncRequest req = {0};
         ELOS_AsyncCompletion cqe;
         Async_RequestID requestID;
 
@@ -391,7 +391,7 @@ static bool flush_write_cache(FILE *restrict stream) {
 
     ELOS_Error error;
 
-    ELOS_AsyncRequest req;
+    ELOS_AsyncRequest req = {0};
     ELOS_AsyncCompletion cqe;
     Async_RequestID requestID;
 
@@ -477,7 +477,7 @@ static size_t cached_write(const void* ptr, size_t size, FILE *restrict stream) 
     ELOS_Error error;
     ELOS_AsyncCompletion cqe;
     Async_RequestID requestID;
-    ELOS_AsyncRequest req;
+    ELOS_AsyncRequest req = {0};
 
     req.operation   = ELOS_ASYNC_FILE_WRITE;
     req.flags       = 0;
@@ -714,7 +714,7 @@ int remove(const char* _path) {
     
     GET_ABS_PATH(path, _path);
 
-    ELOS_AsyncRequest req;
+    ELOS_AsyncRequest req = {0};
     ELOS_AsyncCompletion cqe;
     Async_RequestID requestID;
 
@@ -744,7 +744,7 @@ int rename(const char* _oldpath, const char* _newpath) {
     GET_ABS_PATH(oldpath, _oldpath);
     GET_ABS_PATH(newpath, _newpath);
 
-    ELOS_AsyncRequest req;
+    ELOS_AsyncRequest req = {0};
     ELOS_AsyncCompletion cqe;
     Async_RequestID requestID;
 
@@ -771,7 +771,7 @@ int rename(const char* _oldpath, const char* _newpath) {
 int mkdir(const char* _path, mode_t mode) {
     GET_ABS_PATH(path, _path);
 
-    ELOS_AsyncRequest req;
+    ELOS_AsyncRequest req = {0};
     ELOS_AsyncCompletion cqe;
     Async_RequestID requestID;
 
@@ -809,7 +809,7 @@ ELOS_Error elos_readdir(const char* _path, u64* cookie, u64* entryCount, ELOS_Di
 
     GET_ABS_PATH(path, _path);
 
-    ELOS_AsyncRequest req;
+    ELOS_AsyncRequest req = {0};
     ELOS_AsyncCompletion cqe;
     Async_RequestID requestID;
 

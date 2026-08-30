@@ -356,6 +356,8 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
         _temp_mapped = map_user_buffer((void*)ring->thread->frame.cr3, STRUCT_PTR, sizeof(*STRUCT_PTR)); \
         if (!_temp_mapped)  break;
 
+    // printf("Request 0x%x 0x%p 0x%x\n", request->operation, request->open.path, request->open.flags);
+
     switch (request->operation) {
         case ELOS_ASYNC_FILE_OPEN: {
             GET_SANITIZED_PATH(&safePath, request->open.path);

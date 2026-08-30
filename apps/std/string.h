@@ -11,6 +11,9 @@ void* memcpy(void* dst, const void* src, size_t size);
 //     return chr >= 'A' && chr <= 'Z' ? (chr|32) : chr;
 // }
 
+int strncmp(const char* dst, const char* src, size_t maxlen);
+int strcmp(const char* dst, const char* src);
+
 char *strdup(const char *s);
 char *strrchr(const char *s, int c);
 

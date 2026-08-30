@@ -240,6 +240,7 @@ def package_elos(release_dir, build_iso = False):
     slate_path      = f"{temp_folder_path}/initrd/pkg/slate/slate.elf"
     
     win32_loader    = f"{temp_folder_path}/initrd/pkg/win32_loader/win32_loader.elf"
+    wintest    = f"{temp_folder_path}/initrd/pkg/win32_loader/wintest.exe"
     
     doom_path       = f"{temp_folder_path}/initrd/pkg/doom/doom.elf"
     wad_path        = f"{temp_folder_path}/initrd/pkg/doom/doom1.wad"
@@ -287,6 +288,10 @@ def package_elos(release_dir, build_iso = False):
     def sync6():
         cmd(f"APP_OUTPUT={win32_loader} make -f apps/win32_loader/Makefile")
         cmd_back(f"objdump -S {win32_loader} > win32.dis")
+        
+    def sync7():
+        cmd(f"APP_OUTPUT2={wintest} make -f apps/win32_loader/Makefile wintest")
+        cmd_back(f"objdump -S {wintest} > wintest.dis")
     
     threads.append(cmd_async(sync0))
     threads.append(cmd_async(sync1))
@@ -298,6 +303,7 @@ def package_elos(release_dir, build_iso = False):
     threads.append(cmd_async(sync3))
     threads.append(cmd_async(sync4))
     threads.append(cmd_async(sync6))
+    threads.append(cmd_async(sync7))
     if provide_doom:
         threads.append(cmd_async(sync5))
 
@@ -309,6 +315,7 @@ def package_elos(release_dir, build_iso = False):
         (term_path,  "PKG/TERM/TERM.ELF"),
         (slate_path, "PKG/SLATE/SLATE.ELF"),
         (win32_loader, "PKG/win32_loader/win32_loader.ELF"),
+        (wintest, "PKG/win32_loader/wintest.exe"),
     ]
     if provide_doom:
         DEPS_SPEC.append((doom_path, "PKG/DOOM/DOOM.ELF"))

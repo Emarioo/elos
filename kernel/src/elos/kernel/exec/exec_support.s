@@ -186,6 +186,7 @@ timer_isr_ret32:
     push rax
     mov rax, [rsp + (1 + 4) * 8] # extract SS from interrupt frame
     mov ds, ax
+    mov es, ax
     pop rax
 
     // When returning to 32-bit compatibility mode we use iret with 32-bit operand size.
@@ -328,6 +329,7 @@ syscall_handler32:
 
     mov rcx, [rsp + 4 * 8] # extract SS from interrupt frame
     mov ds, cx
+    mov es, cx
 
     // Convert 64-bit registers (rip,cs,rflags,rsp,ss) to 32-bit registers (eip,cs,eflags,esp,ss)
     mov rcx, [rsp + 0]

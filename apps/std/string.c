@@ -92,6 +92,41 @@ char *strdup(const char *s)
 
 //     return dst;
 // }
+
+
+// int strcmp(const char* dst, const char* src) {
+//     int i=0;
+//     while (1) {
+//         char s = src[i];
+//         char d = dst[i];
+//         if (d != s) {
+//             return d - s;
+//         }
+//         if (d == 0) {
+//             break;
+//         }
+//         i++;
+//     }
+//     return 0;
+// }
+
+// int strncmp(const char* dst, const char* src, size_t len) {
+//     int i=0;
+//     while (i < len) {
+//         char s = src[i];
+//         char d = dst[i];
+//         if (d != s) {
+//             return d - s;
+//         }
+//         if (d == 0) {
+//             break;
+//         }
+//         i++;
+//     }
+//     return 0;
+// }
+
+
 int strcasecmp(const char *a, const char *b)
 {
     while (*a && *b)
