@@ -14,7 +14,7 @@ typedef struct {
 
 
 Slice slice = {
-    .ptr = fixedNumbers,
+    .ptr = fixedNumbers, 
     .len = sizeof(fixedNumbers) / sizeof(*fixedNumbers),
 };
 
@@ -75,13 +75,14 @@ Slice slice = {
 // );
 
 __declspec(dllimport)
-void __stdcall  print(void* data, int size);
+void   print(void* data, int size);
+
 
 int main() {
 
     // HANDLE handle = CreateFileA("/test.txt", GENERIC_WRITE|GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
-    print("Hello\n", 5);
+    print("Hello\n", 6);
     // send(slice.ptr + 2, sizeof(*slice.ptr) * 3);
     // slice.ptr[2] *= 2;
     // send(slice.ptr, sizeof(*slice.ptr) * 3);
@@ -89,3 +90,4 @@ int main() {
     return 5;
 }
 
+void __main(void) {}

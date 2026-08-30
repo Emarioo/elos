@@ -8,6 +8,6 @@
 #include "elos/syscalls.h"
 
 __declspec(dllexport)
-void __stdcall  print(void* data, int size) {
+void   print(void* data, int size) {
     SYS_debug_log(data, size);
 }

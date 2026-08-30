@@ -21,4 +21,16 @@ class SkipInterrupts(gdb.Command):
         else:
             gdb.execute("si")
 
+class Finish32(gdb.Command):
+
+    def __init__(self):
+        super(Finish32, self).__init__("f32", gdb.COMMAND_USER)
+
+    def invoke(self, arg, from_tty):
+        # Read current instruction
+        ebp = int(gdb.parse_and_eval("*((unsigned*)((unsigned)$ebp + 4))"))
+        gdb.execute(f"tb *{ebp}", to_string=True)
+        gdb.execute("continue")
+
 SkipInterrupts()
+Finish32()

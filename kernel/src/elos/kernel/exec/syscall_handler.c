@@ -28,7 +28,8 @@
 
 // @TODO Move into process resource handler?
 typedef struct {
-    void*  address;
+    void*  virtAddress;
+    void*  physAddress;
     size_t size;
 } HeapEntry;
 
@@ -37,14 +38,14 @@ static int        allocations_len;
 static int        allocations_max;
 static volatile u32 heap_lock;
 
-HeapEntry* get_heap_entry(void* address) {
+HeapEntry* get_heap_entry(void* virtAddress) {
     LOCK_INT(&heap_lock);
     
     HeapEntry* found = NULL;
     // @TODO SLOW!!!!
     for (int i=0;i<allocations_len;i++) {
         HeapEntry* entry = &allocations[i];
-        if (entry->address == address) {
+        if (entry->virtAddress == virtAddress) {
             found = entry;
             break;
         }
@@ -54,7 +55,7 @@ HeapEntry* get_heap_entry(void* address) {
     
     return found;
 }
-bool update_heap_entry(void* old_address, void* new_address, size_t size) {
+bool update_heap_entry(void* old_address, void* new_address, void* physAddress, size_t size) {
     bool returnValue = false;
     
     LOCK_INT(&heap_lock);
@@ -62,7 +63,7 @@ bool update_heap_entry(void* old_address, void* new_address, size_t size) {
     if (old_address == NULL) {
         for (int i=0;i<allocations_len;i++) {
             HeapEntry* entry = &allocations[i];
-            if (entry->address == new_address) {
+            if (entry->virtAddress == new_address) {
                 // New address exists
                 goto exit;
             }
@@ -87,15 +88,20 @@ bool update_heap_entry(void* old_address, void* new_address, size_t size) {
         }
         HeapEntry* entry = &allocations[allocations_len];
         allocations_len++;
-        entry->address = new_address;
+        entry->virtAddress = new_address;
+        KERNEL_PANIC(physAddress, "physAddress was NULL when creating new entry");
+        entry->physAddress = physAddress;
         entry->size = size;
         returnValue = true;
     } else {
         for (int i=0;i<allocations_len;i++) {
             HeapEntry* entry = &allocations[i];
-            if (entry->address == old_address) {
-                entry->address = new_address;
+            if (entry->virtAddress == old_address) {
+                entry->virtAddress = new_address;
                 entry->size = size;
+                if (physAddress) {
+                    entry->physAddress = physAddress;
+                }
                 returnValue = true;
                 // @TODO Check new address doesn't exist.
                 goto exit;
@@ -108,6 +114,17 @@ exit:
     return returnValue;
 }
 
+static PMEM_Flags elos_protection_to_pmem_flags(ELOS_Heap_Protection protection) {
+    PMEM_Flags flags = PMEM_FLAG_USER_SPACE;
+    if (protection & ELOS_HEAP_PROT_EXEC) {
+        flags |= PMEM_FLAG_EXECUTABLE;
+    }
+    if (0 == (protection & ELOS_HEAP_PROT_WRITE)) {
+        flags |= PMEM_FLAG_READ_ONLY;
+    }
+    // We always have read access.
+    return flags;
+}
 
 typedef struct {
     // EXEC_Thread* thread; // should be process id
@@ -197,6 +214,8 @@ void enableDefaultMonitorForUsers() {
 exit:
     UNLOCK_INT(&frameBufferOwners_lock);
 }
+
+
 
 ELOS_Error getDefaultMonitor(PageTable* userPageTable, MON_FrameBuffer* monitor) {
     ELOS_Error returnValue = ELOS_ERR_UNKNOWN;
@@ -311,11 +330,11 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             // @TODO Check capability and heap limit
 
-            void* address = PMEM_alloc_phys(size, PMEM_FLAG_USER_SPACE);
+            void* address = PMEM_alloc_phys(size, 0);
             if (address) {
                 write_cr3((u64)g_kernelPageTable);
                 
-                update_heap_entry(NULL, address, size);
+                update_heap_entry(NULL, address, address, size);
                 bool mapped = PMEM_map_memory(userPageTable, address, address, size, PMEM_FLAG_USER_SPACE);
                 if (!mapped) {
                     PMEM_free(address);
@@ -342,7 +361,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             // @TODO Check capability
             
             write_cr3((u64)g_kernelPageTable);
-            update_heap_entry(oldAddress, NULL, 0);
+            update_heap_entry(oldAddress, NULL, NULL, 0);
             write_cr3((u64)userPageTable);
             
             PMEM_free(oldAddress);
@@ -362,7 +381,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             HeapEntry* heapEntry = oldAddress == NULL ? NULL : get_heap_entry(oldAddress);
             if (!heapEntry) {
                 
-                void* address = PMEM_alloc_phys(size, PMEM_FLAG_USER_SPACE);
+                void* address = PMEM_alloc_phys(size, 0);
                 if (!address) {
                     write_cr3((u64)userPageTable);
                     SET_ADDRESS_SIZE_TYPE(newAddress, NULL);
@@ -370,7 +389,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                     break;
                 }
                     
-                update_heap_entry(NULL, address, size);
+                update_heap_entry(NULL, address, address, size);
                 PMEM_map_memory(userPageTable, address, address, size, PMEM_FLAG_USER_SPACE);
                 
                 write_cr3((u64)userPageTable);
@@ -381,10 +400,10 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             }
             u64 oldSize = heapEntry->size;
             
-            void* address = PMEM_alloc_phys(size, PMEM_FLAG_IDENTITY_MAPPED|PMEM_FLAG_USER_SPACE);
+            void* address = PMEM_alloc_phys(size, 0);
             
             if (address) {
-                update_heap_entry(oldAddress, address, size);
+                update_heap_entry(oldAddress, address, address, size);
                 PMEM_map_memory(userPageTable, address, address, size, PMEM_FLAG_USER_SPACE);
                 write_cr3((u64)userPageTable);
                 memcpy(address, oldAddress, oldSize);
@@ -404,19 +423,23 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         } break;
         case _SYS_HEAP_MAP: {
             void*  virtAddress = (void*)arg0;
-            u64    size = arg1;
+            size_t    size = arg1;
+            ELOS_Heap_Protection protection = arg2;
 
             // @TODO Check capability and heap limit
 
-            // @TODO I'm not sure HEAP_FREE can free memory from HEAP_MAP.
-            //    It is not identity mapped. Heap free calls PMEM_free which
-            //    kind of assumes kernel page table which isn't right.
+            // @TODO Check if virtual memory space has stuff at the memory range we want to map.
+            //   Return error if so. Right now we overwrite the page tables with our new mapping
+            //   which will cause a crash.
 
-            void* phys_address = PMEM_alloc_phys(size, PMEM_FLAG_USER_SPACE);
+            void* phys_address = PMEM_alloc_phys(size, 0);
             if (phys_address) {
                 write_cr3((u64)g_kernelPageTable);
-                update_heap_entry(NULL, virtAddress, size);
-                bool mapped = PMEM_map_memory(userPageTable, virtAddress, phys_address, size, PMEM_FLAG_USER_SPACE);
+                update_heap_entry(NULL, virtAddress, phys_address, size);
+
+                PMEM_Flags flags = elos_protection_to_pmem_flags(protection);
+
+                bool mapped = PMEM_map_memory(userPageTable, virtAddress, phys_address, size, flags);
                 write_cr3((u64)userPageTable);
                 if (mapped) {
                     memset(virtAddress, 0x9A, size);
@@ -427,6 +450,34 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             } else {
                 returnValue = ELOS_ERR_UNKNOWN;
             }
+        } break;
+        case _SYS_HEAP_PROTECT: {
+            void*  virtAddress = (void*)arg0;
+            size_t    size = arg1;
+            ELOS_Heap_Protection protection = arg2;
+
+            // @TODO Check capability and heap limit
+
+            // @TODO I'm not sure HEAP_FREE can free memory from HEAP_MAP.
+            //    It is not identity mapped. Heap free calls PMEM_free which
+            //    kind of assumes kernel page table which isn't right.
+
+            write_cr3((u64)g_kernelPageTable);
+
+            HeapEntry* heapEntry = get_heap_entry(virtAddress);
+            if (!heapEntry) {
+                returnValue = ELOS_ERR_UNKNOWN;
+            } else {
+                PMEM_Flags flags = elos_protection_to_pmem_flags(protection);
+
+                bool mapped = PMEM_map_memory(userPageTable, virtAddress, heapEntry->physAddress, size, flags);
+                if (mapped) {
+                    returnValue = ELOS_OK;
+                } else {
+                    returnValue = ELOS_ERR_UNKNOWN;
+                }
+            }
+            write_cr3((u64)userPageTable);
         } break;
         case _SYS_DEFAULT_MONITOR: {
             ELOS_FrameBuffer*  frameBuffer = (void*)arg0;

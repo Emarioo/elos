@@ -70,6 +70,7 @@ typedef struct COFF_Optional_Header {
     uint8_t  MajorLinkerVersion;
     uint8_t  MinorLinkerVersion;
     uint32_t SizeOfCode;
+    uint32_t SizeOfInitializedData;
     uint32_t SizeOfUninitializedData;
     uint32_t AddressOfEntryPoint;
     uint32_t BaseOfCode;

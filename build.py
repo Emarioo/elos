@@ -441,8 +441,8 @@ def make_fat(out_path: str, deps_spec: list[tuple[str,str]]):
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     os.makedirs(INT_DIR, exist_ok=True)
 
-    cmd(f"dd if=/dev/zero of={out_path} bs=1k count={math.ceil(fatSize/1024)}")
-    # cmd(f"truncate {out_path} -s {1024*math.ceil(fatSize/1024)}")
+    # cmd(f"dd if=/dev/zero of={out_path} bs=1k count={math.ceil(fatSize/1024)}")
+    cmd(f"truncate {out_path} -s {1024*math.ceil(fatSize/1024)}")
     cmd(f"mformat -i {out_path} ::")
 
     # Copy files

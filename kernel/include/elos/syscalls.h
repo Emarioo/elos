@@ -204,6 +204,13 @@ void SYS_request_capabilities(ELOS_Capabilities* capabilities);
 void SYS_debug_log(const char* text, u32 length);
 
 
+typedef enum ELOS_Heap_Protection {
+    ELOS_HEAP_PROT_NONE  = 0x0,
+    ELOS_HEAP_PROT_READ  = 0x1,
+    ELOS_HEAP_PROT_WRITE = 0x2,
+    ELOS_HEAP_PROT_EXEC  = 0x4,
+} ELOS_Heap_Protection;
+
 /*
     Allocates memory from the heap.
 
@@ -212,7 +219,8 @@ void SYS_debug_log(const char* text, u32 length);
 ELOS_Error SYS_heap_allocate(void** newAddress, size_t size);
 ELOS_Error SYS_heap_free(void* oldAddress);
 ELOS_Error SYS_heap_reallocate(void** newAddress, size_t size, void* oldAddress);
-ELOS_Error SYS_heap_map(void* virtAddress, size_t size);
+ELOS_Error SYS_heap_map(void* virtAddress, size_t size, ELOS_Heap_Protection protection);
+ELOS_Error SYS_heap_protect(void* virtAddress, size_t size, ELOS_Heap_Protection protection);
 
 
 /*

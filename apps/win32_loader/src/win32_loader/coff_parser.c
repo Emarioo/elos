@@ -90,6 +90,7 @@ void dump_coff(const char* path) {
         printf(" MajorLinkerVersion 0x%x\n", optionalHeader->MajorLinkerVersion);
         printf(" MinorLinkerVersion 0x%x\n", optionalHeader->MinorLinkerVersion);
         printf(" SizeOfCode 0x%x\n", optionalHeader->SizeOfCode);
+        printf(" SizeOfInitializedData 0x%x\n", optionalHeader->SizeOfInitializedData);
         printf(" SizeOfUninitializedData 0x%x\n", optionalHeader->SizeOfUninitializedData);
         printf(" AddressOfEntryPoint 0x%x\n", optionalHeader->AddressOfEntryPoint);
         printf(" BaseOfCode 0x%x\n", optionalHeader->BaseOfCode);
