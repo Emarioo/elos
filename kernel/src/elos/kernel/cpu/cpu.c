@@ -160,7 +160,7 @@ void CPU_init(BootAPI* boot_api) {
     CPU_schedule_timer_interrupt(TIMER_FREQUENCY_NS);
 
 
-    bool mapped = PMEM_map_memory(g_kernelPageTable, TRAMPOLINE_ADDRESS, TRAMPOLINE_ADDRESS, PAGE_SIZE, PMEM_FLAG_NONE);
+    bool mapped = PMEM_map_memory(g_kernelPageTable, TRAMPOLINE_ADDRESS, TRAMPOLINE_ADDRESS, PAGE_SIZE, PMEM_FLAG_EXECUTABLE);
     if (!mapped) {
         printf("Could not map AP trampoline\n");
         return;
@@ -172,15 +172,14 @@ void CPU_init(BootAPI* boot_api) {
     // Starting cores requires some sleep and precise timings.
     // We must calibrate TSC first.
 
-    // @NOCHECKIN Not starting other cores for now.
-    // for (int i=0;i<acpi_lapic_ids_len;i++) {
-    //     u32 apic_id = acpi_lapic_ids[i];
-    //     if (apic_id == lapic_id)
-    //         continue; // don't start yourself
+    for (int i=0;i<acpi_lapic_ids_len;i++) {
+        u32 apic_id = acpi_lapic_ids[i];
+        if (apic_id == lapic_id)
+            continue; // don't start yourself
 
-    //     // printf("APIC id: %d\n", apic_id);
-    //     start_core(apic_id);
-    // }
+        // printf("APIC id: %d\n", apic_id);
+        start_core(apic_id);
+    }
 }
 
 
@@ -994,12 +993,15 @@ void ap_entry(int id) {
     enable_extensions();
     
     int lapic_id = g_lapic_base[APIC_APICID] >> 24;
-    printf("AP #%d started (edi=%d)\n", lapic_id, id);
     
     init_apic();
     init_syscall();
+    
+    CPU_schedule_timer_interrupt(TIMER_FREQUENCY_NS);
 
     EXEC_init();
+
+    printf("Started CORE %d (edi=%d)\n", lapic_id, id);
 
     // We don't want to do anymore work here.
     // The main kernel thread spins up async and system console threads then idles

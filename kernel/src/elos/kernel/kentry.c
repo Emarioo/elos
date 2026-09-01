@@ -41,8 +41,6 @@ extern FN_KCON_write _write_hooks[4];
 void handle_packet(NetDevice device, NET_Packet* packet, void* user_data);
 
 
-void kernel_idle();
-
 static BootAPI _boot_api;
 BootAPI* boot_api;
 
@@ -328,7 +326,7 @@ void os_entry() {
     // EXEC_create_user_thread("/pkg/win32_loader/win32_loader.elf", 0);
 
     EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
-    EXEC_create_user_thread("/pkg/slate/slate.elf", 0);
+    EXEC_create_user_thread("/pkg/slate/slate.elf", 1);
     // EXEC_create_user_thread("/pkg/doom/doom.elf", 0);
 
 
@@ -347,9 +345,6 @@ void os_entry() {
 }
 
 
-void kernel_idle() {
-    while (1) pause();
-}
 void handle_packet(NetDevice device, NET_Packet* packet, void* user_data) {
     NET_handle_packet(device, packet);
 }

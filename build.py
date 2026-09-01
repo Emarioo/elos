@@ -150,7 +150,7 @@ def main():
             # cmd(f"qemu-img create -f raw {DISK_IMG} 64M")
             # cmd(f"gcc scripts/fwrite.c -g -o int/fwrite && int/fwrite {DISK_IMG}")
         HAS_AUDIO = True
-        core_count = 1
+        core_count = 2
         qemu_flags = f'''
             -enable-kvm -cpu host
             -bios {OVMF_FD}

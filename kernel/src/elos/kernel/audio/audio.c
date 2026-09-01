@@ -58,7 +58,7 @@ bool AUDIO_find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
     if (config->vendorID == VENDOR_ID__INTEL && config->deviceID == DEVICE_ID__82801FB) {
         hda_scan(scanInfo, config);
     } else {
-        printf("Unknown PCI audio device vendorID=0x%x deviceID\n", config->vendorID, config->deviceID);
+        printf("Unknown PCI audio device vendorID=0x%x deviceID 0x%x\n", config->vendorID, config->deviceID);
     }
     
     // False because we want to keep searching.

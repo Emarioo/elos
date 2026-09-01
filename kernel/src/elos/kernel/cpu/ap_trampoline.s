@@ -83,19 +83,19 @@ _8060:
     lidt [_idt_register]
 
     // Jump to long mode
-    ljmp 0x08:0x8100
+    ljmp 0x08:0x8100 # KERNEL_CODE_SEGMENT
 
     .align 256
     .code64
 _8100:
     # 64-bit long mode with paging
-    mov ax, 0x10
+    mov ax, 0x10 # KERNEL_DATA_SEGMENT
     mov ds, ax
     mov es, ax
     mov ss, ax
  
     # Load Task State Segment
-    mov ax, 0x30
+    mov ax, 0x38 # TASK_STATE_SEGMENT
     ltr ax
 
     # Get small temporary stack for this processor

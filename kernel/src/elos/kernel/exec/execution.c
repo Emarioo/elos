@@ -43,6 +43,7 @@ void EXEC_timer_handler(ContextFrame* frame) {
 
     EXEC_Core* core = &cores[coreIndex];
 
+    // printf("Interrupt %d\n", coreIndex);
 
     LOCK(&core->thread_lock);
 

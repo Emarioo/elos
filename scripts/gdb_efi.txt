@@ -5,11 +5,12 @@ watch *(unsigned long long*)0x10000 == 0xDEADCE11
 c
 del 1
 set $base = *(unsigned long long*)0x10008
-add-symbol-file bin/boot.elf -o $base
+# add-symbol-file bin/boot.elf -o $base
 add-symbol-file bin/kernel.elf
 # add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/doom/doom.elf -o 0xC1000000
-add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/slate/slate.elf -o 0xC1000000
+# add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/slate/slate.elf -o 0xC1000000
 # add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/win32_loader/win32_loader.elf -o 0xC0000000
 
-hb stap_ok
+hb ap_entry
+# hb *0x8040
 c
