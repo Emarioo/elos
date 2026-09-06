@@ -16,6 +16,10 @@ int tolower(int c);
 int atoi(const char *s);
 double atof(const char *str);
 
+static inline int abs(int x) {
+    return x < 0 ? -x : x;
+}
+
 void exit(int code);
 
 int puts(const char *s);

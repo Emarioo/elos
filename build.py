@@ -238,6 +238,7 @@ def package_elos(release_dir, build_iso = False):
     prism_path      = f"{temp_folder_path}/initrd/pkg/prism/prism.elf"
     term_path       = f"{temp_folder_path}/initrd/pkg/term/term.elf"
     slate_path      = f"{temp_folder_path}/initrd/pkg/slate/slate.elf"
+    supper_path      = f"{temp_folder_path}/initrd/pkg/supper/supper.elf"
     
     win32_loader    = f"{temp_folder_path}/initrd/pkg/win32_loader/win32_loader.elf"
     wintest    = f"{temp_folder_path}/initrd/pkg/win32_loader/wintest.exe"
@@ -280,6 +281,10 @@ def package_elos(release_dir, build_iso = False):
     def sync4():
         cmd(f"APP_OUTPUT={slate_path} make -f apps/slate/Makefile")
         cmd_back(f"objdump -S {slate_path} > slate.dis")
+        
+    def sync4_1():
+        cmd(f"APP_OUTPUT={supper_path} make -f apps/supper/Makefile")
+        cmd_back(f"objdump -S {supper_path} > supper.dis")
 
     def sync5():
         cmd(f"OUTPUT={doom_path} make -f {DOOM_MAKEFILE}")
@@ -292,7 +297,7 @@ def package_elos(release_dir, build_iso = False):
     def sync7():
         cmd(f"APP_OUTPUT2={wintest} make -f apps/win32_loader/Makefile wintest")
         cmd_back(f"objdump -S {wintest} > wintest.dis")
-    
+        
     threads.append(cmd_async(sync0))
     threads.append(cmd_async(sync1))
 
@@ -302,6 +307,7 @@ def package_elos(release_dir, build_iso = False):
     threads.append(cmd_async(sync2))
     threads.append(cmd_async(sync3))
     threads.append(cmd_async(sync4))
+    threads.append(cmd_async(sync4_1))
     threads.append(cmd_async(sync6))
     threads.append(cmd_async(sync7))
     if provide_doom:
@@ -314,6 +320,7 @@ def package_elos(release_dir, build_iso = False):
         (prism_path, "PKG/PRISM/PRISM.ELF"),
         (term_path,  "PKG/TERM/TERM.ELF"),
         (slate_path, "PKG/SLATE/SLATE.ELF"),
+        (supper_path, "PKG/SUPPER/SUPPER.ELF"),
         ("res/Lat2-Terminus16.psf", "PKG/SLATE/STDFONT.PSF"),
         (win32_loader, "PKG/win32_loader/win32_loader.ELF"),
         (wintest, "PKG/win32_loader/wintest.exe"),

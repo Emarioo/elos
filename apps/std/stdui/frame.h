@@ -39,6 +39,10 @@ int draw_text_width(cstring text, int height, Font* font);
 
 void draw_rect(int x, int y, int w, int h, u32 rgba);
 
+void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba);
+
+void draw_line(int x1, int y1, int x2, int y2, int thickness, u32 rgba);
+
 void draw_glyphs_from_text_bcolor(int x, int y, int height, const cstring text, const Font* font, u32 color, u32 back_color);
 
 void draw_refresh();

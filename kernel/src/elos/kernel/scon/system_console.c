@@ -385,6 +385,9 @@ void send_command(cstring text) {
         // Kill doom if it exists
         EXEC_kill("doom");
         EXEC_create_user_thread("/pkg/doom/doom.elf", -1);
+    } else if (!strcmp(text.ptr, "supper")) {
+        EXEC_kill("supper");
+        EXEC_create_user_thread("/pkg/supper/supper.elf", -1);
     } else if (!strcmp(text.ptr, "mount")) {
         VFS_dump_mounts(printCallback, NULL);
     } else if (!strcmp(text.ptr, "sound")) {

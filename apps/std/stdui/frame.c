@@ -8,6 +8,7 @@
 #include "stdlib.h"
 #include "stdio.h"
 
+
 #include "prism/prism.h"
 
 
@@ -163,6 +164,187 @@ void draw_rect(int x, int y, int w, int h, u32 rgba) {
             // TODO: implement
         }
         break; case PixelFormatMax: // do nothing
+    }
+}
+
+void draw_line(int x1, int y1, int x2, int y2, int thickness, u32 rgba) {
+    // @TODO Thickness
+
+    if (x1 < 0) {
+        x1 = 0;
+    }
+    if (y1 < 0) {
+        y1 = 0;
+    }
+    if (x1 >= g_stdui_surfaceInfo->width)
+        x1 = g_stdui_surfaceInfo->width - 1;
+    if (y1 >= g_stdui_surfaceInfo->height)
+        y1 = g_stdui_surfaceInfo->height - 1;
+    if (x2 < 0) {
+        x2 = 0;
+    }
+    if (y2 < 0) {
+        y2 = 0;
+    }
+    if (x2 >= g_stdui_surfaceInfo->width)
+        x2 = g_stdui_surfaceInfo->width - 1;
+    if (y2 >= g_stdui_surfaceInfo->height)
+        y2 = g_stdui_surfaceInfo->height - 1;
+
+    u32* const pixels           = (u32*)g_stdui_surfaceInfo->buffer;
+    u32  const pixels_per_line  = g_stdui_surfaceInfo->stride;
+
+    int x_off = 0;
+    int y_off = 0;
+    int width = abs(x1 - x2)+1;
+    int height = abs(y1 - y2)+1;
+    // @TODO Optimize by removing division and don't use float?
+    if (abs(x1 - x2) > abs(y1 - y2)) {
+        if (x2 < x1) {
+            int tmp = x1;
+            x1 = x2;
+            x2 = tmp;
+            tmp = y1;
+            y1 = y2;
+            y2 = tmp;
+        }
+
+        float steps_per_bump = (float)height / (float)width;
+        if (y2 < y1)
+            steps_per_bump = -steps_per_bump;
+        while (x_off < width) {
+            y_off = x_off * steps_per_bump;
+            int x = x1 + x_off;
+            int y = y1 + y_off;
+            pixels[x + y * pixels_per_line] = rgba;
+            x_off++;
+        }
+    } else {
+        if (y2 < y1) {
+            int tmp = x1;
+            x1 = x2;
+            x2 = tmp;
+            tmp = y1;
+            y1 = y2;
+            y2 = tmp;
+        }
+        float steps_per_bump = (float)width / (float)height;
+        if (x2 < x1)
+            steps_per_bump = -steps_per_bump;
+        while (y_off < height) {
+            x_off = y_off * steps_per_bump;
+            int x = x1 + x_off;
+            int y = y1 + y_off;
+            pixels[x + y * pixels_per_line] = rgba;
+            y_off++;
+        }
+    }
+    
+    // pixels[x1 + y1 * pixels_per_line] = 0xFFFFFF00;
+    // pixels[x2 + y2 * pixels_per_line] = 0xFF8F8F00;
+}
+
+void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
+    // @TODO Remove float operations
+
+    u32* const pixels           = (u32*)g_stdui_surfaceInfo->buffer;
+    u32  const pixels_per_line  = g_stdui_surfaceInfo->stride;
+
+    const struct {
+        int x, y;
+    } points[3] = {
+        {x1,y1},
+        {x2,y2},
+        {x3,y3},
+    };
+
+    int top_point = -1;
+    int mid_point = -1;
+    int bottom_point = -1;
+
+    if (points[0].y < points[1].y && points[0].y < points[2].y) {
+        top_point = 0;
+        if (points[1].y < points[2].y) {
+            mid_point = 1;
+            bottom_point = 2;
+        } else {
+            mid_point = 2;
+            bottom_point = 1;
+        }
+    } else if (points[1].y < points[2].y) {
+        top_point = 1;
+        if (points[0].y < points[2].y) {
+            mid_point = 0;
+            bottom_point = 2;
+        } else {
+            mid_point = 2;
+            bottom_point = 0;
+        }
+    } else {
+        top_point = 2;
+        if (points[0].y < points[1].y) {
+            mid_point = 0;
+            bottom_point = 1;
+        } else {
+            mid_point = 1;
+            bottom_point = 0;
+        }
+    }
+
+    // Upper half of triangle
+    {
+        int height = points[mid_point].y - points[top_point].y + 1;
+
+        int left_point = mid_point;
+        int right_point = bottom_point;
+        float left_ratio  = points[left_point].y  - points[top_point].y == 0 ? 0 : (float)(points[left_point].x  - points[top_point].x) / (float)(points[left_point].y  - points[top_point].y);
+        float right_ratio = points[right_point].y - points[top_point].y == 0 ? 0 : (float)(points[right_point].x - points[top_point].x) / (float)(points[right_point].y - points[top_point].y);
+        if (left_ratio > right_ratio) {
+            float tmp = left_ratio;
+            left_ratio = right_ratio;
+            right_ratio = tmp;
+            left_point = bottom_point;
+            right_point = mid_point;
+        }
+
+        for (int y_off=0;y_off < height; y_off++) {
+            int x_left = points[top_point].x + y_off * left_ratio;
+            int x_right = points[top_point].x + y_off * right_ratio;
+            int width = x_right - x_left + 1;
+            for (int x_off=0;x_off < width; x_off++) {
+                int x = x_left + x_off;
+                int y = points[top_point].y + y_off;
+                pixels[x + y * pixels_per_line] = rgba;
+            }
+        }
+    }
+
+    // Lower half of triangle
+    {
+        int height = points[bottom_point].y - points[mid_point].y + 1;
+
+        int left_point = mid_point;
+        int right_point = top_point;
+        float left_ratio  = points[bottom_point].y - points[left_point].y  == 0 ? 0 : (float)(points[bottom_point].x - points[left_point].x)  / (float)(points[bottom_point].y - points[left_point].y);
+        float right_ratio = points[bottom_point].y - points[right_point].y == 0 ? 0 : (float)(points[bottom_point].x - points[right_point].x) / (float)(points[bottom_point].y - points[right_point].y);
+        if (left_ratio < right_ratio) {
+            float tmp = left_ratio;
+            left_ratio = right_ratio;
+            right_ratio = tmp;
+            left_point = top_point;
+            right_point = mid_point;
+        }
+
+        for (int y_off=0;y_off < height; y_off++) {
+            int x_left = points[left_point].x + (points[mid_point].y - points[left_point].y + y_off) * left_ratio;
+            int x_right = points[right_point].x + (points[mid_point].y - points[right_point].y + y_off) * right_ratio;
+            int width = x_right - x_left + 1;
+            for (int x_off=0;x_off < width; x_off++) {
+                int x = x_left + x_off;
+                int y = points[mid_point].y + y_off;
+                pixels[x + y * pixels_per_line] = rgba;
+            }
+        }
     }
 }
 
