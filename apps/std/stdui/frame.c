@@ -244,8 +244,32 @@ void draw_line(int x1, int y1, int x2, int y2, int thickness, u32 rgba) {
     // pixels[x2 + y2 * pixels_per_line] = 0xFF8F8F00;
 }
 
+volatile void bounds_check() {}
+
+
+// void draw_triangle(Triangle2D* triangle, float* depthBuffer, u32 rgba);
 void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
     // @TODO Remove float operations
+
+    // for debugging
+    // #define CLIP_BORDER 10
+    #define CLIP_BORDER 0
+    #define BIGNUM 0x10000
+
+    #define CLAMP_COORD(V) \
+        if (V < -BIGNUM) \
+            V = -BIGNUM; \
+        else if (V > BIGNUM) \
+            V = BIGNUM;
+    
+    CLAMP_COORD(x1)
+    CLAMP_COORD(y1)
+    CLAMP_COORD(x2)
+    CLAMP_COORD(y2)
+    CLAMP_COORD(x3)
+    CLAMP_COORD(y3)
+
+
 
     u32* const pixels           = (u32*)g_stdui_surfaceInfo->buffer;
     u32  const pixels_per_line  = g_stdui_surfaceInfo->stride;
@@ -291,11 +315,12 @@ void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
         }
     }
 
-    #define CHECK_OUTSIDE(X,Y) if (X < 0 || X >= g_stdui_surfaceInfo->width || Y < 0) continue; if (Y >= g_stdui_surfaceInfo->height) break;
+    // To prevent page fault on per-pixel basis in case clipping math is wrong.
+    #define CHECK_OUTSIDE(X,Y) if (X < 0 || X >= g_stdui_surfaceInfo->width || Y < 0 || Y >= g_stdui_surfaceInfo->height) { bounds_check(); continue; }
+    // #define CHECK_OUTSIDE(X,Y)
 
     // Upper half of triangle
     {
-        int height = points[mid_point].y - points[top_point].y + 1;
 
         int left_point = mid_point;
         int right_point = bottom_point;
@@ -309,27 +334,55 @@ void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
             right_point = mid_point;
         }
 
-        for (int y_off=0;y_off < height; y_off++) {
+        int y_off = 0;
+        int height = points[mid_point].y - points[top_point].y;
+        
+        // Screen-space clipping
+        if (points[top_point].y < CLIP_BORDER) {
+            y_off = CLIP_BORDER - points[top_point].y;
+            if (y_off < 0) {
+                goto exit_upper;
+            }
+        }
+        if (points[top_point].y + height > g_stdui_surfaceInfo->height - CLIP_BORDER) {
+            height = (g_stdui_surfaceInfo->height-CLIP_BORDER) - points[top_point].y;
+            if (height < 0) {
+                goto exit_upper;
+            }
+        }
+
+        for (;y_off < height; y_off++) {
             int x_left = points[top_point].x + y_off * left_ratio;
             int x_right = points[top_point].x + y_off * right_ratio;
-            int width = x_right - x_left + 1;
-            for (int x_off=0;x_off < width; x_off++) {
+            
+            int x_off=0;
+            int width = x_right - x_left;
+            if (x_left < CLIP_BORDER) {
+                x_off = CLIP_BORDER - x_left;
+                if (x_off < 0) {
+                    continue;
+                }
+            }
+            if (x_left + width > g_stdui_surfaceInfo->width - CLIP_BORDER) {
+                width = (g_stdui_surfaceInfo->width - CLIP_BORDER) - x_left;
+                if (width < 0) {
+                    continue;
+                }
+            }
+
+            for (;x_off < width; x_off++) {
                 int x = x_left + x_off;
                 int y = points[top_point].y + y_off;
 
-                // @TODO Better optimization here.
-                //   If all are outside one edge of the screen then no need to rendering anything.
-                //   Otherwise we might need some more complex checks.
                 CHECK_OUTSIDE(x,y)
                 pixels[x + y * pixels_per_line] = rgba;
             }
         }
+    exit_upper:
     }
 
     // Lower half of triangle
     {
-        int height = points[bottom_point].y - points[mid_point].y + 1;
-
         int left_point = mid_point;
         int right_point = top_point;
         float left_ratio  = points[bottom_point].y - points[left_point].y  == 0 ? 0 : (float)(points[bottom_point].x - points[left_point].x)  / (float)(points[bottom_point].y - points[left_point].y);
@@ -342,11 +395,43 @@ void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
             right_point = mid_point;
         }
 
-        for (int y_off=0;y_off < height; y_off++) {
+        int y_off=0;
+        int height = points[bottom_point].y - points[mid_point].y;
+
+        // Screen-space clipping
+        if (points[mid_point].y < CLIP_BORDER) {
+            y_off = CLIP_BORDER - points[mid_point].y;
+            if (y_off < 0) {
+                goto exit_lower;
+            }
+        }
+        if (points[mid_point].y + height > g_stdui_surfaceInfo->height - CLIP_BORDER) {
+            height = (g_stdui_surfaceInfo->height - CLIP_BORDER) - points[mid_point].y;
+            if (height < 0) {
+                goto exit_lower;
+            }
+        }
+
+        for (;y_off < height; y_off++) {
             int x_left = points[left_point].x + (points[mid_point].y - points[left_point].y + y_off) * left_ratio;
             int x_right = points[right_point].x + (points[mid_point].y - points[right_point].y + y_off) * right_ratio;
-            int width = x_right - x_left + 1;
-            for (int x_off=0;x_off < width; x_off++) {
+
+            int x_off=0;
+            int width = x_right - x_left;
+            if (x_left < CLIP_BORDER) {
+                x_off = CLIP_BORDER - x_left;
+                if (x_off < 0) {
+                    continue;
+                }
+            }
+            if (x_left + width > g_stdui_surfaceInfo->width - CLIP_BORDER) {
+                width = (g_stdui_surfaceInfo->width - CLIP_BORDER) - x_left;
+                if (width < 0) {
+                    continue;
+                }
+            }
+
+            for (;x_off < width; x_off++) {
                 int x = x_left + x_off;
                 int y = points[mid_point].y + y_off;
 
@@ -354,6 +439,7 @@ void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
                 pixels[x + y * pixels_per_line] = rgba;
             }
         }
+    exit_lower:
     }
 }
 

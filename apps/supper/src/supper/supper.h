@@ -30,7 +30,7 @@ typedef struct {
     HMM_Vec3 rot;
 
     HMM_Mat4 rotationMatrix;
-    
+
     HMM_Mat4 perspectiveMatrix;
     HMM_Mat4 viewMatrix;
     HMM_Mat4 viewProjectionMatrix;
@@ -45,6 +45,7 @@ typedef struct {
 
 typedef struct {
     HMM_Vec3 pos;
+    HMM_Quat rot;
     Model*   model;
 } Entity;
 

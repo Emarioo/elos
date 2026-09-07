@@ -18,8 +18,9 @@ void update_camera_matrix();
 void update_game();
 void render_game();
 
-Model* g_model;
 Camera g_camera;
+Model* g_model;
+Entity g_entity;
 
 
 typedef struct {
@@ -40,6 +41,7 @@ int selectedPoint = 0;
 int heldKeys[ELOSKEY_MAX];
 
 
+
 void game_loop() {
     SupperSession* session = &g_supperSession;
 
@@ -50,6 +52,9 @@ void game_loop() {
     }
 
     g_model = create_model();
+    g_entity = (Entity){ 0 };
+    g_entity.model = g_model;
+    g_entity.rot.W = 1;
 
     g_camera.pos = (HMM_Vec3){ { 0, 0, 5 } };
     g_camera.rot = (HMM_Vec3){ { 0, 0, 0 } };
@@ -177,6 +182,18 @@ void update_game() {
         g_camera.rot.Y -= rotSpeed;
     }
 
+
+    float spinSpeed = 0.01f;
+
+    HMM_Quat delta =
+        HMM_QFromAxisAngle_LH(
+            HMM_V3(0.3, 1, 0.08),
+            spinSpeed
+        );
+
+    g_entity.rot = HMM_MulQ(delta, g_entity.rot);
+    g_entity.rot = HMM_NormQ(g_entity.rot);
+
 }
 
 void update_camera_matrix() {
@@ -200,12 +217,8 @@ void render_game() {
     SupperSession* session = &g_supperSession;
 
 
-    Entity entity = {
-        {{ 0, 0, 0 }},
-        g_model,
-    };
 
-    render_entity(&entity);
+    render_entity(&g_entity);
 }
 
 void render_entity(Entity* entity) {
@@ -213,12 +226,23 @@ void render_entity(Entity* entity) {
 
     Model* model = entity->model;
 
+    HMM_Mat4 entityMatrix = HMM_MulM4(HMM_QToM4(entity->rot), HMM_Translate(entity->pos));
+
     for (int i=0;i<model->triangles_len;i++) {
-        Triangle3D* triangle = &model->triangles[i];
-        render_triangle(triangle);
+        Triangle3D triangle = model->triangles[i];
 
+        for (int pi=0;pi<3;pi++) {
+            HMM_Vec4 p = { 0 };
+            p.X = triangle.points[pi].X;
+            p.Y = triangle.points[pi].Y;
+            p.Z = triangle.points[pi].Z;
+            p.W = 1;
+            p = HMM_MulM4V4(entityMatrix, p);
+            triangle.points[pi] = p.XYZ;
+        }
+        
+        render_triangle(&triangle);
     }
-
 }
 
 void render_triangle(Triangle3D* triangle) {
@@ -227,14 +251,23 @@ void render_triangle(Triangle3D* triangle) {
 
     // Projection math
 
-    // @TODO Optimize, too expensive per triangle.
+    
+    HMM_Vec3 ab = HMM_SubV3(triangle->points[1], triangle->points[0]);
+    HMM_Vec3 ac = HMM_SubV3(triangle->points[2], triangle->points[0]);
+    HMM_Vec3 normal = HMM_NormV3(HMM_Cross(ab, ac));
+    HMM_Vec3 light_dir = HMM_NormV3((HMM_Vec3){{ -0.19, -0.9, -0.4 }});
+    float brightness = HMM_DotV3(normal, light_dir);
+
+    int ambientGray = 30;
+    int gray = brightness < (float)ambientGray/256.0 ? ambientGray : brightness * 256;
+    u32 color = 0xFF000000 | (gray << 16) | (gray << 8) | (gray);
 
     for (int i=0;i<3;i++) {
         HMM_Vec4 point = HMM_V4V(triangle->points[i], 1.0f);
         point = HMM_MulM4V4(g_camera.viewProjectionMatrix, point);
 
-        // Backface culling
-        if (point.W < 0)
+        // Cull triangles behind the camera
+        if (point.W <= 0)
             return;
 
         point.X /= point.W;
@@ -252,7 +285,7 @@ void render_triangle(Triangle3D* triangle) {
         tri2.points[0].X, tri2.points[0].Y,
         tri2.points[1].X, tri2.points[1].Y,
         tri2.points[2].X, tri2.points[2].Y,
-        0xFF777777
+        color
     );
 
 }
