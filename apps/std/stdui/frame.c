@@ -291,6 +291,8 @@ void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
         }
     }
 
+    #define CHECK_OUTSIDE(X,Y) if (X < 0 || X >= g_stdui_surfaceInfo->width || Y < 0) continue; if (Y >= g_stdui_surfaceInfo->height) break;
+
     // Upper half of triangle
     {
         int height = points[mid_point].y - points[top_point].y + 1;
@@ -314,6 +316,11 @@ void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
             for (int x_off=0;x_off < width; x_off++) {
                 int x = x_left + x_off;
                 int y = points[top_point].y + y_off;
+
+                // @TODO Better optimization here.
+                //   If all are outside one edge of the screen then no need to rendering anything.
+                //   Otherwise we might need some more complex checks.
+                CHECK_OUTSIDE(x,y)
                 pixels[x + y * pixels_per_line] = rgba;
             }
         }
@@ -342,6 +349,8 @@ void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
             for (int x_off=0;x_off < width; x_off++) {
                 int x = x_left + x_off;
                 int y = points[mid_point].y + y_off;
+
+                CHECK_OUTSIDE(x,y)
                 pixels[x + y * pixels_per_line] = rgba;
             }
         }

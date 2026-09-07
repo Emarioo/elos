@@ -29,7 +29,11 @@ typedef struct {
     HMM_Vec3 pos;
     HMM_Vec3 rot;
 
+    HMM_Mat4 rotationMatrix;
+    
     HMM_Mat4 perspectiveMatrix;
+    HMM_Mat4 viewMatrix;
+    HMM_Mat4 viewProjectionMatrix;
 } Camera;
 
 typedef struct {
