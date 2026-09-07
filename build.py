@@ -238,7 +238,7 @@ def package_elos(release_dir, build_iso = False):
     prism_path      = f"{temp_folder_path}/initrd/pkg/prism/prism.elf"
     term_path       = f"{temp_folder_path}/initrd/pkg/term/term.elf"
     slate_path      = f"{temp_folder_path}/initrd/pkg/slate/slate.elf"
-    supper_path      = f"{temp_folder_path}/initrd/pkg/supper/supper.elf"
+    supper_path     = f"{temp_folder_path}/initrd/pkg/supper/supper.elf"
     
     win32_loader    = f"{temp_folder_path}/initrd/pkg/win32_loader/win32_loader.elf"
     wintest    = f"{temp_folder_path}/initrd/pkg/win32_loader/wintest.exe"
@@ -263,6 +263,8 @@ def package_elos(release_dir, build_iso = False):
 
 
     threads = []
+    
+    # cmd(f"make -f apps/libm/Makefile")
 
     def sync0():
         cmd(f"make -f {ROOT}/boot/Makefile INT_DIR={INT_DIR}/boot BOOT_EFI={bootx64_path}")

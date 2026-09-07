@@ -121,6 +121,9 @@ void update_game() {
 void render_game() {
     SupperSession* session = &g_supperSession;
 
+    g_camera.perspectiveMatrix = HMM_Perspective_RH_NO(90.0f, (float)g_surfaceInfo.width / (float)g_surfaceInfo.height, 0.01f, 400.f);
+
+
     Entity entity = {
         {{ 0, 0, 0 }},
         g_model,
@@ -146,20 +149,37 @@ void render_triangle(Triangle3D* triangle) {
     SupperSession* session = &g_supperSession;
 
     // Projection math
-
     Triangle2D tri2 = { 0 };
+
+    // @TODO Optimize, too expensive per triangle.
+
+    for (int i=0;i<3;i++) {
+        HMM_Vec3 point = triangle->points[i];
+        HMM_Sub(point, g_camera.pos);
+
+        HMM_Mat4 rot = HMM_Rotate_RH(g_camera.rot.Y, (HMM_Vec3){{0,1,0}});
+        rot = HMM_MulM4(rot, HMM_Rotate_RH(g_camera.rot.X, (HMM_Vec3){{1,0,0}}));
+        rot = HMM_MulM4(rot, HMM_Rotate_RH(g_camera.rot.Z, (HMM_Vec3){{0,0,1}}));
+        
+        rot = HMM_InvRotate(rot);
+
+        HMM_Mat4 pointMatrix = HMM_Translate(point);
+        pointMatrix = HMM_MulM4(pointMatrix, rot);
+
+        pointMatrix = HMM_MulM4(pointMatrix, g_camera.perspectiveMatrix);
+
+        tri2.points[i].X = g_surfaceInfo.width * (1 + pointMatrix.Columns[3].X) / 2;
+        tri2.points[i].Y = g_surfaceInfo.height * (1 - pointMatrix.Columns[3].Y) / 2;
+    }
 
     // Rasterize triangle
 
-    
-    // u32* const pixels           = (u32*)g_surfaceInfo.buffer;
-    // u32  const pixels_per_line  = g_surfaceInfo.stride;
-    // for (int iy = y; iy < y + h; iy++) {
-    //     for (int ix = x; ix < x + w; ix++) {
-    //         pixels[ix + iy * pixels_per_line] = color;
-    //     }
-    // }
-
+    draw_triangle(
+        tri2.points[0].X, tri2.points[0].Y,
+        tri2.points[1].X, tri2.points[1].Y,
+        tri2.points[2].X, tri2.points[2].Y,
+        0xFF777777
+    );
 
 }
 

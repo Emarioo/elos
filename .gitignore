@@ -32,6 +32,6 @@ dream_aria.wav
 .vscode
 
 # vendor files (like headers for vscode on windows)
-extern
+# extern
 
 releases

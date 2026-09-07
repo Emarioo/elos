@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../doomgeneric"
+		},
+		{
+			"path": "../VENDOR/musl"
 		}
 	],
 	"settings": {}
