@@ -2,12 +2,6 @@
 	"folders": [
 		{
 			"path": "."
-		},
-		{
-			"path": "../doomgeneric"
-		},
-		{
-			"path": "../VENDOR/musl"
 		}
 	],
 	"settings": {}

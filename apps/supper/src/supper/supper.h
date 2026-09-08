@@ -21,9 +21,6 @@ typedef struct {
     HMM_Vec3 points[3];
 } Triangle3D;
 
-typedef struct {
-    HMM_Vec2 points[3];
-} Triangle2D;
 
 typedef struct {
     HMM_Vec3 pos;

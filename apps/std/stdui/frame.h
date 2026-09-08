@@ -24,11 +24,14 @@ typedef struct {
     u32  height;
 } Texture;
 
+typedef struct {
+    int X, Y;
+} ivec2;
 
-// typedef struct {
-//     int x, y;
-//     float z; // for depth
-// } Triangle2D;
+typedef struct {
+    ivec2 points[3];
+    float depth[3];
+} Triangle2D;
 
 
 void draw_frame_info(int* width, int* height);
@@ -45,8 +48,7 @@ int draw_text_width(cstring text, int height, Font* font);
 
 void draw_rect(int x, int y, int w, int h, u32 rgba);
 
-// void draw_triangle(Triangle2D* triangle, float* depthBuffer, u32 rgba);
-void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba);
+void draw_triangle(Triangle2D* triangle, float* depthBuffer, u32 rgba);
 
 void draw_line(int x1, int y1, int x2, int y2, int thickness, u32 rgba);
 

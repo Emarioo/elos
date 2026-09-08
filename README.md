@@ -13,6 +13,10 @@ When building ELOS run `scripts/install_doom.sh` to clone and prepare DOOM repos
 **Editor in ELOS**
 ![](docs/img/editor_in_elos.png)
 
+**Software rendered cubes**
+![](docs/img/cube3d.png)
+
+
 # Building
 
 ```bash

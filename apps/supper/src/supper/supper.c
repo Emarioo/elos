@@ -22,10 +22,9 @@ Camera g_camera;
 Model* g_model;
 Entity g_entity;
 
+float* g_depthBuffer;
 
-typedef struct {
-    int x, y;
-} ivec2;
+
 
 ivec2 positions[3] = {
     // { 10, 50},
@@ -50,6 +49,9 @@ void game_loop() {
     if (!res) {
         exit(1);
     }
+
+    g_depthBuffer = malloc(g_surfaceInfo.height * g_surfaceInfo.stride * sizeof(float));
+
 
     g_model = create_model();
     g_entity = (Entity){ 0 };
@@ -88,18 +90,23 @@ void game_loop() {
                 
                 int step = 10;
                 if (key.keycode == ELOSKEY_LEFT_ARROW) {
-                    positions[selectedPoint].x -= step;
+                    positions[selectedPoint].X -= step;
                 } else if (key.keycode == ELOSKEY_RIGHT_ARROW) {
-                    positions[selectedPoint].x += step;
+                    positions[selectedPoint].X += step;
                 } else if (key.keycode == ELOSKEY_UP_ARROW) {
-                    positions[selectedPoint].y -= step;
+                    positions[selectedPoint].Y -= step;
                 } else if (key.keycode == ELOSKEY_DOWN_ARROW) {
-                    positions[selectedPoint].y += step;
+                    positions[selectedPoint].Y += step;
                 }
             }
         }
 
+        // @TODO Resize depth buffer if window size changes.
+
         draw_rect(0, 0, g_surfaceInfo.width, g_surfaceInfo.height, 0xFF002000);
+        for (int i=0;i<g_surfaceInfo.height * g_surfaceInfo.stride;i++) {
+            g_depthBuffer[i] = __FLT_MAX__;
+        }
 
         // cstring text = PTR_CSTR("1/2/3 and arrow keys");
         // draw_glyphs_from_text_bcolor(10, 10, 30, text, g_default_font, WHITE, 0);
@@ -185,14 +192,14 @@ void update_game() {
 
     float spinSpeed = 0.01f;
 
-    HMM_Quat delta =
-        HMM_QFromAxisAngle_LH(
-            HMM_V3(0.3, 1, 0.08),
-            spinSpeed
-        );
+    // HMM_Quat delta =
+    //     HMM_QFromAxisAngle_LH(
+    //         HMM_V3(0.3, 1, 0.08),
+    //         spinSpeed
+    //     );
 
-    g_entity.rot = HMM_MulQ(delta, g_entity.rot);
-    g_entity.rot = HMM_NormQ(g_entity.rot);
+    // g_entity.rot = HMM_MulQ(delta, g_entity.rot);
+    // g_entity.rot = HMM_NormQ(g_entity.rot);
 
 }
 
@@ -206,6 +213,7 @@ void update_camera_matrix() {
     g_camera.viewMatrix = HMM_Rotate_RH(-g_camera.rot.Z, (HMM_Vec3){{0,0,1}});
     g_camera.viewMatrix = HMM_MulM4(g_camera.viewMatrix, HMM_Rotate_RH(-g_camera.rot.X, (HMM_Vec3){{1,0,0}}));
     g_camera.viewMatrix = HMM_MulM4(g_camera.viewMatrix, HMM_Rotate_RH(-g_camera.rot.Y, (HMM_Vec3){{0,1,0}}));
+
     g_camera.viewMatrix = HMM_MulM4(g_camera.viewMatrix, HMM_Translate(HMM_MulV3F(g_camera.pos, -1.0f)));
 
     g_camera.viewProjectionMatrix = HMM_MulM4(g_camera.perspectiveMatrix, g_camera.viewMatrix);
@@ -219,6 +227,17 @@ void render_game() {
 
 
     render_entity(&g_entity);
+
+    
+    Entity entity = {0};
+    entity = (Entity){ 0 };
+    entity.model = g_model;
+    entity.pos.X = 0.3;
+    entity.pos.Y = 0.2;
+    entity.pos.Z = 1.3;
+    entity.rot.W = 1;
+
+    render_entity(&entity);
 }
 
 void render_entity(Entity* entity) {
@@ -251,42 +270,49 @@ void render_triangle(Triangle3D* triangle) {
 
     // Projection math
 
-    
     HMM_Vec3 ab = HMM_SubV3(triangle->points[1], triangle->points[0]);
     HMM_Vec3 ac = HMM_SubV3(triangle->points[2], triangle->points[0]);
     HMM_Vec3 normal = HMM_NormV3(HMM_Cross(ab, ac));
+
     HMM_Vec3 light_dir = HMM_NormV3((HMM_Vec3){{ -0.19, -0.9, -0.4 }});
-    float brightness = HMM_DotV3(normal, light_dir);
+    float brightness = -HMM_DotV3(normal, light_dir);
 
     int ambientGray = 30;
     int gray = brightness < (float)ambientGray/256.0 ? ambientGray : brightness * 256;
     u32 color = 0xFF000000 | (gray << 16) | (gray << 8) | (gray);
 
+    HMM_Vec4 points[3];
+
     for (int i=0;i<3;i++) {
-        HMM_Vec4 point = HMM_V4V(triangle->points[i], 1.0f);
-        point = HMM_MulM4V4(g_camera.viewProjectionMatrix, point);
+        points[i] = HMM_V4V(triangle->points[i], 1.0f);
+        points[i] = HMM_MulM4V4(g_camera.viewProjectionMatrix, points[i]);
 
         // Cull triangles behind the camera
-        if (point.W <= 0)
+        if (points[i].W <= 0)
             return;
 
-        point.X /= point.W;
-        point.Y /= point.W;
+        points[i].X /= points[i].W;
+        points[i].Y /= points[i].W;
+        points[i].Z /= points[i].W;
+    }
 
+    // Cull backside of triangle
+    float facing = (points[1].X - points[0].X) * (points[2].Y - points[0].Y) -
+                   (points[1].Y - points[0].Y) * (points[2].X - points[0].X);
+    if (facing <= 0) {
+        return;
+    }
+
+    for (int i=0;i<3;i++) {
         // printf("%d %d\n", (int)(100*point.X), (int)(100*point.Y));
-
-        tri2.points[i].X = g_surfaceInfo.width * (1 + point.X) * 0.5f;
-        tri2.points[i].Y = g_surfaceInfo.height * (1 - point.Y) * 0.5f;
+        tri2.points[i].X = g_surfaceInfo.width * (1 + points[i].X) * 0.5f;
+        tri2.points[i].Y = g_surfaceInfo.height * (1 - points[i].Y) * 0.5f;
+        tri2.depth[i] = points[i].Z;
     }
 
     // Rasterize triangle
 
-    draw_triangle(
-        tri2.points[0].X, tri2.points[0].Y,
-        tri2.points[1].X, tri2.points[1].Y,
-        tri2.points[2].X, tri2.points[2].Y,
-        color
-    );
+    draw_triangle(&tri2, g_depthBuffer, color);
 
 }
 
@@ -320,22 +346,22 @@ Model* create_model() {
     model->triangles_len++;
     
     // Top
-    model->triangles[model->triangles_len].points[0] = points[4];
-    model->triangles[model->triangles_len].points[1] = points[5];
+    model->triangles[model->triangles_len].points[0] = points[5];
+    model->triangles[model->triangles_len].points[1] = points[4];
     model->triangles[model->triangles_len].points[2] = points[7];
     model->triangles_len++;
-    model->triangles[model->triangles_len].points[0] = points[7];
-    model->triangles[model->triangles_len].points[1] = points[6];
+    model->triangles[model->triangles_len].points[0] = points[6];
+    model->triangles[model->triangles_len].points[1] = points[7];
     model->triangles[model->triangles_len].points[2] = points[4];
     model->triangles_len++;
     
     // Front
-    model->triangles[model->triangles_len].points[0] = points[0];
-    model->triangles[model->triangles_len].points[1] = points[1];
+    model->triangles[model->triangles_len].points[0] = points[1];
+    model->triangles[model->triangles_len].points[1] = points[0];
     model->triangles[model->triangles_len].points[2] = points[5];
     model->triangles_len++;
-    model->triangles[model->triangles_len].points[0] = points[5];
-    model->triangles[model->triangles_len].points[1] = points[4];
+    model->triangles[model->triangles_len].points[0] = points[4];
+    model->triangles[model->triangles_len].points[1] = points[5];
     model->triangles[model->triangles_len].points[2] = points[0];
     model->triangles_len++;
     
@@ -360,12 +386,12 @@ Model* create_model() {
     model->triangles_len++;
     
     // Right
-    model->triangles[model->triangles_len].points[0] = points[1];
-    model->triangles[model->triangles_len].points[1] = points[3];
+    model->triangles[model->triangles_len].points[0] = points[3];
+    model->triangles[model->triangles_len].points[1] = points[1];
     model->triangles[model->triangles_len].points[2] = points[7];
     model->triangles_len++;
-    model->triangles[model->triangles_len].points[0] = points[7];
-    model->triangles[model->triangles_len].points[1] = points[5];
+    model->triangles[model->triangles_len].points[0] = points[5];
+    model->triangles[model->triangles_len].points[1] = points[7];
     model->triangles[model->triangles_len].points[2] = points[1];
     model->triangles_len++;
     

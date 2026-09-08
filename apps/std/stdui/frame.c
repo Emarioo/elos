@@ -246,10 +246,45 @@ void draw_line(int x1, int y1, int x2, int y2, int thickness, u32 rgba) {
 
 volatile void bounds_check() {}
 
+static inline u32 color_from_depth(float depth) {
+    int val = (int)((255 - 1/(1-depth)));
+    val = val < 0 ? 0 : (val > 255 ? 255 : val);
+    return 0xFF000000 | (val << 16) | (val << 8) | (val);
+}
 
-// void draw_triangle(Triangle2D* triangle, float* depthBuffer, u32 rgba);
-void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
-    // @TODO Remove float operations
+#define CLAMP_255(V) ((int)(V) < 0 ? 0 : ((int)(V) > 255 ? 255 : (int)(V)))
+#define CLAMP_XY(V,MIN,MAX) (V < MIN ? MIN : (V > MAX ? MAX : V))
+
+static inline u32 fragment_color(u32 color, int x, int y, float depth) {
+    // return color_from_depth(depth);
+    return color;
+
+    // Applies some brightness on closer objects.
+    // Reduces the flat-shade feel but gets more expensive which
+    // means less triangles but I want MANY triangles so we leave this commented out.
+    // float factor = 4/(1-depth);
+    // factor = 0.8 + CLAMP_XY(factor, 0, 0.4);
+    // int red = (color >> 16) & 0xFF;
+    // int green = (color >> 8) & 0xFF;
+    // int blue = (color >> 0) & 0xFF;
+    // red = (u32)CLAMP_255(red * factor);
+    // green = (u32)CLAMP_255(green * factor);
+    // blue = (u32)CLAMP_255(blue * factor);
+
+    // return 0xFF000000 | (red << 16) | (green << 8) | (blue << 0);
+}
+
+void draw_triangle(Triangle2D* triangle, float* depthBuffer, u32 rgba) {
+
+    int x1 = triangle->points[0].X;
+    int y1 = triangle->points[0].Y;
+    float z1 = triangle->depth[0];
+    int x2 = triangle->points[1].X;
+    int y2 = triangle->points[1].Y;
+    float z2 = triangle->depth[1];
+    int x3 = triangle->points[2].X;
+    int y3 = triangle->points[2].Y;
+    float z3 = triangle->depth[2];
 
     // for debugging
     // #define CLIP_BORDER 10
@@ -264,10 +299,13 @@ void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
     
     CLAMP_COORD(x1)
     CLAMP_COORD(y1)
+    CLAMP_COORD(z1)
     CLAMP_COORD(x2)
     CLAMP_COORD(y2)
+    CLAMP_COORD(z2)
     CLAMP_COORD(x3)
     CLAMP_COORD(y3)
+    CLAMP_COORD(z3)
 
 
 
@@ -276,10 +314,11 @@ void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
 
     const struct {
         int x, y;
+        float z;
     } points[3] = {
-        {x1,y1},
-        {x2,y2},
-        {x3,y3},
+        {x1,y1,z1},
+        {x2,y2,z2},
+        {x3,y3,z3},
     };
 
     int top_point = -1;
@@ -333,6 +372,8 @@ void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
             left_point = bottom_point;
             right_point = mid_point;
         }
+        float left_depth_ratio  = points[left_point].y  - points[top_point].y == 0 ? 0 : (float)(points[left_point].z  - points[top_point].z) / (float)(points[left_point].y  - points[top_point].y);
+        float right_depth_ratio = points[right_point].y - points[top_point].y == 0 ? 0 : (float)(points[right_point].z - points[top_point].z) / (float)(points[right_point].y - points[top_point].y);
 
         int y_off = 0;
         int height = points[mid_point].y - points[top_point].y;
@@ -365,17 +406,27 @@ void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
             }
             if (x_left + width > g_stdui_surfaceInfo->width - CLIP_BORDER) {
                 width = (g_stdui_surfaceInfo->width - CLIP_BORDER) - x_left;
-                if (width < 0) {
-                    continue;
-                }
             }
+            if (width <= 0) {
+                continue;
+            }
+
+            float z_left = points[top_point].z + y_off * left_depth_ratio;
+            float z_right = points[top_point].z + y_off * right_depth_ratio;
+            float delta_z = (z_right - z_left) / (float)(x_right - x_left);
 
             for (;x_off < width; x_off++) {
                 int x = x_left + x_off;
                 int y = points[top_point].y + y_off;
+                float z = z_left + x_off * delta_z;
+
+                if (z >= depthBuffer[x + y * pixels_per_line]) {
+                    continue;
+                }
 
                 CHECK_OUTSIDE(x,y)
-                pixels[x + y * pixels_per_line] = rgba;
+                pixels[x + y * pixels_per_line] = fragment_color(rgba, x, y, z);
+                depthBuffer[x + y * pixels_per_line] = z;
             }
         }
     exit_upper:
@@ -394,6 +445,9 @@ void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
             left_point = top_point;
             right_point = mid_point;
         }
+        float left_depth_ratio  = points[bottom_point].y - points[left_point].y  == 0 ? 0 : (float)(points[bottom_point].z - points[left_point].z)  / (float)(points[bottom_point].y - points[left_point].y);
+        float right_depth_ratio = points[bottom_point].y - points[right_point].y == 0 ? 0 : (float)(points[bottom_point].z - points[right_point].z) / (float)(points[bottom_point].y - points[right_point].y);
+
 
         int y_off=0;
         int height = points[bottom_point].y - points[mid_point].y;
@@ -430,13 +484,23 @@ void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, u32 rgba) {
                     continue;
                 }
             }
+            float z_left = points[left_point].z + (points[mid_point].y - points[left_point].y + y_off) * left_depth_ratio;
+            float z_right = points[right_point].z + (points[mid_point].y - points[right_point].y + y_off) * right_depth_ratio;
+            float delta_z = (z_right - z_left) / (float)(x_right - x_left);
+
 
             for (;x_off < width; x_off++) {
                 int x = x_left + x_off;
                 int y = points[mid_point].y + y_off;
+                float z = z_left + x_off * delta_z;
 
+                if (z >= depthBuffer[x + y * pixels_per_line]) {
+                    continue;
+                }
                 CHECK_OUTSIDE(x,y)
-                pixels[x + y * pixels_per_line] = rgba;
+                pixels[x + y * pixels_per_line] = fragment_color(rgba, x, y, z);
+                // pixels[x + y * pixels_per_line] = rgba;
+                depthBuffer[x + y * pixels_per_line] = z;
             }
         }
     exit_lower:
