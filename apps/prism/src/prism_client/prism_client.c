@@ -12,7 +12,7 @@
 #include "prism/prism.h"
 #include "prism/prism_protocol.h"
 
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 
 #include "elos/common/intrinsics.h"
 

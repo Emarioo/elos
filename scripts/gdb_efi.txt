@@ -12,5 +12,5 @@ add-symbol-file bin/kernel.elf
 add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/supper/supper.elf -o 0xC1000000
 # add-symbol-file releases/elos-0.0.1-x86_64/initrd/pkg/win32_loader/win32_loader.elf -o 0xC0000000
 
-hb bounds_check
+hb NET_scan_devices
 c

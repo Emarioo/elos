@@ -21,6 +21,7 @@
 #pragma once
 
 #include "elos/common/types.h"
+#include "elos/elos.h"
 
 
 //###############################
@@ -40,6 +41,13 @@ typedef void(*FN_NET_recv_packet)(NetDevice device, NET_Packet* packet, void* us
 typedef struct NET_DeviceInfo {
     u8 mac[6];
 } NET_DeviceInfo;
+
+
+typedef struct {
+    bool             used;
+    ELOS_Net_Address address;
+} NetHandle;
+
 
 //######################################
 //     NETWORK CONTROLLER FUNCTIONS
@@ -123,6 +131,17 @@ void NET_set_receive_callback(NetDevice device, FN_NET_recv_packet callback, voi
 bool NET_handle_packet(NetDevice device, NET_Packet* packet);
 
 
+NetHandle* NET_open(const ELOS_Net_Address* address);
+
+void NET_close(NetHandle* handle);
+
+ELOS_Error NET_write(NetHandle* handle, const ELOS_Net_Address* address, const void* data, u32 size);
+
+ELOS_Error NET_read(NetHandle* handle, ELOS_Net_Address* address, void* buffer, u32* bufferSize);
+
+// @NOCHECKIN Move elsewhere
+bool fetch_mac_from_address(NetDevice device, u32 address, u8 mac[6]);
+
 //######################################
 //     EXTRA WILL MOVE ELSEWHERE
 //######################################
@@ -133,4 +152,4 @@ void NET_send_arp(NetDevice device, uint32_t address);
 void NET_send_dhcp_discover(NetDevice device);
 void NET_send_dhcp_request(NetDevice device, u32 request_address, u32 dhcp_server);
 
-bool NET_send_udp(NetDevice device, u8 dst_mac[6], u32 address, u16 src_port, u16 dst_port, void* data, u32 size);
+bool NET_send_udp(NetDevice device, u8 dst_mac[6], u32 address, u16 src_port, u16 dst_port, const void* data, u32 size);

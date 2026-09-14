@@ -21,7 +21,7 @@
 
 #include "elos/cpu.h"
 
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 
 
 #define printf(...) KCON_printf(__VA_ARGS__)

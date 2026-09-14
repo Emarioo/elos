@@ -67,6 +67,11 @@ void KCON_printf(const char* format, ...) {
     (void)status;
 }
 
+u32 CPU_get_core_index() {
+    return 0;
+}
+
+void CPU_set_msi_irq() { }
 
 void* PMEM_allocate(u64 size, void* old_ptr) {
     EFI_STATUS Status;
@@ -295,3 +300,7 @@ int printf(const char* format, ...) {
     (void)status;
     return len;
 }
+
+
+void LOCK_INT(volatile uint32_t* ptr) {}
+void UNLOCK_INT(volatile uint32_t* ptr) {}

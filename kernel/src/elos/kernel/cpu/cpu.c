@@ -1101,7 +1101,7 @@ void CPU_set_irq(u32 coreIndex, u32 local_irq, u32 global_irq, FN_interrupt_hand
 }
 
 
-void CPU_get_msi_irq(u32 coreId, u32 local_irq, FN_interrupt_handler handler, u64* messageAddress, u16* messageData) {
+void CPU_set_msi_irq(u32 coreId, u32 local_irq, FN_interrupt_handler handler, u64* messageAddress, u16* messageData) {
     
     // @TODO coreId and lapic id are not necessarily the same.
     //    We should have table to convert them.

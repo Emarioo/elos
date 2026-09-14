@@ -11,6 +11,7 @@
 #include "elos/execution.h"
 
 #include "elos/vfs.h"
+#include "elos/network.h"
 
 
 #define printf(...) KCON_printf(__VA_ARGS__)
@@ -336,6 +337,7 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
     const void* safeConstBuffer;
     size_t      safeBufferSize;
     VFS_Handle  safeVFSHandle;
+    NetHandle*  safeNetHandle;
 
     #define GET_SANITIZED_PATH(out_PATH, PATH) \
         *out_PATH = PATH; \
@@ -343,7 +345,10 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
         if (!_temp_mapped)  break;
 
     #define GET_SANITIZED_FILE(out_FILE, FILE) \
-        *out_FILE = VFS_HANDLE_TO_ELOS_FILE(FILE);
+        *out_FILE = VFS_HANDLE_TO_ELOS_FILE(FILE); // @TODO Check if process has this handle.
+
+    #define GET_SANITIZED_NET_HANDLE(out_HANDLE, HANDLE) \
+        *out_HANDLE = (void*)(HANDLE); // @TODO Check if process has this handle.
 
     #define GET_SANITIZED_BUFFER(out_BUFFER, out_SIZE, BUFFER, SIZE) \
         *out_BUFFER = BUFFER; \
@@ -353,6 +358,11 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
 
     #define GET_SANITIZED_STRUCT(out_STRUCT_PTR, STRUCT_PTR) \
         *(void**)out_STRUCT_PTR = STRUCT_PTR; \
+        _temp_mapped = map_user_buffer((void*)ring->thread->frame.cr3, STRUCT_PTR, sizeof(*STRUCT_PTR)); \
+        if (!_temp_mapped)  break;
+
+    #define GET_SANITIZED_CSTRUCT(out_STRUCT_PTR, STRUCT_PTR) \
+        *(const void**)out_STRUCT_PTR = STRUCT_PTR; \
         _temp_mapped = map_user_buffer((void*)ring->thread->frame.cr3, STRUCT_PTR, sizeof(*STRUCT_PTR)); \
         if (!_temp_mapped)  break;
 
@@ -411,10 +421,10 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
         } break;
         case ELOS_ASYNC_FILE_INFO: {
             VFS_HandleInfo info;
-            VFS_HandleInfo* safeVFSHandleInfo;
+            ELOS_FileInfo* safeFileInfo;
 
             GET_SANITIZED_FILE(&safeVFSHandle, request->write.file);
-            GET_SANITIZED_STRUCT(&safeVFSHandleInfo, request->info.fileInfo);
+            GET_SANITIZED_STRUCT(&safeFileInfo, request->info.fileInfo);
 
             // @TODO Handle errors!?
             bool yes = VFS_info(safeVFSHandle, &info);
@@ -422,11 +432,11 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
                 break;
             }
 
-            safeVFSHandleInfo->fileSize          = info.fileSize;
-            safeVFSHandleInfo->blockSize         = info.blockSize;
-            safeVFSHandleInfo->isDirectory       = info.isDirectory;
-            safeVFSHandleInfo->readOnly          = info.readOnly;
-            safeVFSHandleInfo->lastWriteTime_us  = info.lastWriteTime_us;
+            safeFileInfo->fileSize          = info.fileSize;
+            safeFileInfo->blockSize         = info.blockSize;
+            safeFileInfo->isDirectory       = info.isDirectory;
+            safeFileInfo->readOnly          = info.readOnly;
+            safeFileInfo->lastWriteTime_us  = info.lastWriteTime_us;
             
             completion.error = ELOS_OK;
             
@@ -490,6 +500,50 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
             }
             completion.error = ELOS_OK;
         } break;
+
+        case ELOS_ASYNC_NET_OPEN: {
+            NetHandle* handle;
+            ELOS_Net_Address* safeAddress;
+            GET_SANITIZED_CSTRUCT(&safeAddress, request->net_open.address);
+
+            handle = NET_open(safeAddress);
+            if (!handle) {
+                break;
+            }
+
+            completion.net_open.handle = (ELOS_Net_Handle)handle;
+            completion.error = ELOS_OK;
+        } break;
+        
+        case ELOS_ASYNC_NET_CLOSE: {
+            GET_SANITIZED_NET_HANDLE(&safeNetHandle, request->net_write.handle);
+
+            NET_close(safeNetHandle);
+
+            completion.error = ELOS_OK;
+        } break;
+
+        case ELOS_ASYNC_NET_WRITE: {
+            const ELOS_Net_Address* safeAddress;
+            GET_SANITIZED_NET_HANDLE(&safeNetHandle, request->net_write.handle);
+            GET_SANITIZED_CSTRUCT(&safeAddress, request->net_write.address);
+            GET_SANITIZED_BUFFER(&safeConstBuffer, &safeBufferSize, request->net_write.data, request->net_write.size);
+
+            completion.error = NET_write(safeNetHandle, safeAddress, safeConstBuffer, safeBufferSize);
+        } break;
+        
+        case ELOS_ASYNC_NET_READ: {
+            ELOS_Net_Address* safeAddress;
+            GET_SANITIZED_NET_HANDLE(&safeNetHandle, request->net_write.handle);
+            GET_SANITIZED_STRUCT(&safeAddress, request->net_read.address);
+            GET_SANITIZED_BUFFER(&safeBuffer, &safeBufferSize, request->net_read.buffer, request->net_read.bufferSize);
+
+            u32 bufferSize = safeBufferSize;
+
+            completion.error = NET_read(safeNetHandle, safeAddress, safeBuffer, &bufferSize);
+            completion.net_read.readBytes = bufferSize;
+        } break;
+
         default: {
             printf("ASYNC_request_handler: Unhandled operation %d (0 is invalid)\n", request->operation);
             completion.error = ELOS_ERR_INVALID_SYSCALL;

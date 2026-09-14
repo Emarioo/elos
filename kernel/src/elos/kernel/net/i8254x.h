@@ -2,6 +2,8 @@
 
 #include "elos/common/types.h"
 
+#include "elos/cpu.h"
+
 // CARD refers to i8254x. Poor naming.
 
 #define CARD_REG_CTRL   0x0
@@ -180,4 +182,6 @@ bool i8254x_init();
 void i8254x_receive_packet(void** out_buffer, int* out_size);
 
 int i8254x_send_packet(void* data, int size);
+
+void i8254x_set_interrupt_handler(FN_interrupt_handler handler);
 

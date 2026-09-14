@@ -5,7 +5,7 @@
 typedef struct ScanInfo ScanInfo;
 typedef struct AudioDevice_impl AudioDevice_impl;
 
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 #include "elos/kernel/driver/pci.h"
 #include "elos/kernel/driver/pci_list.h"
 

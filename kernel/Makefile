@@ -24,7 +24,7 @@ OBJCOPY := $(TOOLCHAIN)objcopy
 
 CFLAGS += -ggdb -ffreestanding -fno-pic -fno-pie -fno-plt -mcmodel=kernel -nostdlib -nostartfiles -nodefaultlibs
 CFLAGS += -O0 # No optimization for better debugging
-CFLAGS += -I$(ROOT)/kernel/src -I$(ROOT)/kernel/include
+CFLAGS += -I$(ROOT)/kernel/src -I$(ROOT)/kernel/include -I$(ROOT)/include
 CFLAGS += -fshort-wchar -Werror=implicit-function-declaration
 CFLAGS += -fno-asynchronous-unwind-tables -fno-exceptions -fno-stack-protector
 CFLAGS += -Wall -Werror -Wno-multichar
@@ -71,7 +71,7 @@ $(INT_DIR)/interrupts.s: $(ROOT)/kernel/gen_interrupts.py | $(INT_DIR)
 	$(SILENT) $< $@
 	$(SILENT) chmod -w $@ 2>/dev/null || true # This will fail in WSL on NTFS paths
 
-$(ROOT)/kernel/include/elos/syscalls_impl.h: $(ROOT)/kernel/gen_syscalls.py $(ROOT)/kernel/include/elos/syscalls.h | $(INT_DIR)
+$(ROOT)/include/elos/elos_impl.h: $(ROOT)/kernel/gen_syscalls.py $(ROOT)/include/elos/elos.h | $(INT_DIR)
 	$(SILENT) $< $@
 	$(SILENT) chmod -w $@ 2>/dev/null || true # This will fail in WSL on NTFS paths
 
@@ -97,7 +97,7 @@ $(INT_DIR)/default_font.o: $(ROOT)/res/Lat2-Terminus16.psf | $(INT_DIR)
         --redefine-sym _binary_Lat2_Terminus16_psf_start=__default_font_start \
         $(INT_DIR)/default_font.trash $@
 
-$(KERNEL_ELF):$(ROOT)/kernel/include/elos/syscalls_impl.h $(OBJ_FILES) $(KERNEL_LD_SCRIPT) | $(INT_DIR)
+$(KERNEL_ELF):$(ROOT)/include/elos/elos_impl.h $(OBJ_FILES) $(KERNEL_LD_SCRIPT) | $(INT_DIR)
 	$(SILENT) mkdir -p $(@D)
 	$(SILENT) $(LD) $(LDFLAGS) -o $@ $(OBJ_FILES) -Map $(basename $@).map
 	

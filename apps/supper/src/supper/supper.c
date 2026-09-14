@@ -6,8 +6,15 @@
 
 #include "math.h"
 
+#include "elos/elos.h"
+#include "async_io.h"
+
+#include "supper/supper_net.h"
 
 bool supper_load_font();
+
+void init_network();
+void network_send_updated_position();
 
 Model* create_model();
 
@@ -39,6 +46,23 @@ int selectedPoint = 0;
 
 int heldKeys[ELOSKEY_MAX];
 
+static u32 g_random_state = 123456789;
+
+u32 random_u32(void)
+{
+    u32 x = g_random_state;
+
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+
+    g_random_state = x;
+    return x;
+}
+float random_float(void)
+{
+    return (double)random_u32() / 4294967296.0;
+}
 
 
 void game_loop() {
@@ -50,10 +74,33 @@ void game_loop() {
         exit(1);
     }
 
+    init_network();
+
     g_depthBuffer = malloc(g_surfaceInfo.height * g_surfaceInfo.stride * sizeof(float));
 
+    session->entities_max = 100;
+    session->entities_len = 0;
+    session->entities = malloc(session->entities_max * sizeof(Entity));
 
     g_model = create_model();
+
+
+    for (int i=0;i<100;i++) {
+        Entity* entity = &session->entities[session->entities_len];
+        session->entities_len++;
+
+        memset(entity, 0, sizeof(*entity));
+
+        entity->model = g_model;
+        entity->rot.W = 1.0f;
+
+        entity->pos.X = (random_float()-0.5)*10;
+        entity->pos.Y = (random_float()-0.5)*10;
+        entity->pos.Z = -5 - random_float()*20;
+
+        entity->scale = random_float()*0.8 + 0.8;
+    }
+
     g_entity = (Entity){ 0 };
     g_entity.model = g_model;
     g_entity.rot.W = 1;
@@ -127,11 +174,15 @@ void game_loop() {
         update_camera_matrix();
 
         update_game();
+
+        network_send_updated_position();
+
         render_game();
 
         prism_presentSurface(g_surface);
         // sleep((1000/10)*1000000);
-        sleep((1000/60)*1000000);
+        // sleep((1000/60)*1000000);
+        sleep((1000/30)*1000000);
     }
 
 }
@@ -141,8 +192,8 @@ void game_loop() {
 void update_game() {
     SupperSession* session = &g_supperSession;
 
-    float speed = 0.016;
-    float rotSpeed = 0.016;
+    float speed = 0.04;
+    float rotSpeed = 0.03;
 
     if (heldKeys[ELOSKEY_LEFT_SHIFT]) {
         speed *= 2;
@@ -192,14 +243,14 @@ void update_game() {
 
     float spinSpeed = 0.01f;
 
-    // HMM_Quat delta =
-    //     HMM_QFromAxisAngle_LH(
-    //         HMM_V3(0.3, 1, 0.08),
-    //         spinSpeed
-    //     );
+    HMM_Quat delta =
+        HMM_QFromAxisAngle_LH(
+            HMM_V3(0.3, 1, 0.08),
+            spinSpeed
+        );
 
-    // g_entity.rot = HMM_MulQ(delta, g_entity.rot);
-    // g_entity.rot = HMM_NormQ(g_entity.rot);
+    g_entity.rot = HMM_MulQ(delta, g_entity.rot);
+    g_entity.rot = HMM_NormQ(g_entity.rot);
 
 }
 
@@ -224,20 +275,22 @@ void update_camera_matrix() {
 void render_game() {
     SupperSession* session = &g_supperSession;
 
+    for (int i=0;i<session->entities_len;i++) {
+        Entity* entity = &session->entities[i];
+        render_entity(entity);
 
-
-    render_entity(&g_entity);
+    }
 
     
-    Entity entity = {0};
-    entity = (Entity){ 0 };
-    entity.model = g_model;
-    entity.pos.X = 0.3;
-    entity.pos.Y = 0.2;
-    entity.pos.Z = 1.3;
-    entity.rot.W = 1;
+    // Entity entity = {0};
+    // entity = (Entity){ 0 };
+    // entity.model = g_model;
+    // entity.pos.X = 0.3;
+    // entity.pos.Y = 0.2;
+    // entity.pos.Z = 1.3;
+    // entity.rot.W = 1;
 
-    render_entity(&entity);
+    // render_entity(&entity);
 }
 
 void render_entity(Entity* entity) {
@@ -245,7 +298,9 @@ void render_entity(Entity* entity) {
 
     Model* model = entity->model;
 
-    HMM_Mat4 entityMatrix = HMM_MulM4(HMM_QToM4(entity->rot), HMM_Translate(entity->pos));
+    HMM_Mat4 entityMatrix = HMM_QToM4(entity->rot);
+    entityMatrix = HMM_MulM4(entityMatrix, HMM_Scale((HMM_Vec3){{entity->scale,entity->scale,entity->scale}}));
+    entityMatrix = HMM_MulM4(entityMatrix, HMM_Translate(entity->pos));
 
     for (int i=0;i<model->triangles_len;i++) {
         Triangle3D triangle = model->triangles[i];
@@ -398,6 +453,161 @@ Model* create_model() {
     return model;
 }
 
+
+
+
+ELOS_Error net_open(const ELOS_Net_Address* address, ELOS_Net_Handle* handle) {
+    ELOS_Error error;
+    
+    ELOS_AsyncRequest req = {0};
+    ELOS_AsyncCompletion cqe;
+    Async_RequestID requestID;
+
+    req.operation   = ELOS_ASYNC_NET_OPEN;
+    req.flags       = 0;
+
+    req.net_open.address = address;
+
+    requestID = async_submit(&req);
+    bool res = async_wait(requestID, &cqe, 0);
+    if (!res) {
+        printf("-1 from async_wait\n");
+        return ELOS_ERR_UNKNOWN;
+    }
+
+    *handle = cqe.net_open.handle;
+    return cqe.error;
+}
+
+ELOS_Error net_close(ELOS_Net_Handle handle) {
+    ELOS_Error error;
+    
+    ELOS_AsyncRequest req = {0};
+    ELOS_AsyncCompletion cqe;
+    Async_RequestID requestID;
+
+    req.operation   = ELOS_ASYNC_NET_CLOSE;
+    req.flags       = 0;
+
+    req.net_close.handle = handle;
+
+    requestID = async_submit(&req);
+    bool res = async_wait(requestID, &cqe, 0);
+    if (!res) {
+        printf("-1 from async_wait\n");
+        return ELOS_ERR_UNKNOWN;
+    }
+
+    return cqe.error;
+}
+
+ELOS_Error net_write(ELOS_Net_Handle handle, const ELOS_Net_Address* address, const void* data, u32 size) {
+    ELOS_Error error;
+    
+    ELOS_AsyncRequest req = {0};
+    ELOS_AsyncCompletion cqe;
+    Async_RequestID requestID;
+
+    req.operation   = ELOS_ASYNC_NET_WRITE;
+    req.flags       = 0;
+
+    req.net_write.handle = handle;
+    req.net_write.address = address;
+    req.net_write.data = data;
+    req.net_write.size = size;
+
+    requestID = async_submit(&req);
+    bool res = async_wait(requestID, &cqe, 0);
+    if (!res) {
+        printf("-1 from async_wait\n");
+        return ELOS_ERR_UNKNOWN;
+    }
+
+    return cqe.error;
+}
+
+ELOS_Error net_read(ELOS_Net_Handle handle, ELOS_Net_Address* address, void* buffer, u32* bufferSize) {
+    ELOS_Error error;
+    
+    ELOS_AsyncRequest req = {0};
+    ELOS_AsyncCompletion cqe;
+    Async_RequestID requestID;
+
+    req.operation   = ELOS_ASYNC_NET_WRITE;
+    req.flags       = 0;
+
+    req.net_read.handle = handle;
+    req.net_read.address = address;
+    req.net_read.buffer = buffer;
+    req.net_read.bufferSize = *bufferSize;
+
+    requestID = async_submit(&req);
+    bool res = async_wait(requestID, &cqe, 0);
+    if (!res) {
+        printf("-1 from async_wait\n");
+        return ELOS_ERR_UNKNOWN;
+    }
+
+    *bufferSize = cqe.net_read.readBytes;
+
+    return cqe.error;
+}
+
+
+ELOS_Net_Handle g_net_handle;
+
+void init_network() {
+    // We use UDP because it's simple
+    // First check if server exists.
+    
+    ELOS_Net_Address address = {0};
+    address.protocol = ELOS_NET_PROTO_UDP_IPV4;
+    address.address[0] = 127;
+    address.address[1] = 0;
+    address.address[2] = 0;
+    address.address[3] = 1;
+    address.port    = 5001;
+    // snprintf(address.identifier, sizeof(address.identifier), "127.0.0.1:8080");
+
+    ELOS_Error error = net_open(&address, &g_net_handle);
+    
+    if (error != ELOS_OK) {
+        printf("NET_OPEN was not OK\n");
+        return;
+    }
+    printf("NET_OPEN success, handle=%p\n", g_net_handle);
+}
+
+
+
+void network_send_updated_position() {
+
+    ELOS_Net_Address address = {0};
+    address.protocol = ELOS_NET_PROTO_UDP_IPV4;
+    address.address[0] = 10;
+    address.address[1] = 1;
+    address.address[2] = 4;
+    address.address[3] = 52;
+    address.port    = 5002;
+
+    char messageBuffer[512];
+    MessageHeader* message = (void*)messageBuffer;
+    message->kind = MESSAGE_LOCATION;
+    message->location.count = 1;
+    message->location.locations[0].id = 1;
+    message->location.locations[0].pos[0] = g_camera.pos.X;
+    message->location.locations[0].pos[1] = g_camera.pos.Y;
+    message->location.locations[0].pos[2] = g_camera.pos.Z;
+    
+    ELOS_Error error;
+    
+    error = net_write(g_net_handle, &address, message, sizeof(MessageHeader) + message->location.count * sizeof(PlayerLocation));
+    if (error != ELOS_OK) {
+        printf("net_write: Send pos %s\n", elos_error(error));
+    } else {
+        printf("net_write: Sent pos\n");
+    }
+}
 
 
 

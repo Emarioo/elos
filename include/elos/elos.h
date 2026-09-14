@@ -524,9 +524,41 @@ enum _ELOS_AsyncOperation {
 
     // @TODO Network operations
 
+    ELOS_ASYNC_NET_OPEN,
+    ELOS_ASYNC_NET_CLOSE,
+    ELOS_ASYNC_NET_WRITE,
+    ELOS_ASYNC_NET_READ,
+
     // 
 };
 typedef u16 ELOS_AsyncOperation;
+
+
+typedef void* ELOS_Net_Handle;
+
+typedef enum {
+    ELOS_NET_PROTO_RAW,
+    ELOS_NET_PROTO_UDP_IPV4,
+    ELOS_NET_PROTO_TCP_IPV4,
+    ELOS_NET_PROTO_UDP_IPV6,
+    ELOS_NET_PROTO_TCP_IPV6,
+} _ELOS_Net_Protocol;
+typedef u8 ELOS_Net_Protocol;
+
+typedef struct {
+    // 0.0.0.0
+    // 255.255.255.255:65535
+    // ::
+    // [0000:0000:0000:0000:0000:0000:0000:0000]:65535
+    union {
+        char identifier[64]; // last character is reserved to be NULL
+        struct {
+            ELOS_Net_Protocol protocol;
+            u8  address[16];
+            u16 port;
+        };
+    };
+} ELOS_Net_Address;
 
 typedef enum {
     ELOS_FILE_OPEN_FLAG_READ_ONLY = 0x1, // Allows multiple readers on same file.
@@ -616,6 +648,33 @@ typedef struct {
             ELOS_DirectoryEntry* buffer;
             ELOS_PADDING
         } readdir;
+
+        struct {
+            const ELOS_Net_Address* address;
+            ELOS_PADDING
+        } net_open;
+        struct {
+            ELOS_Net_Handle handle;
+            ELOS_PADDING
+        } net_close;
+        struct {
+            ELOS_Net_Handle         handle;
+            ELOS_PADDING
+            const ELOS_Net_Address* address;
+            ELOS_PADDING
+            const void*             data;
+            ELOS_PADDING
+            u32                     size;
+        } net_write;
+        struct {
+            ELOS_Net_Handle     handle;
+            ELOS_PADDING
+            ELOS_Net_Address*   address;
+            ELOS_PADDING
+            void*               buffer;
+            ELOS_PADDING
+            u32                 bufferSize;
+        } net_read;
     };
 } ELOS_AsyncRequest;
 
@@ -639,6 +698,14 @@ typedef struct {
             u64 cookie;
             u64 entryCount;
         } readdir;
+
+        struct {
+            ELOS_Net_Handle handle;
+            ELOS_PADDING
+        } net_open;
+        struct {
+            u32  readBytes;
+        } net_read;
     };
 } ELOS_AsyncCompletion;
 
@@ -700,4 +767,4 @@ ELOS_Error SYS_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, u64 tim
 #endif // ELOS_SYSCALL_INCLUDE
 
 // Auto-generated
-#include "syscalls_impl.h"
+#include "elos/elos_impl.h"

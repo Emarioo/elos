@@ -19,7 +19,7 @@ INCLUDE_EFI_DIR := $(ROOT)/extern/efi
 
 CFLAGS := -ggdb -ffreestanding -fno-asynchronous-unwind-tables -fno-exceptions
 CFLAGS += -I$(INCLUDE_EFI_DIR) -I$(INCLUDE_EFI_DIR)/x86_64 -I$(INCLUDE_EFI_DIR)/protocol -I$(ROOT)/boot/efi \
-	-I$(ROOT)/kernel/include -I$(ROOT)/kernel/src
+	-I$(ROOT)/kernel/include -I$(ROOT)/include -I$(ROOT)/kernel/src
 CFLAGS += -Wall -Werror -fshort-wchar -Werror=implicit-function-declaration
 CFLAGS += -Wno-multichar
 CFLAGS += -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable
@@ -35,6 +35,7 @@ SRC_DIRS := \
 	$(ROOT)/kernel/src/elos/common \
 
 SRC_FILES := $(foreach dir,$(SRC_DIRS),$(shell find $(dir) -name '*.c'))
+
 OBJ_FILES := $(patsubst $(ROOT)/%.c,$(INT_DIR)/%.o,$(SRC_FILES))
 DEP_FILES := $(patsubst %.o,%.d,$(OBJ_FILES))
 
@@ -43,6 +44,11 @@ all: $(BOOT_EFI)
 ifeq (0, $(words $(findstring $(MAKECMDGOALS), clean)))
     -include $(DEP_FILES)
 endif
+
+$(ROOT)/include/elos/elos_impl.h: $(ROOT)/kernel/gen_syscalls.py $(ROOT)/include/elos/elos.h | $(INT_DIR)
+	$(SILENT) $< $@
+	$(SILENT) chmod -w $@ 2>/dev/null || true # This will fail in WSL on NTFS paths
+
 
 $(INT_DIR)/%.o: $(ROOT)/%.c
 	$(SILENT) mkdir -p $(dir $@)

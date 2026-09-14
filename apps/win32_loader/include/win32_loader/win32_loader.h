@@ -10,7 +10,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 #include "elos/common/string.h"
 
 

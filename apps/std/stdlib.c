@@ -2,7 +2,7 @@
 #include "elos/common/string.h"
 #include "elos/common/intrinsics.h"
 
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 
 #include <stdint.h>
 #include <stdbool.h>

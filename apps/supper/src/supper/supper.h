@@ -8,12 +8,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 #include "elos/common/intrinsics.h"
 #include "elos/common/string.h"
 
 #include "prism/prism.h"
 #include "supper/HandmadeMath.h"
+
 
 
 
@@ -44,13 +45,16 @@ typedef struct {
     HMM_Vec3 pos;
     HMM_Quat rot;
     Model*   model;
+    float    scale;
 } Entity;
 
 /*
     One session per process.
 */
 typedef struct {
-    int x;
+    Entity* entities;
+    int     entities_max;
+    int     entities_len;
 } SupperSession;
 
 

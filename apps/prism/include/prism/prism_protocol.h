@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 
 
 #define PRISM_SERVICE_NAME "prism"

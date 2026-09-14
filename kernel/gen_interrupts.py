@@ -93,5 +93,7 @@ isr_stub_table:
 for i in range(256):
     text += f".quad isr_stub_{i}\n"
 
+os.makedirs(os.path.dirname(spath), exist_ok=True)
+
 with open(spath, "w") as file:
     file.write(text)

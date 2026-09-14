@@ -7,7 +7,7 @@
 #pragma once
 
 #include "elos/disk.h"
-#include "elos/syscalls.h" // to get ELOS_DirectoryEntry
+#include "elos/elos.h" // to get ELOS_DirectoryEntry
 
 
 //###############################

@@ -80,7 +80,7 @@ bool hda_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
     debug(" has_cap_list=%d cap_ptr=%d\n", config->status.capabilities_list, config->header0.capabilities_pointer & ~0x3);
 
     u32 coreIndex = CPU_get_core_index();
-    u32 localIRQ = 5;
+    u32 localIRQ = 5; // @TODO Don't hardcode.
 
     u32 cap_ptr = config->header0.capabilities_pointer & ~0x3;
 
@@ -98,7 +98,7 @@ bool hda_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
 
             u64 messageAddress;
             u16 messageData;
-            CPU_get_msi_irq(coreIndex, localIRQ, hda_interrupt, &messageAddress, &messageData);
+            CPU_set_msi_irq(coreIndex, localIRQ, hda_interrupt, &messageAddress, &messageData);
 
             pci_config_writel(config, cap_ptr + 0x4, messageAddress & 0xFFFFFFFF);
             if (is_64bit) {

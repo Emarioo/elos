@@ -2,7 +2,7 @@
 
 import os, sys, re
 
-ROOT = os.path.dirname(__file__)
+ROOT = os.path.dirname(os.path.dirname(__file__))
 
 
 
@@ -72,8 +72,8 @@ def generate_error_string(source):
 
 def main(args):
 
-    header = f"{ROOT}/include/elos/syscalls.h"
-    impl_header = args[1] if len(args) > 1 else f"{ROOT}/include/elos/syscalls_impl.h"
+    header = f"{ROOT}/include/elos/elos.h"
+    impl_header = args[1] if len(args) > 1 else f"{ROOT}/include/elos/elos_impl.h"
 
 
     safe_to_overwrite = False
@@ -119,13 +119,13 @@ def main(args):
 */
     '''
     
-    # syscalls_impl.h will almost always only be included by elos/syscalls.
+    # elos_impl.h will almost always only be included by elos/syscalls.
     # But to prevent errors from text editors we include it here.
 
     output += '''
     
 #ifndef ELOS_SYSCALL_INCLUDE
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 #endif // ELOS_SYSCALL_INCLUDE
 
 #ifndef ELOS_SYSCALL_IDS_INCLUDE
@@ -234,9 +234,13 @@ typedef enum {
 #endif // ELOS_ERROR_STRING_IMPL
     '''
 
+    if os.path.exists(impl_header):
+        os.chmod(impl_header, 0o644)
+    
     with open(impl_header, "w") as f:
         f.write(output)
 
+    os.chmod(impl_header, 0o644)
 
 
 def split_args(arg_string):

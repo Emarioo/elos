@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include "stdlib.h"
 
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 
 #include "elos/common/intrinsics.h"
 

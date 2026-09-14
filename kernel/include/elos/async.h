@@ -20,7 +20,7 @@
 
 #include "elos/common/types.h"
 
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 
 #define ASYNC_OK 0
 #define ASYNC_GENERIC_ERROR 1

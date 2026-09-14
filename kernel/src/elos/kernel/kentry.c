@@ -264,9 +264,9 @@ void kernel_entry(BootAPI* in_boot_api) {
     //   NETWORK STUFF?
     //#####################
 
-    // NetDevice net_device = NULL;
-    // int count = 1;
-    // NET_scan_devices(&net_device, &count);
+    NetDevice net_device = NULL;
+    int count = 1;
+    NET_scan_devices(&net_device, &count);
     // @TODO Check that we got device
     
     // NET_set_receive_callback(net_device, handle_packet, NULL);
@@ -380,7 +380,7 @@ void kernel_bug() {
 
 #define ELOS_ERROR_STRING_IMPL
 
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 
 
 /*

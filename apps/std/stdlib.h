@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 
 
 void* malloc(size_t size);

@@ -3,7 +3,7 @@
 #include "stdint.h"
 #include "stddef.h"
 #include "stdarg.h"
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 
 typedef struct FILE FILE;
 typedef u32 mode_t;

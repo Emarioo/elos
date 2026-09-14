@@ -16,6 +16,8 @@
 
 #include "elos/common/intrinsics.h"
 
+#include "elos/cpu.h"
+
 
 
 #define printf(...) KCON_printf(__VA_ARGS__)
@@ -34,7 +36,7 @@ NetworkController controller;
 
 bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
     if (config->classCode == PCI_CLASSCODE__NETWORK_CONTROLLER) {
-        if (config->vendorID == VENDOR_ID__INTEL && config->deviceID == DEVICE_ID__82540EM_A) {
+        if (config->vendorID == VENDOR_ID__INTEL && (config->deviceID == DEVICE_ID__82540EM_A || config->deviceID == DEVICE_ID__82574L)) {
             controller.found = true;
             controller.config = *config;
             return true;
@@ -103,8 +105,9 @@ void NET_scan_devices(NetDevice devices[], int* count) {
         //     }
         // }
 
-        switch ((controller.config.vendorID << 16) | controller.config.deviceID) {
-            case (VENDOR_ID__INTEL << 16) | DEVICE_ID__82540EM_A: {
+        switch (((u32)controller.config.vendorID << 16) | controller.config.deviceID) {
+            case (VENDOR_ID__INTEL << 16) | DEVICE_ID__82540EM_A:
+            case (VENDOR_ID__INTEL << 16) | DEVICE_ID__82574L: {
                 // @TODO Pass NetworkController (it's globally available at the moment)
                 bool res = i8254x_init();
                 if (!res) {
@@ -708,7 +711,7 @@ bool NET_handle_packet(NetDevice device, NET_Packet* packet) {
 
 
 
-bool NET_send_udp(NetDevice device, u8 dst_mac[6], u32 address, u16 src_port, u16 dst_port, void* data, u32 size) {
+bool NET_send_udp(NetDevice device, u8 dst_mac[6], u32 address, u16 src_port, u16 dst_port, const void* data, u32 size) {
     
     if (size > 1400) {
         return false;
@@ -771,3 +774,148 @@ bool NET_send_udp(NetDevice device, u8 dst_mac[6], u32 address, u16 src_port, u1
 
     return true;
 }
+
+
+#define MAX_NET_HANDLES 100
+
+u32 g_netHandles_max = MAX_NET_HANDLES;
+NetHandle g_netHandles[MAX_NET_HANDLES];
+volatile u32 g_net_lock;
+
+
+
+
+
+NetHandle* NET_open(const ELOS_Net_Address* address) {
+    NetHandle* returnValue = NULL;
+    LOCK_INT(&g_net_lock);
+
+    printf("NET_open: %p\n", address->identifier);
+
+    bool portCollision = false;
+    NetHandle* foundHandle = NULL;
+    for (int i=0;i<g_netHandles_max;i++) {
+        NetHandle* handle = &g_netHandles[i];
+
+        if (handle->address.port == address->port) {
+            portCollision = true;
+        }
+
+        if (!handle->used && !foundHandle) {
+            foundHandle = handle;
+            break;
+        }
+    }
+
+    if (portCollision) {
+        return NULL;
+    }
+
+    if (!foundHandle) {
+        goto exit;
+    }
+
+    foundHandle->used = true;
+    foundHandle->address = *address;
+    
+    returnValue = foundHandle;
+
+exit:
+    UNLOCK_INT(&g_net_lock);
+
+    return returnValue;
+}
+
+
+
+
+void NET_close(NetHandle* handle) {
+    if (!handle) {
+        return;
+    }
+    
+    printf("NET_close: %p\n", handle);
+
+    LOCK_INT(&g_net_lock);
+
+    // @TODO Free resources.
+    handle->used = false;
+    
+    UNLOCK_INT(&g_net_lock);
+}
+
+
+
+
+bool resolve_address(const ELOS_Net_Address* address, NetDevice* device, u8 mac[6], u32* ip_address, u16* port) {
+
+    // address->address
+
+    // always the same right now.
+    *device = &fake_device;
+
+    bool yes = fetch_mac_from_address(*device, *(u32*)address->address, mac);
+
+    if (!yes) {
+        return false;
+    }
+
+
+    *port = address->port;
+    *ip_address = *(u32*)address->address;
+
+    return true;
+}
+
+ELOS_Error NET_write(NetHandle* handle, const ELOS_Net_Address* address, const void* data, u32 size) {
+    ELOS_Error returnValue = ELOS_ERR_UNKNOWN;
+    printf("NET_write: %p %d\n", handle, size);
+
+    NetDevice device;
+    u8  mac[6];
+    u32 ip_address;
+    u16 port;
+
+    // Save to stack in case caller i cheeky and changes address on another thread.
+    // If they do we may still have an incomplete address.
+    ELOS_Net_Address savedAddress = *address;
+
+    bool didResolve = resolve_address(&savedAddress, &device, mac, &ip_address, &port);
+    if (!didResolve) {
+        return ELOS_ERR_UNKNOWN;
+    }
+
+    u16 src_port = handle->address.port;
+
+    switch (address->protocol) {
+        case ELOS_NET_PROTO_UDP_IPV4: {
+
+            bool yes = NET_send_udp(device, mac, ip_address, src_port, port, data, size);
+            if (!yes) {
+                returnValue = ELOS_ERR_UNKNOWN;
+                goto exit;
+            }
+
+            returnValue = ELOS_OK;
+        } break;
+        default: {
+            returnValue = ELOS_ERR_UNKNOWN;
+        } break;
+    }
+
+exit:
+    return returnValue;
+}
+
+ELOS_Error NET_read(NetHandle* handle, ELOS_Net_Address* address, void* buffer, u32* bufferSize) {
+
+    return ELOS_ERR_UNKNOWN;
+}
+
+
+
+
+
+
+
+

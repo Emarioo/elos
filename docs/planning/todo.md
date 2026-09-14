@@ -34,6 +34,7 @@ Tasks related to kernel and operating system
 - [ ] API to read/write disk device directlty from user space. Requires special capability. Kernel handles AHCI, NVMe details.
       And ensures the device isn't used or mounted by anyone else.
 - [ ] [Kernel Modules](./problems.md#kernel-modules).
+- [ ] Debugger syscall API. And a small debugger to test it.
 - [ ] Plants VS Zombies port. A lot of working, implementing win32 wrappers, directsound, COM api eugh...
       - [ ] 32-bit user mode. GDT, syscalls, structures need to be updated.
 - [x] DOOM port.

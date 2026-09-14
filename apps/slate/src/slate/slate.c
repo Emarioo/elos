@@ -2,7 +2,7 @@
 #include "slate/slate.h"
 
 #include "prism/prism.h"
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 #include "elos/common/intrinsics.h"
 #include "elos/common/string.h"
 

@@ -22,11 +22,14 @@
 
 
 #define printf(...) KCON_printf(__VA_ARGS__)
+#define debug(...)  KCON_printf(__VA_ARGS__)
+// #define debug(...)
 
 void setup_transmit_ring();
 void setup_receive_ring();
 void enable_interrupts();
 
+void i8254x_interrupt_handler(u32 vector, InterruptFrame* frame);
 
 
 
@@ -48,10 +51,10 @@ bool reset_nic();
 u16 eeprom_read(u8 addr);
 
 bool i8254x_init() {
-    if (!controller.found || controller.config.vendorID != VENDOR_ID__INTEL || controller.config.deviceID != DEVICE_ID__82540EM_A) {
-        printf("[WARNING] NET_init: Why we call ix8254x when found controller is different device id?\n");
-        return false;
-    }
+    // if (!controller.found || controller.config.vendorID != VENDOR_ID__INTEL || controller.config.deviceID != DEVICE_ID__82540EM_A) {
+    //     printf("[WARNING] NET_init: Why we call ix8254x when found controller is different device id?\n");
+    //     return false;
+    // }
     
     decode_bar(&controller.config, &controller.ioaddr, &controller.ioaddr_size, &controller.maddr, &controller.maddr_size);
 
@@ -77,6 +80,59 @@ bool i8254x_init() {
     //     controller.mac_address[5] >> 4, controller.mac_address[5] & 0xF
     //     );
 
+    PCI_ConfigSpace* config = &controller.config;
+
+    u32 coreIndex = CPU_get_core_index();
+    u32 localIRQ = 6; // @TODO Don't hardcode.
+
+    u32 cap_ptr = config->header0.capabilities_pointer & ~0x3;
+
+    while (cap_ptr) {
+        u32 cap_data = pci_config_readl(config, cap_ptr);
+        u32 cap_id   = (cap_data & 0xFF);
+        u32 cap_next = (cap_data >> 8) & 0xFC;
+
+        debug("Cap %d\n", cap_id);
+
+        if (cap_id == 0x5) {
+            u16 messageControl = (cap_data >> 16);
+
+            int is_64bit = messageControl & (1 << 7);
+
+            u64 messageAddress;
+            u16 messageData;
+            CPU_set_msi_irq(coreIndex, localIRQ, i8254x_interrupt_handler, &messageAddress, &messageData);
+
+            pci_config_writel(config, cap_ptr + 0x4, messageAddress & 0xFFFFFFFF);
+            if (is_64bit) {
+                pci_config_writel(config, cap_ptr + 0x8, messageAddress >> 32);
+                pci_config_writew(config, cap_ptr + 0xC, messageData);
+            } else {
+                pci_config_writew(config, cap_ptr + 0x8, messageData);
+            }
+
+            // Enable MSI
+            messageControl |= 1;
+            pci_config_writew(config, cap_ptr + 0x2, messageControl);
+
+            
+            cap_data = pci_config_readl(config, cap_ptr);
+            cap_id   = (cap_data & 0xFF);
+            cap_next = (cap_data >> 8) & 0xFC;
+            messageControl = (cap_data >> 16);
+
+            debug(" control 0x%x\n", messageControl);
+            debug(" address %p\n",   messageAddress);
+            debug(" data    0x%x\n", messageData);
+
+        } else if (cap_id == 0x11) {
+            // HDA on QEMU does not support MSI-X
+            // @TODO Check if my laptop HDA supports MSI or only MSI-X, probably does right?
+        }
+
+        cap_ptr = cap_next;
+    }
+
     /*
         Setup ring buffers
     */
@@ -84,7 +140,7 @@ bool i8254x_init() {
     setup_transmit_ring();
     setup_receive_ring();
 
-    // enable_interrupts();
+    enable_interrupts();
 
     return true;
 }
@@ -371,4 +427,15 @@ int i8254x_send_packet(void* data, int length){
     return sent;
 }
 
+
+
+
+void i8254x_interrupt_handler(u32 vector, InterruptFrame* frame) {
+
+    u32 cause = read_register(CARD_REG_ICR);
+    printf("i8254x interrupt 0x%x\n", cause);
+
+
+
+}
 

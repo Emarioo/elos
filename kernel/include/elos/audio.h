@@ -4,7 +4,7 @@
 
 #include "elos/boot_api.h"
 
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 
 //###########################
 //      TYPES

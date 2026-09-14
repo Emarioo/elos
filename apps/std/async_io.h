@@ -10,7 +10,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "elos/syscalls.h"
+#include "elos/elos.h"
 
 typedef uint64_t Async_RequestID;
 
