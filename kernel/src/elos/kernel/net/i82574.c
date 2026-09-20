@@ -271,8 +271,10 @@ u16 i82574_eeprom_read(u8 addr) {
 
 TransmitDescriptor* g_transmit_ring;
 ReceiveDescriptor* g_receive_ring;
+volatile u32 g_ring_lock;
 
 static void setup_transmit_ring() {
+    // @TODO Tweak the paraameters.
     int g_transmit_ring_size = NUM_OF_TX_DESCRIPTORS * 16;
     g_transmit_ring = PMEM_alloc_phys(g_transmit_ring_size, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
     memset(g_transmit_ring, 0, g_transmit_ring_size);
@@ -305,7 +307,6 @@ static void setup_transmit_ring() {
 
 
 static void setup_receive_ring() {
-    // @TODO memory should not be cached. uncacheable pages
     int g_receive_ring_size = NUM_OF_RX_DESCRIPTORS * 16; // you can substitute 16 with sizeof(receive_descriptor_t)
     g_receive_ring = PMEM_alloc_phys(g_receive_ring_size, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
     memset(g_receive_ring, 0, g_receive_ring_size);
@@ -341,6 +342,8 @@ static void setup_receive_ring() {
 static void send_data(const void* data, u32 size, bool EOP){
     // @TODO We need to check if buffer is full!
 
+    LOCK_INT(&g_ring_lock);
+
     u32 tail = read_register(CARD_REG_TDT);
     TransmitDescriptor* tx = g_transmit_ring + tail; // Get the descriptor the tail is pointing at (next available descriptor)
 
@@ -349,9 +352,13 @@ static void send_data(const void* data, u32 size, bool EOP){
 
     tx->length = size; // Set the length of the descriptor
 
-    if (EOP) tx->cmd |= CARD_BIT_TD_CMD_EOP | CARD_BIT_TD_CMD_IFCS; // If its the last one, set EOP
+    if (EOP) {
+        tx->cmd |= CARD_BIT_TD_CMD_EOP | CARD_BIT_TD_CMD_IFCS; // If its the last one, set EOP
+    }
     tail = (tail + 1) % NUM_OF_TX_DESCRIPTORS;
     write_register(CARD_REG_TDT, tail); // Increment and write the tail
+
+    UNLOCK_INT(&g_ring_lock);
 }
 
 int i82574_send_packet(const void* data, int length){
@@ -368,11 +375,10 @@ int i82574_send_packet(const void* data, int length){
 
 static u8 rx_next = 0;
 
-
 void i82574_receive_packet(void** out_buffer, u32* out_size) {
     // printf("RECV packets!\n");
 
-    // @TODO make this thread safe
+    LOCK_INT(&g_ring_lock);
 
     u32 idx = rx_next;
 
@@ -388,6 +394,9 @@ void i82574_receive_packet(void** out_buffer, u32* out_size) {
         
         // Handle multiple-descriptor packets
         if (buffer == NULL){ // This is the first descriptor of the packet
+            // @TODO Keep a pre-allocated list of allocations to use.
+            // @TODO Can we send buffer in ring directly and swap it with a fresh one
+            //    to avoid memcpy?
             buffer = PMEM_alloc(len); // use your kernel's heap allocator
             buffer_len = len;
             memcpy(buffer, data, len);
@@ -426,20 +435,33 @@ void i82574_receive_packet(void** out_buffer, u32* out_size) {
 
     *out_buffer = buffer;
     *out_size = buffer_len;
+
+    UNLOCK_INT(&g_ring_lock);
 }
 
 
 void i82574_interrupt_handler(u32 vector, InterruptFrame* frame) {
+    // @TODO THIS IS SLOW. Implement high kernel mapping.
+    u64 prev_cr3 = read_cr3();
+    write_cr3((size_t)g_kernelPageTable);
+    
 
     // @TODO Check which network controller triggered.
 
 
     u32 cause = read_register(CARD_REG_ICR);
+    // @TODO Don't assume interrupt is because we got a packet.
+    //    It's fine because we can still check if we have packet and do nothing if we don't.
+    // @TODO How to handle overrun.
     // printf("i8254x interrupt 0x%x\n", cause);
 
-    void* buffer;
-    u32 bufferSize;
+    void* buffer = NULL;
+    u32 bufferSize = 0;
     i82574_receive_packet(&buffer, &bufferSize);
+
+    if (!buffer || !bufferSize) {
+        goto exit;
+    }
 
     uint8_t* bytes = buffer;
 
@@ -464,7 +486,12 @@ void i82574_interrupt_handler(u32 vector, InterruptFrame* frame) {
     //   IRQ number per device?
     NET_Device* device = &g_devices[0];
 
-    net_handle_packet(device, &packet);
+    bool handled = net_handle_packet(device, &packet);
+    if (!handled) {
+        NET_free_packet(&packet);
+    }
 
+exit:
+    write_cr3(prev_cr3);
 }
 

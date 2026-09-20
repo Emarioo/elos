@@ -1,5 +1,16 @@
 Images of done things
 
+**2026-09-21, UDP user space networking**
+Run some of these commands and load netchat user program.
+Currently you must add it in kentry.c as startup program.
+
+```bash
+sudo scripts/maketap.sh
+./build.py
+
+make -f apps/netchat/netchat_server/Makefile
+bin/netchat
+```
 
 **2026-08-25, Audio syscalls.**
 

@@ -54,6 +54,7 @@ typedef enum {
 
     ELOS_ERR_NOT_FOUND,
     ELOS_ERR_BUSY,
+    ELOS_ERR_TIMEOUT,
 
 
     // ELOS_ERR_IPC_FULL,
@@ -687,6 +688,7 @@ typedef struct {
             void*               buffer;
             ELOS_PADDING
             u32                 bufferSize;
+            u64                 timeout_ns;
         } net_read;
     };
 } ELOS_AsyncRequest;

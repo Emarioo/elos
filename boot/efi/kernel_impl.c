@@ -312,7 +312,7 @@ int netdrv_recv(NetBoot_Device device, void* buffer, int* out_size) {
     }
     int bytes = *out_size >= packet.size ? packet.size : *out_size;
     memcpy(buffer, packet.buffer, bytes);
-    NET_free_packet(device, &packet);
+    NET_free_packet(&packet);
     return bytes;
 }
 int netdrv_send(NetBoot_Device device, void* buffer, int size) {

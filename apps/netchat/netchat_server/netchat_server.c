@@ -177,7 +177,7 @@ int main(int argc, char **argv)
         buffer[received] = 0;
 
 
-        printf("\nReceived %d bytes from ", received);
+        printf("Received %d bytes from ", received);
         print_address(&client_address);
         printf("\n");
 

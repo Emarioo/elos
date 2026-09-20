@@ -3,6 +3,8 @@
     @TODO Complete overhaul on networking. I think it's very easy to send malicious ARP or other types of packets
        for spoofing and so on. We need to check and test these things properly.
 
+    @TODO Local routing through 127.0.0.1
+
 */
 
 
@@ -45,6 +47,20 @@ NET_Device g_devices[MAX_NET_DEVICES];
 int        g_devices_len;
 int        g_devices_max = MAX_NET_DEVICES;
 
+
+
+
+#define MAX_NET_HANDLES 100
+
+u32 g_netHandles_max = MAX_NET_HANDLES;
+NET_Handle g_netHandles[MAX_NET_HANDLES];
+volatile u32 g_net_lock;
+
+
+
+
+
+
 NET_Device* reserve_net_device() {
     NET_Device* device = &g_devices[g_devices_len];
     device->present = true;
@@ -56,23 +72,26 @@ NetworkController controller;
 
 
 bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
+    bool returnValue = false;
     ScanInfo* scanInfo = scanner->user_data;
 
     if (config->classCode != PCI_CLASSCODE__NETWORK_CONTROLLER) {
         return false;
     }
+    
+    NET_Device* device = NULL;
 
     if (config->vendorID == VENDOR_ID__INTEL && config->deviceID == DEVICE_ID__82574L) {
-        NET_Device* device = reserve_net_device();
+        device = reserve_net_device();
         device->config = *config;
 
-        bool res = i82574_init(device);
+        returnValue = i82574_init(device);
 
         // @TODO unreserve device if it fails
 
-        return res;
     } else if (config->vendorID == VENDOR_ID__REALTEK && config->deviceID == DEVICE_ID__RTL8169) {
         
+        // @TODO Fix this up
         controller.found = true;
         controller.config = *config;
 
@@ -81,11 +100,22 @@ bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
         controller.found = res;
 
         return res;
+
     } else {
         // printf("[INFO] NET_init: Searching PCI for network card, found device id 0x%x (vendor 0x%x), but card is not supported.\n", config->deviceID, config->vendorID);
     }
 
-    return false;
+    if (device) {
+        // @TODO DHCP to get gateway, netmask, address.
+        // @TODO Automatic Private IP Addressing if DHCP is unavailable.
+        //   We currently use fixed address.
+
+        device->info.ipv4_address     = ipv4_from_str("169.254.0.1");
+        device->info.ipv4_subnet_mask = ipv4_from_str("255.255.0.0");
+        device->info.ipv4_gateway     = 0; // no gateway
+    }
+
+    return returnValue;
 }
 
 void NET_scan_devices(NET_Device* devices[], int* count) {
@@ -100,9 +130,6 @@ void NET_scan_devices(NET_Device* devices[], int* count) {
     }
     
     char buffer0[24];
-
-    // device->info.ipv4_address = ipv4_from_str("192.168.100.54");
-    // printf("Hardcoded IP: %s\n", ipv4_int_str(device->info.ipv4_address, buffer0));
 
     ScanInfo scanInfo = {
         .devices = devices,
@@ -124,14 +151,14 @@ void NET_device_info(NET_Device* device, NET_DeviceInfo* info) {
     memcpy(info->mac, controller.mac_address, 6);
 }
 
-FN_NET_recv_packet g_recv_packet_callback;
-void* g_recv_packet_callback_userData;
+// FN_NET_recv_packet g_recv_packet_callback;
+// void* g_recv_packet_callback_userData;
 
-void NET_set_receive_callback(NET_Device* device, FN_NET_recv_packet callback, void* user_data) {
-    // @TODO Thread safety.
-    g_recv_packet_callback = callback;
-    g_recv_packet_callback_userData = user_data;
-}
+// void NET_set_receive_callback(NET_Device* device, FN_NET_recv_packet callback, void* user_data) {
+//     // @TODO Thread safety.
+//     g_recv_packet_callback = callback;
+//     g_recv_packet_callback_userData = user_data;
+// }
 
 bool NET_poll_packet(NET_Device* device, NET_Packet* packet) {
     // if (!packet) {
@@ -163,10 +190,9 @@ bool NET_poll_packet(NET_Device* device, NET_Packet* packet) {
     packet->size = size;
     return true;
 }
-void NET_free_packet(NET_Device* device, NET_Packet* packet) {
+void NET_free_packet(NET_Packet* packet) {
     PMEM_free(packet->buffer);
-    packet->buffer = NULL;
-    packet->size = 0;
+    memset(packet, 0, sizeof(*packet));
 }
 
 bool NET_send_packet(NET_Device* device, const void* buffer, int size) {
@@ -202,11 +228,13 @@ bool NET_send_packet(NET_Device* device, const void* buffer, int size) {
 
 
 bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
-    
+    bool consumedPacket = false;
+
     // @NOCHECKIN We need to check that lengths specified in packet doesn't extend the length of the whole packet. Malicious or corrupt packet should be dropped if so.
 
-    if (!packet->buffer || !packet->size)
-        return true;
+    KERNEL_PANIC(packet->buffer && packet->size, "WHY EMPTY?");
+
+    // printf("HANDLE %d\n", packet->size);
 
     void* buffer = packet->buffer;
     int size = packet->size;
@@ -263,18 +291,19 @@ bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
                     message_arp->operation     = bswap16(message_arp->operation);
 
                     NET_send_packet(device, message_buffer, sizeof(message_buffer));
-                    return true;
+                    NET_free_packet(packet);
+                    consumedPacket = true;
                 } else if (arp_ipv4->operation == ARP_REPLY) {
-
-                    // arp_update_table(*(u32*)&arp_ipv4->target_proto_address, device, arp_ipv4->target_hw_address);
                     arp_update_table(*(u32*)&arp_ipv4->sender_proto_address, device, arp_ipv4->sender_hw_address);
+                    NET_free_packet(packet);
+                    consumedPacket = true;
                 }
             } else {
-                // printf("ARP hw=%s proto=%s oper=%s\n",
-                //     htype_str(arp->hardware_type),
-                //     ether_str(arp->protocol_type),
-                //     oper_str(arp->operation)
-                // );
+                printf("ARP hw=%s proto=%s oper=%s (cannot handle)\n",
+                    htype_str(arp->hardware_type),
+                    ether_str(arp->protocol_type),
+                    oper_str(arp->operation)
+                );
             }
         } break;
         case ETHER_IPV4: {
@@ -329,8 +358,11 @@ bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
                         //     );
                         
                         if (computed_checksum != 0) {
+                            printf("NET: ICMP bad checksum %x\n", computed_checksum);
                             // Don't send anything back, checksum is bad (or my implementation is bad)
-                            return true;
+                            NET_free_packet(packet);
+                            consumedPacket = true;
+                            goto exit;
                         }
 
                         u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(ICMP_Header_Echo) + 256] = {0};
@@ -339,7 +371,9 @@ bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
 
                         if (packet_size > sizeof(message_buffer)) {
                             printf("NET: ICMP packet payload to big for static buffer, dropping\n");
-                            return true;
+                            NET_free_packet(packet);
+                            consumedPacket = true;
+                            goto exit;
                         }
 
                         EtherFrame* message_frame = (EtherFrame*)message_buffer;
@@ -379,10 +413,14 @@ bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
                         
                         message_echo->checksum = bswap16(compute_internet_checksum(message_echo, icmp_size));
 
-                        NET_send_packet(device, message_buffer, packet_size); 
-                        return true;
+                        NET_send_packet(device, message_buffer, packet_size);
+                        NET_free_packet(packet);
+                        consumedPacket = true;
+                        goto exit;
                     } else {
-                        // ignore for now
+                        // @TODO Handle ICMP destination unreachable?
+                        //    linux tap sends it to QEMU if we send a packet
+                        //    to an address/port that isn't open.
                     }
                 } break;
                 case IP_UDP: {
@@ -408,8 +446,9 @@ bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
                         while (head < opt_length) {
                             u8 opt = dhcp->options[head];
                             head++;
-                            if (opt == 0xFF)
+                            if (opt == 0xFF) {
                                 break;
+                            }
 
                             u8 len = dhcp->options[head];
                             head++;
@@ -435,25 +474,74 @@ bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
                                 (offered_address>>24)&0xFF);
                             device->info.ipv4_address = offered_address; // can't set this yet, we need to wait for ACK
                             NET_send_dhcp_request(device, offered_address, dhcp->siaddr);
-                            return true;
+                            NET_free_packet(packet);
+                            consumedPacket = true;
                         } else  if (msg_type == DHCP_ACK) {
                             printf("DHCP ACK\n");
-                            return true;
+                            NET_free_packet(packet);
+                            consumedPacket = true;
                         } else {
                             printf("Unhandled DHCP, type=%d\n", msg_type);
                         }
-
-                        break;
+                        goto exit;
                     }
 
                     int body_size = udpSize - sizeof(UDP_Header);
                     u8* body = (u8*)udp + sizeof(UDP_Header);
 
-                    if (!memcmp(body, "ism", 3)) {
-                        // some message from router?
-                        return true;
-                        break;
+
+                    LOCK_INT(&g_net_lock);
+
+                    NET_Handle* foundHandle = NULL;
+                    for (int i=0;i<g_netHandles_max;i++) {
+                        NET_Handle* handle = &g_netHandles[i];
+                        if (!handle->used) {
+                            continue;
+                        }
+
+                        // printf("CMP %d %d : %x %x\n", handle->address.udp_tcp4.port, udp->destinationPort, handle->address.udp_tcp4.address, ip->destinationAddress);
+
+                        if (handle->address.udp_tcp4.port == udp->destinationPort && (handle->address.udp_tcp4.address == 0 || handle->address.udp_tcp4.address == ip->destinationAddress)) {
+                            foundHandle = handle;
+                            break;
+                        }
                     }
+
+                    if (!foundHandle) {
+                        UNLOCK_INT(&g_net_lock);
+                        goto exit;
+                    }
+                    
+                    if (foundHandle->address.protocol != ELOS_NET_PROTO_UDP_IPV4) {
+                        UNLOCK_INT(&g_net_lock);
+                        goto exit;
+                    }
+
+
+                    NET_PortMessage* portMessage = PMEM_alloc(sizeof(NET_PortMessage));
+                    memset(portMessage, 0, sizeof(*portMessage));
+
+                    // foundHandle->packetVersion++;
+
+                    portMessage->rawPacket          = *packet;
+                    portMessage->sourceAddress      = ip->sourceAddress;
+                    portMessage->destinationAddress = ip->destinationAddress;
+                    portMessage->sourcePort         = udp->sourcePort;
+                    portMessage->destinationPort    = udp->destinationPort;
+                    portMessage->data               = body;
+                    portMessage->data_len           = body_size;
+
+                    portMessage->nextMessage        = foundHandle->nextMessage;
+                    foundHandle->nextMessage        = portMessage; // Set in handle last when message is complete
+
+                    // foundHandle->packetVersion++;
+
+                    UNLOCK_INT(&g_net_lock);
+
+                    // if (!memcmp(body, "ism", 3)) {
+                    //     // My router sends this message now and then.
+                    //     goto exit;
+                    // }
 
                     // printf("  UDP srcPort=%d dstPort=%d \n", udp->sourcePort, udp->destinationPort);
 
@@ -493,16 +581,9 @@ bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
         } break;
     }
 
-    return false;
+exit:
+    return consumedPacket;
 }
-
-
-
-#define MAX_NET_HANDLES 100
-
-u32 g_netHandles_max = MAX_NET_HANDLES;
-NET_Handle g_netHandles[MAX_NET_HANDLES];
-volatile u32 g_net_lock;
 
 
 
@@ -514,7 +595,7 @@ NET_Handle* NET_open(const ELOS_Net_Address* address) {
 
     char netaddr_buffer[64];
 
-    printf("NET_open: %p\n", net_address_str(*address, netaddr_buffer));
+    // printf("NET_open: %p\n", net_address_str(*address, netaddr_buffer));
 
     bool portCollision = false;
     NET_Handle* foundHandle = NULL;
@@ -558,7 +639,7 @@ void NET_close(NET_Handle* handle) {
         return;
     }
     
-    printf("NET_close: %p\n", handle);
+    // printf("NET_close: %p\n", handle);
 
     LOCK_INT(&g_net_lock);
 
@@ -571,7 +652,7 @@ void NET_close(NET_Handle* handle) {
 
 ELOS_Error NET_write(NET_Handle* handle, const ELOS_Net_Address* address, const void* data, u32 size) {
     ELOS_Error returnValue = ELOS_ERR_UNKNOWN;
-    printf("NET_write: %p %d\n", handle, size);
+    // printf("NET_write: %p %d\n", handle, size);
 
     NET_Device* device;
     u8  mac[6];
@@ -592,7 +673,7 @@ ELOS_Error NET_write(NET_Handle* handle, const ELOS_Net_Address* address, const 
         src_port = handle->address.udp_tcp4.port;
         bool didResolve = fetch_mac_from_address(savedAddress.udp_tcp4.address, &device, mac);
         if (!didResolve) {
-            return ELOS_ERR_UNKNOWN;
+            return ELOS_ERR_NOT_FOUND;
         }
         ip_address = savedAddress.udp_tcp4.address;
         dst_port = savedAddress.udp_tcp4.port;
@@ -602,7 +683,7 @@ ELOS_Error NET_write(NET_Handle* handle, const ELOS_Net_Address* address, const 
     switch (address->protocol) {
         case ELOS_NET_PROTO_RAW: {
             static char macbuff[32];
-            printf("NET_write: raw, mac %s\n", mac_str(mac, macbuff));
+            // printf("NET_write: raw, mac %s\n", mac_str(mac, macbuff));
 
             bool yes = NET_send_packet(device, data, size);
             if (!yes) {
@@ -613,7 +694,7 @@ ELOS_Error NET_write(NET_Handle* handle, const ELOS_Net_Address* address, const 
         case ELOS_NET_PROTO_UDP_IPV4: {
             static char macbuff[32];
 
-            printf("NET_write: udp, mac %s\n", mac_str(mac, macbuff));
+            // printf("NET_write: udp, mac %s\n", mac_str(mac, macbuff));
 
             bool yes = NET_send_udp(device, mac, ip_address, src_port, dst_port, data, size);
             if (!yes) {
@@ -624,7 +705,7 @@ ELOS_Error NET_write(NET_Handle* handle, const ELOS_Net_Address* address, const 
             returnValue = ELOS_OK;
         } break;
         default: {
-            returnValue = ELOS_ERR_UNKNOWN;
+            returnValue = ELOS_ERR_INVALID_PARAM;
         } break;
     }
 
@@ -632,9 +713,57 @@ exit:
     return returnValue;
 }
 
-ELOS_Error NET_read(NET_Handle* handle, ELOS_Net_Address* address, void* buffer, u32* bufferSize) {
+ELOS_Error NET_read(NET_Handle* handle, ELOS_Net_Address* address, void* buffer, u32* bufferSize, u64 timeout_ns) {
+    ELOS_Error returnValue = ELOS_ERR_UNKNOWN;
 
-    return ELOS_ERR_UNKNOWN;
+    u64 tickStart = CPU_ticks();
+    u64 tps = CPU_ticks_per_second();
+    u64 timeout_tick = tickStart + (timeout_ns/10 * tps/10) / 10000000;
+
+    // @TODO Better sleep and rescheduling.
+    while (true) {
+
+        if (handle->nextMessage) {
+
+            LOCK_INT(&g_net_lock);
+            
+            if (handle->nextMessage) {
+                NET_PortMessage* message = handle->nextMessage;
+
+                address->protocol = handle->address.protocol;
+                address->udp_tcp4.address = message->sourceAddress;
+                address->udp_tcp4.port = message->sourcePort;
+
+                if (*bufferSize >= message->data_len) {
+                    memcpy(buffer, message->data, message->data_len);
+                    *bufferSize = message->data_len;
+                    handle->nextMessage = message->nextMessage;
+                    PMEM_free(message);
+                    UNLOCK_INT(&g_net_lock);
+                    returnValue = ELOS_OK;
+                    break;
+                } else {
+                    UNLOCK_INT(&g_net_lock);
+                    returnValue = ELOS_ERR_BUFFER_SIZE_TOO_SMALL;
+                    break;
+                }
+            }
+
+            UNLOCK_INT(&g_net_lock);
+        }
+
+        u64 tickNow = CPU_ticks();
+        if (tickNow > timeout_tick) {
+            // printf("NET_read timeout\n");
+            returnValue = ELOS_ERR_TIMEOUT;
+            break;
+        }
+
+        pause();
+    }
+
+
+    return returnValue;
 }
 
 

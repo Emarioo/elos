@@ -39,7 +39,7 @@ int main() {
 
     ELOS_Net_Address address = {0};
     address.protocol = ELOS_NET_PROTO_UDP_IPV4;
-    address.udp_tcp4.address = net_ipv4_from_str("127.0.0.1");
+    address.udp_tcp4.address = 0; // any address
     address.udp_tcp4.port    = 5001;
 
     ELOS_Error error = net_open(&address, &g_net_handle);
@@ -49,12 +49,12 @@ int main() {
         return 1;
     }
 
-    printf("NET_OPEN success, handle=%p\n", g_net_handle);
+    printf("netchat: Started %s:%u\n", net_ipv4_str(address.udp_tcp4.address), address.udp_tcp4.port);
 
     int packetId = 0;
 
     while (1) {
-        // recv_packet();
+        recv_packet();
         send_packet(packetId++);
 
         SYS_sleep_ns(1000 * 1000000);
@@ -73,25 +73,25 @@ void recv_packet() {
     ELOS_Net_Address address = {0};
 
     char messageBuffer[512];
-    u32 bufferSize = sizeof(messageBuffer);
+    u32 bufferSize = sizeof(messageBuffer)-1;
+    messageBuffer[0] = 0;
 
-    error = net_read(g_net_handle, &address, messageBuffer, &bufferSize);
-    if (error != ELOS_OK) {
+    error = net_read(g_net_handle, &address, messageBuffer, &bufferSize, 0);
+    if (error == ELOS_ERR_TIMEOUT) {
+        // no packets
+    } else if (error != ELOS_OK) {
         printf("recv_packet: Error %s\n", elos_error(error));
     } else {
-        printf("recv_packet: Read message\n");
+        messageBuffer[bufferSize] = 0;
+        printf("netchat server: %s\n", messageBuffer);
     }
-
-    printf("%s\n", messageBuffer);
-
 }
 
 void send_packet(int packedId) {
     ELOS_Net_Address address = {0};
     address.protocol = ELOS_NET_PROTO_UDP_IPV4;
-    //  10.255.255.254
-    // address.udp_tcp4.address = net_ipv4_from_str("10.255.254");
-    address.udp_tcp4.address = net_ipv4_from_str("192.168.100.50");
+    // address.udp_tcp4.address = net_ipv4_from_str("10.255.255.254");
+    address.udp_tcp4.address = net_ipv4_from_str("169.254.0.2");
     address.udp_tcp4.port    = 5002;
 
     char messageBuffer[512];
@@ -101,8 +101,8 @@ void send_packet(int packedId) {
     
     error = net_write(g_net_handle, &address, messageBuffer, len);
     if (error != ELOS_OK) {
-        printf("send_packet: Error %s\n", elos_error(error));
+        printf("Could not send packet, %s\n", elos_error(error));
     } else {
-        printf("send_packet: Sent message\n");
+        printf("sent: %s\n", messageBuffer);
     }
 }

@@ -540,7 +540,7 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
 
             u32 bufferSize = safeBufferSize;
 
-            completion.error = NET_read(safeNetHandle, safeAddress, safeBuffer, &bufferSize);
+            completion.error = NET_read(safeNetHandle, safeAddress, safeBuffer, &bufferSize, request->net_read.timeout_ns);
             completion.net_read.readBytes = bufferSize;
         } break;
 

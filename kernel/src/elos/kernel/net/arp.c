@@ -64,6 +64,8 @@ bool find_mac(u32 address, NET_Device** device, u8 mac[6]) {
     bool returnValue = false;
     LOCK_INT(&arp_table_lock);
 
+    // @TODO If ARP entry is old we should ask for it again.
+
     ARP_Entry* entry = NULL;
     for (int i=0;i<arp_table_len;i++) {
         // printf("CMP %x %x\n", arp_table[i].address, address);
@@ -75,7 +77,7 @@ bool find_mac(u32 address, NET_Device** device, u8 mac[6]) {
 
     if (entry) {
         *device = entry->device;
-        memcpy(mac, entry->mac, sizeof(*mac));
+        memcpy(mac, entry->mac, sizeof(entry->mac));
         returnValue = true;
         goto exit;
     }
@@ -110,7 +112,7 @@ void arp_update_table(u32 address, NET_Device* device, u8 mac[6]) {
     if (entry) {
         entry->address = address;
         entry->device = device;
-        memcpy(entry->mac, mac, sizeof(*mac));
+        memcpy(entry->mac, mac, sizeof(entry->mac));
         arpTableVersion++;
         returnValue = true;
     }
@@ -147,7 +149,7 @@ bool fetch_mac_from_address(u32 address, NET_Device** out_device, u8 out_mac[6])
     while (true) {
 
         if (arpTableVersion != prev_version) {
-            printf("Table changes!\n");
+            // printf("Table changes!\n");
             res = find_mac(address, out_device, out_mac);
             if (res) {
                 return true;
@@ -157,7 +159,7 @@ bool fetch_mac_from_address(u32 address, NET_Device** out_device, u8 out_mac[6])
 
         u64 tickNow = CPU_ticks();
         if (tickNow > timeout_tick) {
-            printf("arp timeout\n");
+            // printf("arp timeout\n");
             break;
         }
 

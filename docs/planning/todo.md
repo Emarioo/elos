@@ -19,17 +19,18 @@ The categories are:
 Tasks related to kernel and operating system
 
 ## @current
+- [ ] Add 'start \<path\>' and 'kill \<name\>' to system console.
 - [ ] Fix NetBoot for QEMU. It's broken? Also it waits 1-2 seconds to start in QEMU which is too long.
 - [ ] Audio server.
 - [ ] Networking ASYNC operations. classic berkley sockets API?
 - [ ] My laptop has 3-4 unknown PCI audio devices. Check if we still detect HDA and if playing sound works.
 - [ ] Separate CPU architecture specific code to separate folder/files.
-- [ ] System console.
+- [ ] System console. Currently just a prototype.
 - [ ] Process manager. If process exits gets terminated then free resources. Memory, created services, rings, buffers.
 - [ ] Text editor. Try to port https://github.com/martanne/vis?
 - [ ] Terminal.
 - [ ] PRISM Compositor, moving and resizing windows, double buffering, transparent windows, input passthrough. Keyboard and mouse input.
-- [ ] Driver for file system, disk device.
+- [ ] NVMe driver.
 - [ ] Kernel mouse syscalls. (maybe generic input syscalls for keyboard, controller, mouse?)
 - [ ] API to read/write disk device directlty from user space. Requires special capability. Kernel handles AHCI, NVMe details.
       And ensures the device isn't used or mounted by anyone else.

@@ -822,6 +822,7 @@ register size_t _arg1 asm ("ecx") = (size_t)timeout_ns;
         case ELOS_ERR_CAP_DENIED: return "ELOS_ERR_CAP_DENIED";
         case ELOS_ERR_NOT_FOUND: return "ELOS_ERR_NOT_FOUND";
         case ELOS_ERR_BUSY: return "ELOS_ERR_BUSY";
+        case ELOS_ERR_TIMEOUT: return "ELOS_ERR_TIMEOUT";
         case ELOS_ERR_UNSUPPORTED_AUDIO_FORMAT: return "ELOS_ERR_UNSUPPORTED_AUDIO_FORMAT";
         case ELOS_ERR_BUFFER_SIZE_NOT_FRAME_ALIGNED: return "ELOS_ERR_BUFFER_SIZE_NOT_FRAME_ALIGNED";
         case ELOS_ERR_BUFFER_SIZE_TOO_BIG: return "ELOS_ERR_BUFFER_SIZE_TOO_BIG";

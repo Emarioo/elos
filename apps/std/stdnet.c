@@ -78,7 +78,7 @@ ELOS_Error net_write(ELOS_Net_Handle handle, const ELOS_Net_Address* address, co
     return cqe.error;
 }
 
-ELOS_Error net_read(ELOS_Net_Handle handle, ELOS_Net_Address* address, void* buffer, u32* bufferSize) {
+ELOS_Error net_read(ELOS_Net_Handle handle, ELOS_Net_Address* address, void* buffer, u32* bufferSize, u64 timeout_ns) {
     ELOS_Error error;
     
     ELOS_AsyncRequest req = {0};
@@ -92,6 +92,7 @@ ELOS_Error net_read(ELOS_Net_Handle handle, ELOS_Net_Address* address, void* buf
     req.net_read.address = address;
     req.net_read.buffer = buffer;
     req.net_read.bufferSize = *bufferSize;
+    req.net_read.timeout_ns = timeout_ns;
 
     requestID = async_submit(&req);
     bool res = async_wait(requestID, &cqe, 0);
@@ -113,4 +114,12 @@ u32 net_ipv4_from_str(const char* address) {
     num |= (u32)strtol(string+1, &string, 10) << 16;
     num |= (u32)strtol(string+1, &string, 10) << 24;
     return num;
+}
+
+const char* net_ipv4_str(u32 address) {
+    static char buffer[50]; // @TODO Make it thread safe
+    snprintf(buffer, sizeof(buffer), "%u.%u.%u.%u", 
+        address & 0xFF, (address >> 8) & 0xFF, (address >> 16) & 0xFF, address >> 24
+    );
+    return buffer;
 }

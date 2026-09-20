@@ -193,7 +193,6 @@ int main(int argc, char** argv) {
     struct sockaddr_in addr = {0};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(PORT);
-    // addr.sin_addr.s_addr = inet_addr("192.168.100.50");
     addr.sin_addr.s_addr = INADDR_ANY;
 
     res = bind(listenSocket, (struct sockaddr*)&addr, sizeof(addr));

@@ -40,12 +40,26 @@ typedef struct NET_Packet {
     int   size;
 } NET_Packet;
 
+typedef struct NET_PortMessage NET_PortMessage;
+
+struct NET_PortMessage {
+    NET_Packet       rawPacket;
+    NET_PortMessage* nextMessage;
+    
+    u32 sourceAddress;
+    u32 destinationAddress;
+    u16 sourcePort;
+    u16 destinationPort;
+    u8* data;
+    u8  data_len;
+};
+
 
 typedef struct NET_DeviceInfo {
     char name[64];
     u8   mac[6];
     u32  ipv4_address;
-    u32  ipv4_netmask;
+    u32  ipv4_subnet_mask;
     u32  ipv4_gateway;
 } NET_DeviceInfo;
 
@@ -62,13 +76,14 @@ struct NET_Device {
 typedef struct {
     bool             used;
     ELOS_Net_Address address;
+    NET_PortMessage* volatile nextMessage;
 } NET_Handle;
 
-typedef bool(*FN_NET_recv_packet)(NET_Device* device, NET_Packet* packet, void* user_data);
+// typedef bool(*FN_NET_recv_packet)(NET_Device* device, NET_Packet* packet, void* user_data);
 
 
-extern FN_NET_recv_packet g_recv_packet_callback;
-extern void* g_recv_packet_callback_userData;
+// extern FN_NET_recv_packet g_recv_packet_callback;
+// extern void* g_recv_packet_callback_userData;
 
 
 
@@ -131,7 +146,7 @@ bool NET_send_packet(NET_Device* device, const void* buffer, int size);
     @return False if no packet available. True if packet was available.
 */
 bool NET_poll_packet(NET_Device* device, NET_Packet* packet);
-void NET_free_packet(NET_Device* device, NET_Packet* packet);
+void NET_free_packet(NET_Packet* packet);
 
 // bool NET_handle_packet(NET_Device* device, NET_Packet* packet);
 
@@ -180,7 +195,7 @@ ELOS_Error NET_write(NET_Handle* handle, const ELOS_Net_Address* address, const 
 
     @param address Which address/connection the bytes came from.
 */
-ELOS_Error NET_read(NET_Handle* handle, ELOS_Net_Address* address, void* buffer, u32* bufferSize);
+ELOS_Error NET_read(NET_Handle* handle, ELOS_Net_Address* address, void* buffer, u32* bufferSize, u64 timeout_ns);
 
 
 
