@@ -19,8 +19,6 @@
 #include "elos/common/intrinsics.h"
 #include "elos/common/string.h"
 
-#include "elos/kernel/net/i8254x.h"
-
 #include "elos/kernel/video/frame.h"
 
 #include "elos/kernel/net/protocol.h"
@@ -38,7 +36,7 @@ void terminal_main();
 
 extern FN_KCON_write _write_hooks[4];
 
-void handle_packet(NetDevice device, NET_Packet* packet, void* user_data);
+void handle_packet(NET_Device* device, NET_Packet* packet, void* user_data);
 
 
 static BootAPI _boot_api;
@@ -264,21 +262,21 @@ void kernel_entry(BootAPI* in_boot_api) {
     //   NETWORK STUFF?
     //#####################
 
-    NetDevice net_device = NULL;
+    NET_Device* net_device = NULL;
     int count = 1;
     NET_scan_devices(&net_device, &count);
-    // @TODO Check that we got device
-    
-    // NET_set_receive_callback(net_device, handle_packet, NULL);
 
-    // u32 target_ip = ipv4_from_str("192.168.100.50");
+    if (count) {
+        // NET_set_receive_callback(net_device, handle_packet, NULL);
+        // u32 target_ip = ipv4_from_str("192.168.100.50");
 
-    // In QEMU you need to setup DHCP server or use "-netdev user,id=net0"
-    // NET_send_dhcp_discover(net_device);
-    
-    // In QEMU you cannot use "-netdev user,id=net0".
-    // You must setup tap device (which is preferably anyway because you can use wireshark)
-    // NET_send_arp(net_device, target_ip);
+        // In QEMU you need to setup DHCP server or use "-netdev user,id=net0"
+        // NET_send_dhcp_discover(net_device);
+        
+        // In QEMU you cannot use "-netdev user,id=net0".
+        // You must setup tap device (which is preferably anyway because you can use wireshark)
+        // NET_send_arp(net_device, target_ip);
+    }
 
 
     // Start scheduling
@@ -326,7 +324,8 @@ void os_entry() {
     // EXEC_create_user_thread("/pkg/win32_loader/win32_loader.elf", 0);
 
     EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
-    EXEC_create_user_thread("/pkg/supper/supper.elf", 0);
+    // EXEC_create_user_thread("/pkg/supper/supper.elf", 0);
+    EXEC_create_user_thread("/pkg/netchat/netchat.elf", 0);
     // EXEC_create_user_thread("/pkg/slate/slate.elf", 1);
     // EXEC_create_user_thread("/pkg/doom/doom.elf", 0);
 
@@ -346,9 +345,9 @@ void os_entry() {
 }
 
 
-void handle_packet(NetDevice device, NET_Packet* packet, void* user_data) {
-    NET_handle_packet(device, packet);
-}
+// void handle_packet(NET_Device* device, NET_Packet* packet, void* user_data) {
+//     NET_handle_packet(device, packet);
+// }
 
 
 // These are defined in kernel Makefile (created from res/Lat2-Terminus16.psf at the time of writing this)

@@ -1,29 +1,79 @@
 #pragma once
 
+#include "elos/kernel/driver/pci.h"
 #include "elos/common/types.h"
-
 #include "elos/cpu.h"
 
-// CARD refers to i8254x. Poor naming.
+#include "elos/network.h"
 
-#define CARD_REG_CTRL   0x0
-#define CARD_REG_STATUS 0x8
-#define CARD_REG_EECD   0x10
-#define CARD_REG_EERD   0x14
-#define CARD_REG_ICR    0xC0
-#define CARD_REG_IMS    0xD0
-#define CARD_REG_RCTL   0x100
-#define CARD_REG_RDBAL  0x2800
-#define CARD_REG_RDBAH  0x2804
-#define CARD_REG_RDLEN  0x2808
-#define CARD_REG_RDH    0x2810
-#define CARD_REG_RDT    0x2818
-#define CARD_REG_TCTL   0x400
-#define CARD_REG_TDBAL  0x3800
-#define CARD_REG_TDBAH  0x3804
-#define CARD_REG_TDLEN  0x3808
-#define CARD_REG_TDH    0x3810
-#define CARD_REG_TDT    0x3818
+// CARD refers to i8254x.
+
+typedef struct {
+
+    // 0x0
+    u32 CTRL;
+    u32 _padding0;
+    u32 STATUS;
+    u32 _padding01;
+    u32 EEC;
+    u32 EERD;
+    u32 CTRL_EXT;
+    u32 FLA;
+    u32 MDIC;
+    u32 FCAL;
+    u32 _padding1;
+    u32 FCAH;
+    u32 FCT;
+    u32 _padding2;
+    u32 VET;
+    u32 _padding3;
+
+    // 0x40
+    u32 _padding4[0x20];
+
+    // 0xc0
+    u32 ICR;
+    u32 ITR;
+    u32 ICS;
+    u32 _padding5;
+    u32 IMS;
+    u32 _padding6;
+    u32 IMC;
+    u32 EIAC;
+    u32 IAM;
+    u32 IVAR;
+
+    // 0xE8
+    u32 EITR[5];
+    u32 _padding7;
+
+    // 0x100
+
+
+} i82574_Registers;
+
+
+
+#define CARD_REG_CTRL      0x0
+#define CARD_REG_STATUS    0x8
+#define CARD_REG_EECD      0x10
+#define CARD_REG_EERD      0x14
+#define CARD_REG_CTRL_EXT  0x18
+#define CARD_REG_FLA       0x1C
+#define CARD_REG_ICR       0xC0
+#define CARD_REG_IMS       0xD0
+#define CARD_REG_RCTL      0x100
+#define CARD_REG_RDBAL     0x2800
+#define CARD_REG_RDBAH     0x2804
+#define CARD_REG_RDLEN     0x2808
+#define CARD_REG_RDH       0x2810
+#define CARD_REG_RDT       0x2818
+#define CARD_REG_TCTL      0x400
+#define CARD_REG_TDBAL     0x3800
+#define CARD_REG_TDBAH     0x3804
+#define CARD_REG_TDLEN     0x3808
+#define CARD_REG_TDH       0x3810
+#define CARD_REG_TDT       0x3818
 
 #define CARD_REG_RAL(N) (0x5400 + (N) * 8)
 #define CARD_REG_RAH(N) (0x5404 + (N) * 8)
@@ -60,21 +110,40 @@
 #define CARD_BIT_STATUS_PCIX_MODE    0x2000
 #define CARD_MASK_STATUS_PCIXSPD     0xC000
 
-#define CARD_BIT_EECD_SK        0x1
-#define CARD_BIT_EECD_CS        0x2
-#define CARD_BIT_EECD_DI        0x4
-#define CARD_BIT_EECD_DO        0x8
-#define CARD_BIT_EECD_FWE       0x10
-#define CARD_BIT_EECD_EE_REQ    0x20
-#define CARD_BIT_EECD_EE_GNT    0x40
-#define CARD_BIT_EECD_EE_PRES   0x80
-#define CARD_BIT_EECD_EE_SIZE_1 0x100
-#define CARD_BIT_EECD_EE_SIZE_2 0x200
-#define CARD_BIT_EECD_EE_TYPE   0x1000
+#define CARD_BIT_EECD_EE_SK      (1 << 0)
+#define CARD_BIT_EECD_EE_CS      (1 << 1)
+#define CARD_BIT_EECD_EE_DI      (1 << 2)
+#define CARD_BIT_EECD_EE_DO      (1 << 3)
+// #define CARD_BIT_EECD_FWE        (1 << )
+#define CARD_BIT_EECD_EE_REQ     (1 << 6)
+#define CARD_BIT_EECD_EE_GNT     (1 << 7)
+#define CARD_BIT_EECD_EE_PRES    (1 << 8)
+
+#define CARD_BIT_EEC_NVMTYPE     (1 << 23)
 
 
-#define CARD_BIT_EERD_START  0x1
-#define CARD_BIT_EERD_DONE   0x10
+#define CARD_IS_NVM_FLASH(EEC)  ((EEC) & CARD_BIT_EEC_NVMTYPE)
+
+#define CARD_BIT_FL_NVM_SK      (1 << 0)
+#define CARD_BIT_FL_CE          (1 << 1)
+#define CARD_BIT_FL_SI          (1 << 2)
+#define CARD_BIT_FL_SO          (1 << 3)
+#define CARD_BIT_FL_REQ         (1 << 4)
+#define CARD_BIT_FL_GNT         (1 << 5)
+// #define CARD_BIT_FL_DEV_ER_IND  (1 << 6)
+// #define CARD_BIT_FL_SEC_ER_IND  (1 << 7)
+// #define CARD_BIT_FL_WR_IND      (1 << 8)
+// #define CARD_BIT_FL_WR_DONE     (1 << 9)
+#define CARD_BIT_FL_BUSY        (1 << 30)
+#define CARD_BIT_FL_ER          (1 << 31)
+
+
+#define CARD_BIT_EERD_START  (1 << 0)
+#define CARD_BIT_EERD_DONE   (1 << 1)
+
+#define CARD_IS_EERD_DONE(EERD) ((EERD) & CARD_BIT_EERD_DONE)
+#define CARD_FIELD_EERD_DATA(EERD) ((u32)(EERD) >> 16)
+#define CARD_MAKE_EERD_START(ADDR) (((u32)(ADDR) << 2) | CARD_BIT_EERD_START)
 
 
 #define CARD_BIT_TCTL_EN  (1 << 1)
@@ -177,11 +246,12 @@ typedef struct ReceiveDescriptor {
 #define CARD_BIT_RD_ERRORS_IPE  (1 << 6)
 #define CARD_BIT_RD_ERRORS_RXE  (1 << 7)
 
-bool i8254x_init();
 
-void i8254x_receive_packet(void** out_buffer, int* out_size);
+// void i8254x_set_interrupt_handler(FN_interrupt_handler handler);
 
-int i8254x_send_packet(void* data, int size);
 
-void i8254x_set_interrupt_handler(FN_interrupt_handler handler);
+int i82574_send_packet(const void* data, int length);
 
+void i82574_receive_packet(void** out_buffer, u32* out_size);
+
+bool i82574_init(NET_Device* device);

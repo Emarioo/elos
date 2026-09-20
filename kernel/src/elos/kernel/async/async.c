@@ -337,7 +337,7 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
     const void* safeConstBuffer;
     size_t      safeBufferSize;
     VFS_Handle  safeVFSHandle;
-    NetHandle*  safeNetHandle;
+    NET_Handle*  safeNetHandle;
 
     #define GET_SANITIZED_PATH(out_PATH, PATH) \
         *out_PATH = PATH; \
@@ -502,7 +502,7 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
         } break;
 
         case ELOS_ASYNC_NET_OPEN: {
-            NetHandle* handle;
+            NET_Handle* handle;
             ELOS_Net_Address* safeAddress;
             GET_SANITIZED_CSTRUCT(&safeAddress, request->net_open.address);
 

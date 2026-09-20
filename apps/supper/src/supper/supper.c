@@ -3,11 +3,13 @@
 
 #include "prism/prism.h"
 #include "stdui.h"
+#include "stdnet.h"
 
 #include "math.h"
 
 #include "elos/elos.h"
 #include "async_io.h"
+
 
 #include "supper/supper_net.h"
 
@@ -456,104 +458,6 @@ Model* create_model() {
 
 
 
-ELOS_Error net_open(const ELOS_Net_Address* address, ELOS_Net_Handle* handle) {
-    ELOS_Error error;
-    
-    ELOS_AsyncRequest req = {0};
-    ELOS_AsyncCompletion cqe;
-    Async_RequestID requestID;
-
-    req.operation   = ELOS_ASYNC_NET_OPEN;
-    req.flags       = 0;
-
-    req.net_open.address = address;
-
-    requestID = async_submit(&req);
-    bool res = async_wait(requestID, &cqe, 0);
-    if (!res) {
-        printf("-1 from async_wait\n");
-        return ELOS_ERR_UNKNOWN;
-    }
-
-    *handle = cqe.net_open.handle;
-    return cqe.error;
-}
-
-ELOS_Error net_close(ELOS_Net_Handle handle) {
-    ELOS_Error error;
-    
-    ELOS_AsyncRequest req = {0};
-    ELOS_AsyncCompletion cqe;
-    Async_RequestID requestID;
-
-    req.operation   = ELOS_ASYNC_NET_CLOSE;
-    req.flags       = 0;
-
-    req.net_close.handle = handle;
-
-    requestID = async_submit(&req);
-    bool res = async_wait(requestID, &cqe, 0);
-    if (!res) {
-        printf("-1 from async_wait\n");
-        return ELOS_ERR_UNKNOWN;
-    }
-
-    return cqe.error;
-}
-
-ELOS_Error net_write(ELOS_Net_Handle handle, const ELOS_Net_Address* address, const void* data, u32 size) {
-    ELOS_Error error;
-    
-    ELOS_AsyncRequest req = {0};
-    ELOS_AsyncCompletion cqe;
-    Async_RequestID requestID;
-
-    req.operation   = ELOS_ASYNC_NET_WRITE;
-    req.flags       = 0;
-
-    req.net_write.handle = handle;
-    req.net_write.address = address;
-    req.net_write.data = data;
-    req.net_write.size = size;
-
-    requestID = async_submit(&req);
-    bool res = async_wait(requestID, &cqe, 0);
-    if (!res) {
-        printf("-1 from async_wait\n");
-        return ELOS_ERR_UNKNOWN;
-    }
-
-    return cqe.error;
-}
-
-ELOS_Error net_read(ELOS_Net_Handle handle, ELOS_Net_Address* address, void* buffer, u32* bufferSize) {
-    ELOS_Error error;
-    
-    ELOS_AsyncRequest req = {0};
-    ELOS_AsyncCompletion cqe;
-    Async_RequestID requestID;
-
-    req.operation   = ELOS_ASYNC_NET_WRITE;
-    req.flags       = 0;
-
-    req.net_read.handle = handle;
-    req.net_read.address = address;
-    req.net_read.buffer = buffer;
-    req.net_read.bufferSize = *bufferSize;
-
-    requestID = async_submit(&req);
-    bool res = async_wait(requestID, &cqe, 0);
-    if (!res) {
-        printf("-1 from async_wait\n");
-        return ELOS_ERR_UNKNOWN;
-    }
-
-    *bufferSize = cqe.net_read.readBytes;
-
-    return cqe.error;
-}
-
-
 ELOS_Net_Handle g_net_handle;
 
 void init_network() {
@@ -562,17 +466,15 @@ void init_network() {
     
     ELOS_Net_Address address = {0};
     address.protocol = ELOS_NET_PROTO_UDP_IPV4;
-    address.address[0] = 127;
-    address.address[1] = 0;
-    address.address[2] = 0;
-    address.address[3] = 1;
-    address.port    = 5001;
+    address.udp_tcp4.address = net_ipv4_from_str("127.0.0.1");
+    address.udp_tcp4.port    = 5001;
     // snprintf(address.identifier, sizeof(address.identifier), "127.0.0.1:8080");
 
     ELOS_Error error = net_open(&address, &g_net_handle);
     
     if (error != ELOS_OK) {
         printf("NET_OPEN was not OK\n");
+        g_net_handle = NULL;
         return;
     }
     printf("NET_OPEN success, handle=%p\n", g_net_handle);
@@ -582,13 +484,14 @@ void init_network() {
 
 void network_send_updated_position() {
 
+    if (!g_net_handle) {
+        return;
+    }
+
     ELOS_Net_Address address = {0};
     address.protocol = ELOS_NET_PROTO_UDP_IPV4;
-    address.address[0] = 10;
-    address.address[1] = 1;
-    address.address[2] = 4;
-    address.address[3] = 52;
-    address.port    = 5002;
+    address.udp_tcp4.address = net_ipv4_from_str("10.1.4.54");
+    address.udp_tcp4.port    = 5002;
 
     char messageBuffer[512];
     MessageHeader* message = (void*)messageBuffer;

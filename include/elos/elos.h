@@ -128,6 +128,8 @@ typedef u32 ELOS_ThreadID;
 
 typedef u32 ELOS_DeviceID;
 
+typedef struct NET_Device NET_Device;
+
 typedef enum {
     ELOS_USER_EVENT_CONNECTED, // mouse,keyboard,controllers
     ELOS_USER_EVENT_DISCONNECTED,
@@ -551,11 +553,22 @@ typedef struct {
     // ::
     // [0000:0000:0000:0000:0000:0000:0000:0000]:65535
     union {
-        char identifier[64]; // last character is reserved to be NULL
+        // char identifier[64]; // last character is reserved to be NULL
         struct {
             ELOS_Net_Protocol protocol;
-            u8  address[16];
-            u16 port;
+            union {
+                struct {
+                    NET_Device* device;
+                } raw;
+                struct {
+                    u32 address;
+                    u16 port;
+                } udp_tcp4;
+                struct {
+                    u16 address[8];
+                    u16 port;
+                } udp_tcp6;
+            };
         };
     };
 } ELOS_Net_Address;

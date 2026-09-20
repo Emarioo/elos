@@ -15,6 +15,10 @@
     They fill it up and send it to NET. NET sends data to controller
     and collects the buffer into the pool where it can be reused again.
 
+
+    @TODO How does user app iterate network controllers.
+       A network debug app might want to display all controllers, networks, gateways, ipv4 addresses.
+       Maybe artificially make network controller like tap on linux.
 */
 
 
@@ -23,34 +27,53 @@
 #include "elos/common/types.h"
 #include "elos/elos.h"
 
+#include "elos/kernel/driver/pci.h"
+
 
 //###############################
 //          TYPES
 //###############################
 
 
-typedef void* NetDevice;
-
 typedef struct NET_Packet {
     char* buffer;
     int   size;
 } NET_Packet;
 
-typedef void(*FN_NET_recv_packet)(NetDevice device, NET_Packet* packet, void* user_data);
 
 typedef struct NET_DeviceInfo {
-    u8 mac[6];
+    char name[64];
+    u8   mac[6];
+    u32  ipv4_address;
+    u32  ipv4_netmask;
+    u32  ipv4_gateway;
 } NET_DeviceInfo;
 
+typedef struct NET_Device NET_Device;
+
+struct NET_Device {
+    bool present;
+    NET_DeviceInfo info;
+
+    // Some network controllers may use USB and not PCI.
+    PCI_ConfigSpace config;
+};
 
 typedef struct {
     bool             used;
     ELOS_Net_Address address;
-} NetHandle;
+} NET_Handle;
+
+typedef bool(*FN_NET_recv_packet)(NET_Device* device, NET_Packet* packet, void* user_data);
+
+
+extern FN_NET_recv_packet g_recv_packet_callback;
+extern void* g_recv_packet_callback_userData;
+
 
 
 //######################################
-//     NETWORK CONTROLLER FUNCTIONS
+//      KERNEL NETWORK FUNCTIONS
 //######################################
 
 
@@ -69,9 +92,9 @@ typedef struct {
     @param devices Array of devices to fetch, initialize and return.
     @param max_count Max number of devices to initialize. Returns number of devices found.
 */
-void NET_scan_devices(NetDevice devices[], int* count);
+void NET_scan_devices(NET_Device* devices[], int* count);
 
-void NET_device_info(NetDevice device, NET_DeviceInfo* info);
+void NET_device_info(NET_Device* device, NET_DeviceInfo* info);
 
 /*
     Reset/turn off network controller.
@@ -86,18 +109,7 @@ void NET_device_info(NetDevice device, NET_DeviceInfo* info);
 void NET_cleanup();
 
 /*
-    Polls the network controller for packets. The returned packets are raw ethernet frames.
-    
-    @note Thread-safe
-
-    @param packet Packet with pointer and size. (Ethernet frame + IP/ICMP + UDP/TCP for example).
-    @return False if no packet available. True if packet was available.
-*/
-bool NET_poll_packet(NetDevice device, NET_Packet* packet);
-void NET_free_packet(NetDevice device, NET_Packet* packet);
-
-/*
-    Sends packet to network controller.
+    Sends raw packet to network controller.
     
     @note Thread-safe
 
@@ -105,7 +117,23 @@ void NET_free_packet(NetDevice device, NET_Packet* packet);
     @param size Size of packet data.
     @return False if no packet available. True if packet was available.
 */
-void NET_send_packet(NetDevice device, void* buffer, int size);
+bool NET_send_packet(NET_Device* device, const void* buffer, int size);
+
+// void NET_enable_interrupt(NET_Device* device);
+// void NET_disable_interrupt(NET_Device* device);
+
+/*
+    Polls the network controller for packets. The returned packets are raw ethernet frames.
+    
+    @note Thread-safe
+
+    @param packet Packet with pointer and size. (Ethernet frame + IP/ICMP + UDP/TCP for example).
+    @return False if no packet available. True if packet was available.
+*/
+bool NET_poll_packet(NET_Device* device, NET_Packet* packet);
+void NET_free_packet(NET_Device* device, NET_Packet* packet);
+
+// bool NET_handle_packet(NET_Device* device, NET_Packet* packet);
 
 /*
     Sets callback for network controller. When packets are received the callback will be
@@ -120,36 +148,45 @@ void NET_send_packet(NetDevice device, void* buffer, int size);
 
     @param callback Will be called asynchronously when packet was received.
 */
-void NET_set_receive_callback(NetDevice device, FN_NET_recv_packet callback, void* user_data);
+// void NET_set_receive_callback(NET_Device* device, FN_NET_recv_packet callback, void* user_data);
+
 
 
 //######################################
-//     PROTOCOL HANDLING FUNCTIONS
+//      USER NETWORK ASYNC API
 //######################################
 
 
-bool NET_handle_packet(NetDevice device, NET_Packet* packet);
 
 
-NetHandle* NET_open(const ELOS_Net_Address* address);
+/*
+    Opens a connection on the this computer at the address.
+*/
+NET_Handle* NET_open(const ELOS_Net_Address* address);
 
-void NET_close(NetHandle* handle);
+/*
+    Closes a connection.
+*/
+void NET_close(NET_Handle* handle);
 
-ELOS_Error NET_write(NetHandle* handle, const ELOS_Net_Address* address, const void* data, u32 size);
+/*
+    Sends bytes from a connection on this computer to another
+    address/connection which may or may not be this computer.
+*/
+ELOS_Error NET_write(NET_Handle* handle, const ELOS_Net_Address* address, const void* data, u32 size);
 
-ELOS_Error NET_read(NetHandle* handle, ELOS_Net_Address* address, void* buffer, u32* bufferSize);
+/*
+    Reads bytes from a connection. The sender address is provided.
 
-// @NOCHECKIN Move elsewhere
-bool fetch_mac_from_address(NetDevice device, u32 address, u8 mac[6]);
+    @param address Which address/connection the bytes came from.
+*/
+ELOS_Error NET_read(NET_Handle* handle, ELOS_Net_Address* address, void* buffer, u32* bufferSize);
+
+
+
 
 //######################################
 //     EXTRA WILL MOVE ELSEWHERE
 //######################################
 
 
-void NET_send_arp(NetDevice device, uint32_t address);
-
-void NET_send_dhcp_discover(NetDevice device);
-void NET_send_dhcp_request(NetDevice device, u32 request_address, u32 dhcp_server);
-
-bool NET_send_udp(NetDevice device, u8 dst_mac[6], u32 address, u16 src_port, u16 dst_port, const void* data, u32 size);

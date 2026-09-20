@@ -16,6 +16,8 @@ int tolower(int c);
 int atoi(const char *s);
 double atof(const char *str);
 
+long strtol(const char* ptr, char** endptr, int base);
+
 static inline int abs(int x) {
     return x < 0 ? -x : x;
 }

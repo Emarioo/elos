@@ -6,6 +6,10 @@
     so we will use that. To use it we must implement a couple of 
     kernel functions below. They map to EFI requivalent functions.
 
+    @TODO Consider maintaining a separate network implementation for during EFI booting.
+       We need one for QEMU (i82574, e1000e) and REAL PC (rtl8169). They can be minimal.
+       No interrupts, raw polling and sending packets.
+
 */
 
 
@@ -67,8 +71,50 @@ void KCON_printf(const char* format, ...) {
     (void)status;
 }
 
+
+void kernel_panic(const char* format, ...) {
+    char buffer[512];
+    unsigned short w_buffer[256];
+
+    va_list va;
+    va_start(va, format);
+    int len = vsnprintf(buffer, sizeof(buffer), format, va);
+    va_end(va);
+
+    int head=0;
+    int dst_head=0;
+    while(head < len + 1) {
+        if (buffer[head] == '\n' && (head-1 < 0 || buffer[head-1] != '\r')) {
+            w_buffer[dst_head] = '\r';
+            dst_head++;
+        }
+        w_buffer[dst_head] = buffer[head];
+        head++;
+        dst_head++;
+    }
+    EFI_STATUS status = ST->ConOut->OutputString(ST->ConOut, w_buffer);
+    (void)status;
+
+    // @TODO Tell other cores to halt too.
+    while (1) {
+        asm volatile (
+            "cli\n"
+            "hlt\n"
+        );
+    }
+}
+
+
 u32 CPU_get_core_index() {
     return 0;
+}
+
+u64 CPU_ticks() {
+    return rdtsc();
+}
+
+u64 CPU_ticks_per_second() {
+    return 3000000000LLU;
 }
 
 void CPU_set_msi_irq() { }
@@ -166,14 +212,14 @@ void init_network() {
 
     if (!can_load_kernel_from_network) {
             
-        NetDevice devices[6];
+        NET_Device* devices[6];
         int devices_len = ARRAY_LENGTH(devices);
         NET_scan_devices(devices, &devices_len);
 
         if (devices_len == 0) {
             printf("Non-UEFI network driver could not find supported controller (no rtl8169)\n");
         } else {
-            NetDevice device = devices[0];
+            NET_Device* device = devices[0];
             NET_DeviceInfo devinfo;
             NET_device_info(device, &devinfo);
 

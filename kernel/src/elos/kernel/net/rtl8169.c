@@ -28,7 +28,9 @@ typedef struct Descriptor {
 
 static bool reset_nic();
 
-bool rtl8169_init() {
+bool rtl8169_init(NET_Device* device) {
+
+    PCI_ConfigSpace* config = &device->config;
     
     decode_bar(&controller.config, &controller.ioaddr, &controller.ioaddr_size, &controller.maddr, &controller.maddr_size);
 
@@ -120,7 +122,7 @@ static bool reset_nic() {
     for (int i=0;i<6;i++) {
         controller.mac_address[i] = inb(ioaddr + i);
     }
-    memcpy(current_mac, controller.mac_address, 6);
+    // memcpy(current_mac, controller.mac_address, 6);
 
 
     // printf("NET_init: MAC Address: %x%x:%x%x:%x%x:%x%x:%x%x:%x%x\n",
@@ -174,7 +176,7 @@ static bool reset_nic() {
 
 int next_rx_descriptor = 0;
 
-void rtl8169_receive_packet(void** out_buffer, int* out_size) {
+void rtl8169_receive_packet(void** out_buffer, u32* out_size) {
     
     if (rx_descriptors[next_rx_descriptor].command & DESCRIPTOR_COMMAND_OWN) {
         // No packets to read
@@ -266,7 +268,7 @@ void rtl8169_receive_packet(void** out_buffer, int* out_size) {
 int next_tx_descriptor = 0;
 
 
-int rtl8169_send_packet(void* data, int size) {
+int rtl8169_send_packet(const void* data, int size) {
     u64 ioaddr = controller.ioaddr;
 
     if (size > tx_buffer_len)

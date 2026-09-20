@@ -12,6 +12,8 @@ The following tools/binaries exist:
 import os, sys, math, re, platform, shutil, shlex, glob, math, threading, multiprocessing, dataclasses, subprocess
 from dataclasses import dataclass
 
+from typing import Callable
+
 
 
 ########################
@@ -214,19 +216,98 @@ def main():
         parse_fault()
 
 
-def package_elos(release_dir, build_iso = False):
-    name    = "elos"
-    version = "0.0.1"
-    arch    = "x86_64"
+@dataclass
+class PackageItem:
+    source_path: str      = None # Path on the host OS
+    dst_path:    str      = None # Path to move source_path to in initrd
+    func:        Callable = None # func to create the source path (if executable that needs compiling for example)
 
-    temp_folder_name = f"{name}-{version}-{arch}"
+@dataclass
+class PackageOS:
+    name:    str
+    version: str
+    arch:    str
+
+    temp_folder_name: str = None
+    temp_folder_path: str = None
+    items:   list[PackageItem] = dataclasses.field(default_factory=list)
+
+
+
+def default_package(release_dir) -> PackageOS:
+    
+    APP_DIR = f"{ROOT}/apps"
+    
+    DOOM_MAKEFILE   = f"{ROOT}/../doomgeneric/doomgeneric/Makefile.elos"
+    DOOM_WAD        = f"{ROOT}/../iwad/doom1.wad"
+
+    # @TODO Provide copyright-free sound for testing.
+    WAV_PATH        = f"{ROOT}/dream_aria.wav"
+
+    package = PackageOS(
+        name    = "elos",
+        version = "0.0.1",
+        arch    = "x86_64",
+    )
+
+    temp_folder_name = f"{package.name}-{package.version}-{package.arch}"
     temp_folder_path = f"{release_dir}/{temp_folder_name}"
+    package.temp_folder_name = temp_folder_name
+    package.temp_folder_path = temp_folder_path
+    
+    doom_path       = f"{temp_folder_path}/initrd/pkg/doom/doom.elf"
+    wad_path        = f"{temp_folder_path}/initrd/pkg/doom/doom1.wad"
+    wintest         = f"{temp_folder_path}/initrd/pkg/win32_loader/wintest.exe"
+    
+    def win32_func():
+        cmd(f"APP_OUTPUT2={wintest} make -f apps/win32_loader/Makefile wintest")
+        cmd_back(f"objdump -S {wintest} > wintest.dis")
+        
+    def doom_func():
+        cmd(f"OUTPUT={doom_path} make -f {DOOM_MAKEFILE}")
+        cmd_back(f"objdump -S {doom_path} > doom.dis")
+
+    package.items = [
+            PackageItem(f"{APP_DIR}/prism"),
+            PackageItem(f"{APP_DIR}/terminal", "PKG/TERM/TERM.ELF"),
+            PackageItem(f"{APP_DIR}/slate"),
+            PackageItem(f"{ROOT}/res/Lat2-Terminus16.psf", "PKG/SLATE/STDFONT.PSF"),
+            PackageItem(f"{APP_DIR}/supper"),
+            PackageItem(f"{APP_DIR}/netchat"),
+
+            PackageItem(f"{APP_DIR}/win32_loader"),
+            PackageItem(wintest, "PKG/win32_loader/wintest.exe", func = win32_func),
+
+            PackageItem(f"{ROOT}/boot/template.cfg", "TEMPLATE.CFG"),
+    ]
+
+    provide_doom = os.path.exists(DOOM_MAKEFILE) and os.path.exists(DOOM_WAD)
+    if provide_doom:
+        os.makedirs(os.path.dirname(wad_path), exist_ok=True)
+        cmd(f"cp {DOOM_WAD} {wad_path}")
+        package.items.append(PackageItem(doom_path, "PKG/DOOM/DOOM.ELF", func = doom_func))
+        package.items.append(PackageItem(wad_path, "PKG/DOOM/DOOM1.WAD"))
+    else:
+        print(DOOM_MAKEFILE, DOOM_WAD)
+
+    if os.path.exists(WAV_PATH):
+        package.items.append(PackageItem(WAV_PATH, "PKG/WAV/DREAM.WAV"))
+    else:
+        print(f"\033[33mWARNING:\033[0m Could not find {WAV_PATH} (it won't be included in PKG)")
+
+    return package
+
+
+def package_elos(release_dir, build_iso = False):
+    
+    package = default_package(release_dir)
+
+    temp_folder_name = package.temp_folder_name
+    temp_folder_path = package.temp_folder_path
 
     os.makedirs(temp_folder_path, exist_ok=True)
-
     os.makedirs(temp_folder_path+"/fs", exist_ok=True)
     os.makedirs(temp_folder_path+"/initrd", exist_ok=True)
-
     os.makedirs(temp_folder_path+"/fs/EFI/BOOT", exist_ok=True)
 
     iso_path        = f"{temp_folder_path}/elos.iso"
@@ -235,28 +316,6 @@ def package_elos(release_dir, build_iso = False):
     bootx64_path    = f"{temp_folder_path}/fs/EFI/BOOT/BOOTX64.EFI"
     kernel_path     = f"{temp_folder_path}/fs/KERNEL.IMG"
     initrd_path     = f"{temp_folder_path}/fs/INITRD.IMG"
-    prism_path      = f"{temp_folder_path}/initrd/pkg/prism/prism.elf"
-    term_path       = f"{temp_folder_path}/initrd/pkg/term/term.elf"
-    slate_path      = f"{temp_folder_path}/initrd/pkg/slate/slate.elf"
-    supper_path     = f"{temp_folder_path}/initrd/pkg/supper/supper.elf"
-    
-    win32_loader    = f"{temp_folder_path}/initrd/pkg/win32_loader/win32_loader.elf"
-    wintest    = f"{temp_folder_path}/initrd/pkg/win32_loader/wintest.exe"
-    
-    doom_path       = f"{temp_folder_path}/initrd/pkg/doom/doom.elf"
-    wad_path        = f"{temp_folder_path}/initrd/pkg/doom/doom1.wad"
-
-    DOOM_MAKEFILE   = f"{ROOT}/../doomgeneric/doomgeneric/Makefile.elos"
-    DOOM_WAD        = f"{ROOT}/../iwad/doom1.wad"
-
-    # @TODO Provide copyright-free sound for testing.
-    WAV_PATH        = f"{ROOT}/dream_aria.wav"
-
-    provide_doom = os.path.exists(DOOM_MAKEFILE) and os.path.exists(DOOM_WAD)
-
-    if provide_doom:
-        os.makedirs(os.path.dirname(wad_path), exist_ok=True)
-        cmd(f"cp {DOOM_WAD} {wad_path}")
 
     INT_DIR         = f"{ROOT}/int"
     fat_path        = f"{INT_DIR}/fat.img"
@@ -272,70 +331,43 @@ def package_elos(release_dir, build_iso = False):
     def sync1():
         cmd(f"make -f {ROOT}/kernel/Makefile INT_DIR={INT_DIR}/kernel KERNEL_IMAGE={kernel_path} KERNEL_ELF={kernel_elf_path}")
     
-    def sync2():
-        cmd(f"APP_OUTPUT={prism_path} make -f apps/prism/Makefile")
-        cmd_back(f"objdump -S {prism_path} > prism.dis")
-        
-    def sync3():
-        cmd(f"APP_OUTPUT={term_path} make -f apps/terminal/Makefile")
-        cmd_back(f"objdump -S {term_path} > term.dis")
-
-    def sync4():
-        cmd(f"APP_OUTPUT={slate_path} make -f apps/slate/Makefile")
-        cmd_back(f"objdump -S {slate_path} > slate.dis")
-        
-    def sync4_1():
-        cmd(f"APP_OUTPUT={supper_path} make -f apps/supper/Makefile")
-        cmd_back(f"objdump -S {supper_path} > supper.dis")
-
-    def sync5():
-        cmd(f"OUTPUT={doom_path} make -f {DOOM_MAKEFILE}")
-        cmd_back(f"objdump -S {doom_path} > doom.dis")
-
-    def sync6():
-        cmd(f"APP_OUTPUT={win32_loader} make -f apps/win32_loader/Makefile")
-        cmd_back(f"objdump -S {win32_loader} > win32.dis")
-        
-    def sync7():
-        cmd(f"APP_OUTPUT2={wintest} make -f apps/win32_loader/Makefile wintest")
-        cmd_back(f"objdump -S {wintest} > wintest.dis")
-        
     threads.append(cmd_async(sync0))
+    
+    wait_pool(threads)
+
     threads.append(cmd_async(sync1))
 
     wait_pool(threads)
     
     threads = []
-    threads.append(cmd_async(sync2))
-    threads.append(cmd_async(sync3))
-    threads.append(cmd_async(sync4))
-    threads.append(cmd_async(sync4_1))
-    threads.append(cmd_async(sync6))
-    threads.append(cmd_async(sync7))
-    if provide_doom:
-        threads.append(cmd_async(sync5))
+    DEPS_SPEC: list[tuple[str,str]] = [ ]
+    
+    def app_sync(makefile, app_path):
+        # print(makefile, app_path)
+        basename = os.path.basename(app_path)
+        cmd(f"APP_OUTPUT={app_path} make -f {makefile}")
+        cmd_back(f"objdump -S {app_path} > {basename}.dis")
 
+    for item in package.items:
+        if item.func is not None:
+            assert item.dst_path is not None, item
+            assert item.source_path is not None, item
+            threads.append(cmd_async(item.func))
+            DEPS_SPEC.append((item.source_path, item.dst_path))
+        elif os.path.exists(item.source_path + "/Makefile"):
+            makefile = item.source_path + "/Makefile"
+            basename = os.path.basename(item.source_path)
+            dst_path = f"PKG/{basename}/{basename}.elf" if item.dst_path is None else item.dst_path
+            src_path = f"{temp_folder_path}/initrd/pkg/{basename}/{basename}.elf"
+            
+            threads.append(cmd_async(app_sync, makefile, src_path))
+            DEPS_SPEC.append((src_path, dst_path))
+        else:
+            assert item.dst_path is not None, item
+            assert item.source_path is not None, item
+            DEPS_SPEC.append((item.source_path, item.dst_path))
+      
     wait_pool(threads)
-
-
-    DEPS_SPEC: list[tuple[str,str]] = [
-        (prism_path, "PKG/PRISM/PRISM.ELF"),
-        (term_path,  "PKG/TERM/TERM.ELF"),
-        (slate_path, "PKG/SLATE/SLATE.ELF"),
-        (supper_path, "PKG/SUPPER/SUPPER.ELF"),
-        ("res/Lat2-Terminus16.psf", "PKG/SLATE/STDFONT.PSF"),
-        (win32_loader, "PKG/win32_loader/win32_loader.ELF"),
-        (wintest, "PKG/win32_loader/wintest.exe"),
-        ("boot/template.cfg", "TEMPLATE.CFG"),
-    ]
-    if provide_doom:
-        DEPS_SPEC.append((doom_path, "PKG/DOOM/DOOM.ELF"))
-        DEPS_SPEC.append((wad_path, "PKG/DOOM/DOOM1.WAD"))
-
-    if os.path.exists(WAV_PATH):
-        DEPS_SPEC.append((WAV_PATH, "PKG/WAV/DREAM.WAV"))
-    else:
-        print(f"\033[33mWARNING:\033[0m Could not find {WAV_PATH} (it won't be included in PKG)")
         
     make_gpt(initrd_path, DEPS_SPEC)
     
@@ -531,8 +563,8 @@ def install_deps():
         print(f"Platform {platform.system()} not supported by 'build.py install'")
         print(f"You'll have to install dependencies manually ):")
 
-def cmd_async(func):
-    thr = threading.Thread(target = func)
+def cmd_async(func, *args):
+    thr = threading.Thread(target = func, args=args)
     thr.start()
     return thr
 

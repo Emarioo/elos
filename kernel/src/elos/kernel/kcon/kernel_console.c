@@ -108,51 +108,51 @@ void serial_write(const char* buffer, int size) {
 }
 
 
-u8        netlog_target_mac[6];
-u32       netlog_target_address;
-NetDevice netlog_device;
+// u8        netlog_target_mac[6];
+// u32       netlog_target_address;
+// NET_Device* netlog_device;
 
-void KCON_net_set_target(NetDevice device, u8 mac[6], u32 address) {
-    netlog_device = device;
-    memcpy(netlog_target_mac, mac, 6);
-    netlog_target_address = address;
-}
+// void KCON_net_set_target(NET_Device* device, u8 mac[6], u32 address) {
+//     netlog_device = device;
+//     memcpy(netlog_target_mac, mac, 6);
+//     netlog_target_address = address;
+// }
 
-void KCON_net_write(const char* buffer, int buffer_len) {
-    static int sending;
-    static int sequence;
+// void KCON_net_write(const char* buffer, int buffer_len) {
+//     static int sending;
+//     static int sequence;
 
-    if (sending)
-        return;
+//     if (sending)
+//         return;
 
-    if (!netlog_target_address) {
-        KCON_printf("NETLOG Target address is not set\n");
-        return;
-    }
+//     if (!netlog_target_address) {
+//         KCON_printf("NETLOG Target address is not set\n");
+//         return;
+//     }
     
-    sending++;
+//     sending++;
 
-    u8 chunk[1600];
+//     u8 chunk[1600];
 
-    int head = 0;
-    while (head < buffer_len) {
-        NetLog_Header* header = (NetLog_Header*)chunk;
-        header->command = NETLOG_COMMAND_DATA;
-        memcpy(header->magic, NETLOG_MAGIC, sizeof(header->magic));
-        header->sequence = sequence++;
-        if (buffer_len - head + sizeof(NetLog_Header) > 1400) {
-            header->size = 1400;
-        }
-        memcpy(header->payload, buffer + head, header->size);
-        head += header->size;
-        bool sent = NET_send_udp(netlog_device, netlog_target_mac, netlog_target_address, NETLOG_DEFAULT_PORT, NETLOG_DEFAULT_PORT, chunk, header->size + sizeof(NetLog_Header));
+//     int head = 0;
+//     while (head < buffer_len) {
+//         NetLog_Header* header = (NetLog_Header*)chunk;
+//         header->command = NETLOG_COMMAND_DATA;
+//         memcpy(header->magic, NETLOG_MAGIC, sizeof(header->magic));
+//         header->sequence = sequence++;
+//         if (buffer_len - head + sizeof(NetLog_Header) > 1400) {
+//             header->size = 1400;
+//         }
+//         memcpy(header->payload, buffer + head, header->size);
+//         head += header->size;
+//         bool sent = NET_send_udp(netlog_device, netlog_target_mac, netlog_target_address, NETLOG_DEFAULT_PORT, NETLOG_DEFAULT_PORT, chunk, header->size + sizeof(NetLog_Header));
         
-        // Do nothing if we failed sending?
-    }
+//         // Do nothing if we failed sending?
+//     }
 
-    sending--;
+//     sending--;
     
-}
+// }
 
 
 void kernel_panic(const char* format, ...) {

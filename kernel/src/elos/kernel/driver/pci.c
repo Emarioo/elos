@@ -124,8 +124,11 @@ void pci_read_config_space(PCI_ConfigSpace* config, u8 bus, u8 slot, u8 function
     u32* dwords = (u32*)config;
 
     // Read first 4 DWORDs, they are normal and common
-    for (int i = 0; i < CONFIG_SPACE_SIZE/sizeof(u32); i++)
+    for (int i = 0; i < CONFIG_SPACE_SIZE/sizeof(u32); i++) {
         dwords[i] = pciConfig_readl(bus, slot, function, i * sizeof(u32));
+    }
+
+    // decode_bars(&config);
 }
 
 
@@ -153,6 +156,52 @@ bool pci_scan_function(PCI_Scanner* scanner, int bus, int device, int function) 
     config.pci_function = function;
     pci_read_config_space(&config, bus, device, function);
 
+    u32* bars = &config.header0.bar0;
+
+    // #define debug(...) printf(__VA_ARGS__)
+    // #define debug(...) 
+
+    // int head = 0;
+    // while (head < 6) {
+    //     u32 bar = bars[head];
+    //     head++;
+    //     u64 bar_size = 0;
+    //     decode_bar_size(&config, head-1, &bar_size);
+
+    //     if (bar & 0x1) {
+    //         u32 addr = bar & ~0x3;
+    //         debug("[INFO] bar[%d] IO-mapped addr=%x size=%d KB\n", head, addr, bar_size/1024);
+    //         // if (first_ioaddr && (*first_ioaddr == 0)) {
+    //         //     *first_ioaddr = addr;
+    //         //     *out_first_ioaddr_size = bar_size;
+    //         // }
+    //     } else if (((bar >> 1) & 0x6) == 0) {
+    //         u32 addr = bar & ~0xf;
+    //         if (bar & 0x8) {
+    //             debug("[INFO] bar[%d] 32-bit prefetchable addr=%x size=%d KB\n", head, addr, bar_size/1024);
+    //         } else {
+    //             debug("[INFO] bar[%d] 32-bit addr=%x size=%d KB\n", head,addr, bar_size/1024);
+    //         }
+    //         // if (first_maddr && (*first_maddr == 0)) {
+    //         //     *first_maddr = addr;
+    //         //     *out_first_maddr_size = bar_size;
+    //         // }
+    //     } else if (((bar >> 1) & 0x3) == 2) {
+    //         u32 bar_ext = bars[head];
+    //         u64 addr = ((u64)bar_ext << 32) | ((u64)bar & ~0xfLLU);
+    //         head++;
+    //         if (bar & 0x8) {
+    //             debug("[INFO] bar[%d] 64-bit prefetchable addr=%x\n", head, addr, bar_size/1024);
+    //         } else {
+    //             debug("[INFO] bar[%d] 64-bit addr=%x size=%d KB\n", head, addr, bar_size/1024);
+    //         }
+    //         // if (first_maddr && (*first_maddr == 0)) {
+    //         //     *first_maddr = addr;
+    //         //     *out_first_maddr_size = bar_size;
+    //         // }
+    //     }
+    // }
+
     // trace_config_space(&config);
 
     if ((config.headerType & 0x7F) == 1 && config.classCode == PCI_CLASSCODE__BRIDGE_CONTROLLER && config.subclass == PCI_SUBCLASS__PCI_TO_PCI_BRIDGE) {
@@ -164,20 +213,6 @@ bool pci_scan_function(PCI_Scanner* scanner, int bus, int device, int function) 
                 return true;
             }
         }
-
-        // switch (config.classCode) {
-        //     case PCI_CLASSCODE__MASS_STORAGE_CONTROLLER: {
-        //         if (config.subclass == PCI_SUBCLASS__IDE_CONTROLLER) {
-        //             // for each drive and bus we create a device if we can communicate with it
-
-        //             // If we did a scan previously then we want to update the devices we already made instead of
-        //             // overwriting or creating new ones.
-        //         }
-        //     } break;
-        //     default: {
-
-        //     } break;
-        // }
     }
     return false;
 }

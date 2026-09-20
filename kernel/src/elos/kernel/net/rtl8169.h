@@ -23,8 +23,8 @@ bool rtl8169_init();
 
 // @TODO Shutdown
 
-void rtl8169_receive_packet(void** out_buffer, int* out_size);
+void rtl8169_receive_packet(void** out_buffer, u32* out_size);
 
-int rtl8169_send_packet(void* data, int size);
+int rtl8169_send_packet(const void* data, int size);
 
 // @TODO Interrupt and callback

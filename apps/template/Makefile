@@ -33,6 +33,7 @@ CFLAGS += -Wno-unused-variable -Wno-unused-value -Wno-unused-function -Wno-unuse
 
 CFLAGS += -I$(ROOT)/kernel/include -I$(ROOT)/include -I$(ROOT)/kernel/src -I$(APP_ROOT)/include -I$(ROOT)/extern/musl -I$(APP_ROOT)/src -I$(ROOT)/apps/std
 
+
 LDFLAGS := -g $(LDFLAGS) -nostdlib -nodefaultlibs -nostartfiles -Wl,--no-warn-execstack $(ROOT)/extern/musl/libm.a
 
 SRC_DIRS += \
@@ -40,6 +41,11 @@ SRC_DIRS += \
 	$(ROOT)/kernel/src/elos/common \
 	$(ROOT)/apps/std \
 	#
+
+
+CFLAGS   += -I$(ROOT)/apps/prism/include
+SRC_DIRS += $(ROOT)/apps/prism/src/prism_client
+
 
 SRC_FILES := \
 	$(foreach dir,$(SRC_DIRS),$(shell find $(dir) \( -name '*.c' -o -name '*.s' \) ))

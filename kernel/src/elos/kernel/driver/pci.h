@@ -3,6 +3,8 @@
 
 #include "elos/common/types.h"
 
+#include "elos/kernel/driver/pci_list.h"
+
 //##########################
 //       TYPES
 //##########################
@@ -174,6 +176,15 @@ typedef enum PCI_Subclass {
 
 // TODO: prog IF
 
+typedef struct {
+    bool present;
+    bool ioMapped;
+    bool size64;
+    bool prefetchable;
+    u64  barSize;
+    u64  address; // address or io-offset
+} PCI_BAR;
+
 typedef struct PCI_ConfigSpace {
     u16 vendorID;
     u16 deviceID;
@@ -279,6 +290,8 @@ typedef struct PCI_ConfigSpace {
     int pci_bus;
     int pci_device;
     int pci_function;
+
+    // PCI_BAR decodedBars[6];
 } PCI_ConfigSpace;
 
 // @IMPORTANT DO not sizeof(PCI_ConfigSpace) and read a bunch of words from PCI port.

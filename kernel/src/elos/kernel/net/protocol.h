@@ -1,6 +1,9 @@
 #pragma once
 
 #include "elos/common/types.h"
+#include "elos/elos.h"
+
+typedef struct NET_Device NET_Device;
 
 /*
     Ethernet Frame
@@ -46,10 +49,6 @@ typedef struct ARP_Header {
     u8 protocol_length;
     ARP_Operation operation;
     u8 _payload[];
-    // u8 sender_hw_address[6];
-    // u8 sender_proto_address[4];
-    // u8 target_hw_address[6];
-    // u8 target_proto_address[4];
 } ARP_Header;
 
 typedef struct ARP_Header_EthernetIPV4 {
@@ -210,9 +209,17 @@ void construct_arp(u8* message_buffer, int* buffer_len, u8 my_mac[6], uint32_t m
 
 void construct_dhcp_discover(u8* buffer, int* buffer_len, u8 mac[6]);
 void construct_dhcp_request(u8* buffer, int* buffer_len, u8 mac[6], u32 request_address, u32 dhcp_server);
+
     
+void NET_send_arp(NET_Device* device, uint32_t address);
+
+void NET_send_dhcp_discover(NET_Device* device);
+void NET_send_dhcp_request(NET_Device* device, u32 request_address, u32 dhcp_server);
+
+bool NET_send_udp(NET_Device* device, u8 dst_mac[6], u32 address, u16 src_port, u16 dst_port, const void* data, u32 size);
 
 
+const char* net_address_str(const ELOS_Net_Address address, char* buffer);
 
 const char* htype_str(ARP_HardwareType type);
 const char* oper_str(ARP_Operation type);

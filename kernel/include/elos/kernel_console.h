@@ -13,9 +13,9 @@ void KCON_printf(const char* format, ...);
 
 void serial_write(const char* buffer, int size);
 
-void KCON_net_set_target(NetDevice device, u8 mac[6], u32 address);
+// void KCON_net_set_target(NET_Device* device, u8 mac[6], u32 address);
 
-void KCON_net_write(const char* buffer, int len);
+// void KCON_net_write(const char* buffer, int len);
 
 void kernel_panic(const char* format, ...);
 
