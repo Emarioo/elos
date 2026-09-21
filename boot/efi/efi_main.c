@@ -541,7 +541,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     }
 
     // Comment out to disable network boot.
-    // init_network();
+    init_network();
     // Or set this:
     // can_load_kernel_from_network = false;
 
@@ -581,7 +581,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     }
     kernel_entry = kernel_address; // linker script for kernel (sections.ld) defines _start at beginning of kernel image.
 
-    load_initrd();
+    // load_initrd();
 
     boot_init_frame_buffer();
 
@@ -602,7 +602,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
 
     printf("UEFI - Exit boot services\n");
 
-    // FREEZE();
+    FREEZE();
 
     // Sleep if we want.
     // EFI_EVENT timer_event;

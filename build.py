@@ -331,11 +331,11 @@ def package_elos(release_dir, build_iso = False):
     def sync1():
         cmd(f"make -f {ROOT}/kernel/Makefile INT_DIR={INT_DIR}/kernel KERNEL_IMAGE={kernel_path} KERNEL_ELF={kernel_elf_path}")
     
-    threads.append(cmd_async(sync0))
+    threads.append(cmd_async(sync1))
     
     wait_pool(threads)
 
-    threads.append(cmd_async(sync1))
+    threads.append(cmd_async(sync0))
 
     wait_pool(threads)
     
@@ -388,6 +388,17 @@ def package_elos(release_dir, build_iso = False):
             cmd(f"xorriso -as mkisofs -R -f -e fat.img -no-emul-boot -o {iso_path} {ISO_DIR}")
             if os.path.exists(iso_path):
                 cmd(f"cp {iso_path} bin/elos.iso")
+            
+            # @TODO Remove this.
+            #   Currently moves iso to windows for rufus.
+            host_path = "/mnt/e/dev/elos/bin/elos.iso"
+            if os.path.exists(os.path.dirname(host_path)):
+                cmd(f"cp {iso_path} {host_path}")
+                
+            fs_path = "/mnt/e/dev/elos/releases/elos-0.0.1-x86_64";
+            if os.path.exists("/mnt/e/dev/elos"):
+                cmd(f"cp -r releases/elos-0.0.1-x86_64/fs {fs_path}")
+
         threads.append(cmd_async(sync1))
 
     #                       GPT header info      fat    some extra rom

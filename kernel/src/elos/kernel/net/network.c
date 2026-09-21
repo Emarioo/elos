@@ -49,6 +49,7 @@ int        g_devices_max = MAX_NET_DEVICES;
 
 
 
+bool initialize_network_with_interrupts;
 
 #define MAX_NET_HANDLES 100
 
@@ -67,8 +68,6 @@ NET_Device* reserve_net_device() {
     g_devices_len++;
     return device;
 }
-
-NetworkController controller;
 
 
 bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
@@ -91,15 +90,12 @@ bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
 
     } else if (config->vendorID == VENDOR_ID__REALTEK && config->deviceID == DEVICE_ID__RTL8169) {
         
-        // @TODO Fix this up
-        controller.found = true;
-        controller.config = *config;
+        device = reserve_net_device();
+        device->config = *config;
 
-        bool res = rtl8169_init();
-        
-        controller.found = res;
+        returnValue = rtl8169_init(device);
 
-        return res;
+        // @TODO unreserve device if it fails
 
     } else {
         // printf("[INFO] NET_init: Searching PCI for network card, found device id 0x%x (vendor 0x%x), but card is not supported.\n", config->deviceID, config->vendorID);
@@ -115,7 +111,13 @@ bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
         device->info.ipv4_gateway     = 0; // no gateway
     }
 
-    return returnValue;
+    if (device && scanInfo->count + 1 < scanInfo->maxCount) {
+        scanInfo->devices[scanInfo->count] = device;
+        scanInfo->count++;
+        return returnValue;
+    } else {
+        return false;
+    }
 }
 
 void NET_scan_devices(NET_Device* devices[], int* count) {
@@ -148,7 +150,7 @@ void NET_cleanup() {
 }
 
 void NET_device_info(NET_Device* device, NET_DeviceInfo* info) {
-    memcpy(info->mac, controller.mac_address, 6);
+    *info = device->info;
 }
 
 // FN_NET_recv_packet g_recv_packet_callback;
@@ -167,8 +169,8 @@ bool NET_poll_packet(NET_Device* device, NET_Packet* packet) {
     //     return false;
     // 
     
-    void* buffer;
-    u32 size;
+    void* buffer = NULL;
+    u32 size = 0;
 
     switch (device->config.deviceID) {
         case DEVICE_ID__82574L: {
@@ -178,7 +180,8 @@ bool NET_poll_packet(NET_Device* device, NET_Packet* packet) {
             rtl8169_receive_packet(&buffer, &size);
         } break;
         default: {
-            printf("%s: Unhandled vendor/device 0x%x/0x%x", __func__, device->config.vendorID, device->config.deviceID);
+            // @TODO Don't spam unhandled vendor.
+            printf("%s: Unhandled vendor/device 0x%x/0x%x\n", __func__, device->config.vendorID, device->config.deviceID);
         } break;
     }
 

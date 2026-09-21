@@ -264,6 +264,7 @@ void kernel_entry(BootAPI* in_boot_api) {
 
     NET_Device* net_device = NULL;
     int count = 1;
+    initialize_network_with_interrupts = true; // @TODO Refactor this option. We don't want interrupts in EFI application (netboot)
     NET_scan_devices(&net_device, &count);
 
 

@@ -119,7 +119,7 @@ u64 CPU_ticks_per_second() {
 
 void CPU_set_msi_irq() { }
 
-void* PMEM_allocate(u64 size, void* old_ptr) {
+void* PMEM_allocate(size_t size, void* old_ptr) {
     EFI_STATUS Status;
     if (size && !old_ptr) {
         void* addr = 0;
@@ -160,7 +160,7 @@ void* PMEM_allocate(u64 size, void* old_ptr) {
     }
 }
 
-void* PMEM_alloc_phys(u64 size, int flags) {
+void* PMEM_alloc_phys(size_t size, int flags) {
     EFI_STATUS Status;
     EFI_PHYSICAL_ADDRESS addr = 0;
     Status = ST->BootServices->AllocatePages(AllocateAnyPages, EfiLoaderData, (size+EFI_PAGE_SIZE-1)/EFI_PAGE_SIZE, &addr);
@@ -171,44 +171,47 @@ void* PMEM_alloc_phys(u64 size, int flags) {
     return (void*)addr;
 }
 
-void PMEM_map_memory(void* vaddr, void* paddr, uint64_t size) {
-    if (vaddr != paddr) {
-        printf("Only identitiy mapping allowed, %x -> %x (%d bytes)\n", paddr, vaddr, size);
-        return;
+bool PMEM_map_memory(void* table, void* virtual_address, void* physical_address, size_t size, int flags) {
+    if (virtual_address != physical_address) {
+        printf("Only identitiy mapping allowed, %x -> %x (%d bytes)\n", physical_address, virtual_address, size);
+        return false;
     }
     EFI_STATUS Status;
-    EFI_PHYSICAL_ADDRESS addr = (EFI_PHYSICAL_ADDRESS)paddr;
+    EFI_PHYSICAL_ADDRESS addr = (EFI_PHYSICAL_ADDRESS)physical_address;
     Status = ST->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, (size+EFI_PAGE_SIZE-1)/EFI_PAGE_SIZE, &addr);
     if (EFI_ERROR(Status)) {
-        printf("Could not map %x -> %x (%d bytes), %d\n", paddr, vaddr, size, Status);
+        // We assume it failed because the memory area is already reserved for a device.
+        // printf("Could not map %x -> %x (%d bytes), %d\n", physical_address, virtual_address, size, Status);
+        // return false;
     }
+    return true;
 }
 
 
 
 void init_network() {
     EFI_STATUS Status;
-    Status = BS->LocateProtocol(&gEfiSimpleNetworkProtocolGuid, NULL, (void**)&simple_network);
-    if (EFI_ERROR(Status)) {
-        printf("SimpleNetworkProtocol is not available, %d\n", Status);
-    } else {
-        Status = simple_network->Start(simple_network);
-        if (EFI_ERROR(Status)) {
-            printf("Cannot start network, %d\n", Status);
-        } else {
-            Status = simple_network->Initialize(simple_network, 0x0, 0x0);
-            // status = simple_network->Initialize(simple_network, 0x100000, 0x100000);
-            if (EFI_ERROR(Status)) {
-                printf("Cannot init network, %d\n", Status);
-            } else {
-                netboot_impl.recv = efi_recv;
-                netboot_impl.send = efi_send;
-                memcpy(netboot_impl.mac, simple_network->Mode->CurrentAddress.Addr, 6);
-                netboot_device = NULL;
-                can_load_kernel_from_network = true;
-            }
-        }
-    }
+    // Status = BS->LocateProtocol(&gEfiSimpleNetworkProtocolGuid, NULL, (void**)&simple_network);
+    // if (EFI_ERROR(Status)) {
+    //     printf("SimpleNetworkProtocol is not available, %d\n", Status);
+    // } else {
+    //     Status = simple_network->Start(simple_network);
+    //     if (EFI_ERROR(Status)) {
+    //         printf("Cannot start network, %d\n", Status);
+    //     } else {
+    //         Status = simple_network->Initialize(simple_network, 0x0, 0x0);
+    //         // status = simple_network->Initialize(simple_network, 0x100000, 0x100000);
+    //         if (EFI_ERROR(Status)) {
+    //             printf("Cannot init network, %d\n", Status);
+    //         } else {
+    //             netboot_impl.recv = efi_recv;
+    //             netboot_impl.send = efi_send;
+    //             memcpy(netboot_impl.mac, simple_network->Mode->CurrentAddress.Addr, 6);
+    //             netboot_device = NULL;
+    //             can_load_kernel_from_network = true;
+    //         }
+    //     }
+    // }
 
     if (!can_load_kernel_from_network) {
             
@@ -225,6 +228,7 @@ void init_network() {
 
             netboot_impl.recv = netdrv_recv;
             netboot_impl.send = netdrv_send;
+            netboot_impl.device = device;
             memcpy(netboot_impl.mac, devinfo.mac, 6);
             netboot_device = device;
             can_load_kernel_from_network = true;

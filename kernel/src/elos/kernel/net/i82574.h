@@ -247,11 +247,7 @@ typedef struct ReceiveDescriptor {
 #define CARD_BIT_RD_ERRORS_RXE  (1 << 7)
 
 
-// void i8254x_set_interrupt_handler(FN_interrupt_handler handler);
-
-
-int i82574_send_packet(const void* data, int length);
-
+bool i82574_init(NET_Device* device);
+u32 i82574_send_packet(const void* data, u32 length);
 void i82574_receive_packet(void** out_buffer, u32* out_size);
 
-bool i82574_init(NET_Device* device);

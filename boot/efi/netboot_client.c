@@ -32,8 +32,8 @@ void KCON_printf(const char* format, ...);
 #define printf(...) KCON_printf(__VA_ARGS__)
 
 
-#define debug(...) KCON_printf(__VA_ARGS__)
-// #define debug(...)
+// #define debug(...) KCON_printf(__VA_ARGS__)
+#define debug(...)
 
 u32 ipv4_from_str(const char* address);
 
@@ -518,9 +518,7 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
     uint64_t start_us = now_us();
     uint64_t timeoutStart_us = start_us;
 
-    // uint64_t timeoutValue = 1000 * 1000; // You want something higher on QEMU.
-    uint64_t timeoutValue = 100 * 1000; // You want something higher on QEMU.
-    // int limit = limit_cap;
+    uint64_t timeoutValue = 300 * 1000;
     while (1) {
         int buffer_size = sizeof(g_recv_buffer);
         bool res = recv_packet(g_recv_buffer, &buffer_size);
@@ -589,7 +587,6 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
         }
         
         // printf("Memcpy %x, %d, %d\n", buffer, buffer_offset, sendf->size);
-        // printf("CHILL\n");
         memcpy((char*)buffer + buffer_offset, sendf->payload, sendf->size);
 
         // debug("Recv file size, recbytes=%d off=%d recvsize=%d total=%d foff=%d\n", received_bytes, buffer_offset, sendf->size, sendf->totalFileSize, sendf->offset);
@@ -616,7 +613,7 @@ int NETBOOT_request_file(const char* path, uint64_t offset, uint64_t size, void*
 
     // bitmap_dump();
     
-    printf("No response on NETBOOT file request? (or incomplete response)\n");
+    // printf("No response on NETBOOT file request? (or incomplete response)\n");
 
     return 0;
 }
@@ -756,5 +753,6 @@ void send_file_ack(uint8_t mac[6], uint32_t address, uint16_t port, uint64_t off
 
     send_packet(g_send_buffer, packet_size);
 
+    debug("Sent ack off=%d size=%d 0x%x\n", (int)offset/1400, (int)size, my_ip_address);
     // debug("Sent ack off=%d size=%d\n", (int)offset, (int)size);
 }

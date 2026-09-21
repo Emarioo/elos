@@ -85,6 +85,7 @@ typedef struct {
 // extern FN_NET_recv_packet g_recv_packet_callback;
 // extern void* g_recv_packet_callback_userData;
 
+extern bool initialize_network_with_interrupts;
 
 
 //######################################

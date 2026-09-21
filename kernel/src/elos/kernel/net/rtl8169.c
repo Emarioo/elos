@@ -1,5 +1,6 @@
 #include "elos/kernel/net/rtl8169.h"
 
+#include "elos/network.h"
 #include "elos/kernel/net/net_internal.h"
 
 #include "elos/common/string.h"
@@ -7,7 +8,60 @@
 #include "elos/kernel_console.h"
 #include "elos/physical_memory.h"
 #include "elos/kernel/pmem/paging.h"
+#include "elos/cpu.h"
 
+
+static uint8_t* g_memory_bar;
+static uint32_t g_io_bar;
+static uint8_t  g_mac[6];
+
+
+static u8 read_byte(u32 reg) {
+    if (g_memory_bar) {
+        return *(uint8_t*)(g_memory_bar + reg);
+    } else {
+        return inb(g_io_bar + reg);
+    }
+}
+static u16 read_short(u32 reg) {
+    if (g_memory_bar) {
+        return *(uint16_t*)(g_memory_bar + reg);
+    } else {
+        return inw(g_io_bar + reg);
+    }
+}
+static u32 read_long(u32 reg) {
+    if (g_memory_bar) {
+        return *(uint32_t*)(g_memory_bar + reg);
+    } else {
+        return inl(g_io_bar + reg);
+    }
+}
+
+static void write_byte(u32 reg, u8 value) {
+    if (g_memory_bar) {
+        *(uint8_t*)(g_memory_bar + reg) = value;
+    } else {
+        outb(g_io_bar + reg, value);
+    }
+}
+static void write_short(u32 reg, u16 value) {
+    if (g_memory_bar) {
+        *(uint16_t*)(g_memory_bar + reg) = value;
+    } else {
+        outw(g_io_bar + reg, value);
+    }
+}
+static void write_long(u32 reg, u32 value) {
+    if (g_memory_bar) {
+        *(uint32_t*)(g_memory_bar + reg) = value;
+    } else {
+        outl(g_io_bar + reg, value);
+    }
+}
+
+
+static NET_Device* g_device;
 
 typedef struct Descriptor {
     u32 command;
@@ -24,26 +78,83 @@ typedef struct Descriptor {
 #define DESCRIPTOR_COMMAND_LS (1 << 28)
 
 
+
 #define printf(...) KCON_printf(__VA_ARGS__)
 
 static bool reset_nic();
 
+
+void rtl8169_interrupt_handler(u32 vector, InterruptFrame* frame);
+void rtl8169_setup_interrupt(PCI_ConfigSpace* config);
+
 bool rtl8169_init(NET_Device* device) {
 
     PCI_ConfigSpace* config = &device->config;
-    
-    decode_bar(&controller.config, &controller.ioaddr, &controller.ioaddr_size, &controller.maddr, &controller.maddr_size);
 
-    if(!controller.ioaddr) {
-        printf("[ERROR] rtl8169 BARS does not have IO bar, might have memory bar: %x\n", controller.ioaddr, controller.maddr);
+    // printf("bar0 0x%x\n", config->header0.bar0);
+    // printf("bar1 0x%x\n", config->header0.bar1);
+    // printf("bar2 0x%x\n", config->header0.bar2);
+    // printf("bar3 0x%x\n", config->header0.bar3);
+
+    if (config->header0.bar0 & 1) {
+        g_io_bar = (config->header0.bar0 & ~0x3);
+    } else {
+        // no IO bar is wierd, quit before funny things happen.
+        printf("rtl8169: BARS does not have IO bar, might have memory bar\n");
         return false;
     }
+    
+    if ((config->header0.bar1 & 1) == 0) {
+        if (config->header0.bar1 != 0) {
+            // 32-bit
+            g_memory_bar = (void*)(size_t)(config->header0.bar1 & ~0x3);
+        } else if ((config->header0.bar2 & 7) == 4) {
+            // 64-bit
+            g_memory_bar = (void*)(((u64)config->header0.bar2 & ~0xfLLU) | ((u64)config->header0.bar3 << 32));
+        }
+    }
+    // no memory bar is fine i guess? fall back to io bar?
+    // printf("iobar  0x%x\n", g_io_bar);
+    // printf("membar 0x%zx\n", g_memory_bar);
+
+    if (g_memory_bar) {
+        bool mapped = PMEM_map_memory(g_kernelPageTable, g_memory_bar, g_memory_bar, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
+        if (!mapped) {
+            // fall back to iobar
+            printf("rtl8169: could not page map membar. using iobar instead\n");
+            g_memory_bar = NULL;
+        }
+    }
+
+    
+    // decode_bar(&controller.config, &controller.ioaddr, &controller.ioaddr_size, &controller.maddr, &controller.maddr_size);
+
+    // if(!controller.ioaddr) {
+    //     return false;
+    // }
 
     // If we use maddr don't forget to map the physical pages to virtual.
 
     bool yes = reset_nic();
     if (!yes) {
+        printf("rtl8169: could not reset/init\n");
         return false;
+    }
+    
+    printf("rtl8169: MAC Address: %x%x:%x%x:%x%x:%x%x:%x%x:%x%x\n",
+        g_mac[0] >> 4, g_mac[0] & 0xF,
+        g_mac[1] >> 4, g_mac[1] & 0xF,
+        g_mac[2] >> 4, g_mac[2] & 0xF,
+        g_mac[3] >> 4, g_mac[3] & 0xF,
+        g_mac[4] >> 4, g_mac[4] & 0xF,
+        g_mac[5] >> 4, g_mac[5] & 0xF
+        );
+
+
+    memcpy(device->info.mac, g_mac, sizeof(device->info.mac));
+
+    if (initialize_network_with_interrupts) {
+        rtl8169_setup_interrupt(config);
     }
 
     // printf("Reset success?\n");
@@ -105,9 +216,8 @@ bool prepare_buffers() {
 
 static bool reset_nic() {
 
-    u64 ioaddr = controller.ioaddr;
 
-    outb(ioaddr + 0x37, 0x10); /*set the Reset bit (0x10) to the Command Register (0x37)*/
+    write_byte(0x37, 0x10); /*set the Reset bit (0x10) to the Command Register (0x37)*/
     
     // Prepare buffers while card is resetting
     bool res = prepare_buffers();
@@ -115,12 +225,12 @@ static bool reset_nic() {
         return false;
     }
 
-    while(inb(ioaddr + 0x37) & 0x10) ;
+    while(read_byte(0x37) & 0x10) ;
     /*setting a timeout could be useful if the card is problematic*/
 
     
     for (int i=0;i<6;i++) {
-        controller.mac_address[i] = inb(ioaddr + i);
+        g_mac[i] = read_byte(i);
     }
     // memcpy(current_mac, controller.mac_address, 6);
 
@@ -154,22 +264,22 @@ static bool reset_nic() {
 
     // We create tx descriptors when we transmit packets.
 
-    outb(ioaddr + 0x50, 0xC0); /* Unlock config registers */
-    outl(ioaddr + 0x44, 0x0000E70F); /* RxConfig = RXFTH: unlimited, MXDMA: unlimited, AAP: set (promisc. mode set) */
-    outb(ioaddr + 0x37, 0x04); /* Enable Tx in the Command register, required before setting TxConfig, NOTE: osdev did this so we do as well just in case. It works if we enable first. May work if we don't on my laptop? */
-    outl(ioaddr + 0x40, 0x03000700); /* TxConfig = IFG: normal, MXDMA: unlimited */
-    outw(ioaddr + 0xDA, rx_buffer_len-1); /* Max rx packet size */
+    write_byte(0x50, 0xC0); /* Unlock config registers */
+    write_long(0x44, 0x0000E70F); /* RxConfig = RXFTH: unlimited, MXDMA: unlimited, AAP: set (promisc. mode set) */
+    write_byte(0x37, 0x04); /* Enable Tx in the Command register, required before setting TxConfig, NOTE: osdev did this so we do as well just in case. It works if we enable first. May work if we don't on my laptop? */
+    write_long(0x40, 0x03000700); /* TxConfig = IFG: normal, MXDMA: unlimited */
+    write_short(0xDA, rx_buffer_len-1); /* Max rx packet size */
     #define TX_UNIT_SIZE 32
-    outb(ioaddr + 0xEC, (tx_buffer_len + TX_UNIT_SIZE-1)/TX_UNIT_SIZE); /* max tx packet size */
+    write_byte(0xEC, (tx_buffer_len + TX_UNIT_SIZE-1)/TX_UNIT_SIZE); /* max tx packet size */
 
 
-    outl(ioaddr + 0x20, (u64)tx_descriptors & 0xFFFFFFFF); // Tell the NIC where the first Tx descriptor is.
-    outl(ioaddr + 0x24, (u64)tx_descriptors >> 32);
-    outl(ioaddr + 0xE4, (u64)rx_descriptors & 0xFFFFFFFF); // Tell the NIC where the first Rx descriptor is.
-    outl(ioaddr + 0xE8, (u64)rx_descriptors >> 32);
+    write_long(0x20, (u64)tx_descriptors & 0xFFFFFFFF); // Tell the NIC where the first Tx descriptor is.
+    write_long(0x24, (u64)tx_descriptors >> 32);
+    write_long(0xE4, (u64)rx_descriptors & 0xFFFFFFFF); // Tell the NIC where the first Rx descriptor is.
+    write_long(0xE8, (u64)rx_descriptors >> 32);
 
-    outb(ioaddr + 0x37, 0x0c); /* Enable Rx/Tx in the Command register */
-    outb(ioaddr + 0x50, 0);    /* Lock config registers */
+    write_byte(0x37, 0x0c); /* Enable Rx/Tx in the Command register */
+    write_byte(0x50, 0);    /* Lock config registers */
 
     return true;
 }
@@ -268,8 +378,7 @@ void rtl8169_receive_packet(void** out_buffer, u32* out_size) {
 int next_tx_descriptor = 0;
 
 
-int rtl8169_send_packet(const void* data, int size) {
-    u64 ioaddr = controller.ioaddr;
+u32 rtl8169_send_packet(const void* data, u32 size) {
 
     if (size > tx_buffer_len)
         return 0;
@@ -289,7 +398,7 @@ int rtl8169_send_packet(const void* data, int size) {
     }
     tx_descriptors[next_tx_descriptor].command = command;
 
-    outb(ioaddr + 0x38, 0x40); // Normal priority poll
+    write_byte(0x38, 0x40); // Normal priority poll
 
     // printf("rtl: sent %d\n", size);
 
@@ -297,3 +406,123 @@ int rtl8169_send_packet(const void* data, int size) {
     return size;
 }
 
+void rtl8169_setup_interrupt(PCI_ConfigSpace* config) {
+    
+    u32 coreIndex = CPU_get_core_index();
+    u32 localIRQ = 6; // @TODO Don't hardcode. all network controllers use same IRQ which is terrible. will break stuff.
+
+    u32 cap_ptr = config->header0.capabilities_pointer & ~0x3;
+
+    while (cap_ptr) {
+        u32 cap_data = pci_config_readl(config, cap_ptr);
+        u32 cap_id   = (cap_data & 0xFF);
+        u32 cap_next = (cap_data >> 8) & 0xFC;
+
+        // printf("Cap %d\n", cap_id);
+
+        if (cap_id == 0x5) {
+            u16 messageControl = (cap_data >> 16);
+
+            int is_64bit = messageControl & (1 << 7);
+
+            u64 messageAddress;
+            u16 messageData;
+            CPU_set_msi_irq(coreIndex, localIRQ, rtl8169_interrupt_handler, &messageAddress, &messageData);
+
+            pci_config_writel(config, cap_ptr + 0x4, messageAddress & 0xFFFFFFFF);
+            if (is_64bit) {
+                pci_config_writel(config, cap_ptr + 0x8, messageAddress >> 32);
+                pci_config_writew(config, cap_ptr + 0xC, messageData);
+            } else {
+                pci_config_writew(config, cap_ptr + 0x8, messageData);
+            }
+
+            // Enable MSI
+            messageControl |= 1;
+            pci_config_writew(config, cap_ptr + 0x2, messageControl);
+
+            
+            cap_data = pci_config_readl(config, cap_ptr);
+            cap_id   = (cap_data & 0xFF);
+            cap_next = (cap_data >> 8) & 0xFC;
+            messageControl = (cap_data >> 16);
+
+            // printf(" control 0x%x\n", messageControl);
+            // printf(" address %p\n",   messageAddress);
+            // printf(" data    0x%x\n", messageData);
+
+        } else if (cap_id == 0x11) {
+            // HDA on QEMU does not support MSI-X
+            // @TODO Check if my laptop HDA supports MSI or only MSI-X, probably does right?
+        }
+
+        cap_ptr = cap_next;
+    }
+
+    // receive fifo overflow
+    #define CARD_BIT_FOVW    (1 << 7)
+    // link change
+    #define CARD_BIT_LINKCHG (1 << 5)
+    // receive ok
+    #define CARD_BIT_ROK     (1 << 0)
+
+    uint16_t ims = CARD_BIT_LINKCHG | CARD_BIT_ROK | CARD_BIT_FOVW;
+    write_short(0x3C, ims); // interrupt mask
+}
+
+void rtl8169_interrupt_handler(u32 vector, InterruptFrame* frame) {
+    printf("rtl8169: received interrupt!\n");
+
+    // @TODO THIS IS SLOW. Implement high kernel mapping.
+    u64 prev_cr3 = read_cr3();
+    write_cr3((size_t)g_kernelPageTable);
+    
+
+    // @TODO Check which network controller triggered.
+
+
+    // u32 cause = read_register(CARD_REG_ICR);
+    // @TODO Don't assume interrupt is because we got a packet.
+    //    It's fine because we can still check if we have packet and do nothing if we don't.
+    // @TODO How to handle overrun.
+    // printf("i8254x interrupt 0x%x\n", cause);
+
+    void* buffer = NULL;
+    u32 bufferSize = 0;
+    rtl8169_receive_packet(&buffer, &bufferSize);
+
+    if (!buffer || !bufferSize) {
+        goto exit;
+    }
+
+    uint8_t* bytes = buffer;
+
+    // printf("RECV ");
+    // printf("%02x%02x%02x%02x ", bytes[0], bytes[1], bytes[2], bytes[3]);
+    // bytes += 4;
+    // printf("%02x%02x%02x%02x ", bytes[0], bytes[1], bytes[2], bytes[3]);
+    // bytes += 4;
+    // printf("\n");
+    // printf("%02x%02x%02x%02x ", bytes[0], bytes[1], bytes[2], bytes[3]);
+    // bytes += 4;
+    // printf("%02x%02x%02x%02x ", bytes[0], bytes[1], bytes[2], bytes[3]);
+    // bytes += 4;
+    // printf("\n");
+
+    NET_Packet packet = {
+        .buffer = buffer,
+        .size   = bufferSize,
+    };
+
+    // @TODO How do we know which device?
+    //   IRQ number per device?
+    NET_Device* device = &g_devices[0];
+
+    bool handled = net_handle_packet(device, &packet);
+    if (!handled) {
+        NET_free_packet(&packet);
+    }
+
+exit:
+    write_cr3(prev_cr3);
+}

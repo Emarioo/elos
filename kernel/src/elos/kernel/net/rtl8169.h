@@ -16,15 +16,11 @@
 #pragma once 
 
 #include "elos/common/types.h"
+#include "elos/network.h"
+
+// @TODO RTL8169 registers
 
 
-
-bool rtl8169_init();
-
-// @TODO Shutdown
-
+bool rtl8169_init(NET_Device* device);
+u32 rtl8169_send_packet(const void* data, u32 size);
 void rtl8169_receive_packet(void** out_buffer, u32* out_size);
-
-int rtl8169_send_packet(const void* data, int size);
-
-// @TODO Interrupt and callback

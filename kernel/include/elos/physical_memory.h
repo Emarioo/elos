@@ -33,7 +33,7 @@ void PMEM_init(BootAPI* boot_api);
     Memory may not be identity mapped to physical addresses.
     Memory is uninitialized.
 */
-void* PMEM_allocate(u64 bytes, void* ptr);
+void* PMEM_allocate(size_t bytes, void* ptr);
 #define PMEM_alloc(BYTES) PMEM_allocate(BYTES, NULL)
 #define PMEM_free(PTR) PMEM_allocate(0, PTR)
 #define PMEM_realloc(BYTES, PTR) PMEM_allocate(BYTES, PTR)
@@ -42,7 +42,7 @@ void* PMEM_allocate(u64 bytes, void* ptr);
     Does no memory mapping by default (flags can change this)
     Memory is uninitialized
 */
-void* PMEM_alloc_phys(u64 size, PMEM_Flags flags);
+void* PMEM_alloc_phys(size_t size, PMEM_Flags flags);
 
 PageTable* PMEM_allocPageTable();
 
@@ -53,7 +53,7 @@ PageTable* PMEM_allocPageTable();
 
     Fails if page is already mapped.
 */
-bool PMEM_map_memory(PageTable* table, void* virtual_address, void* physical_address, u64 size, PMEM_Flags flags);
+bool PMEM_map_memory(PageTable* table, void* virtual_address, void* physical_address, size_t size, PMEM_Flags flags);
 
 /*
     Returns false if address wasn't mapped
@@ -62,6 +62,6 @@ bool PMEM_map_memory(PageTable* table, void* virtual_address, void* physical_add
     then that physical page will be lost. Unless you are bookkeeping it's address or
     have already "reclaimed" that physical page (which is done in phys_allocator).
 */
-bool PMEM_unmap_memory(PageTable* table, void* virtual_address, u64 size);
+bool PMEM_unmap_memory(PageTable* table, void* virtual_address, size_t size);
 
 void* PMEM_virt_to_phys(PageTable* table, void* virtual_address);

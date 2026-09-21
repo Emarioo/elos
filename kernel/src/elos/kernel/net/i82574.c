@@ -33,9 +33,9 @@ static void setup_receive_ring();
 u16 i82574_eeprom_read(u8 addr);
 u16 i82574_flash_read(u8 addr);
 
-uint8_t* g_memory_bar;
-uint8_t* g_flash_bar;
-uint8_t  g_mac[6];
+static uint8_t* g_memory_bar;
+static uint8_t* g_flash_bar;
+static uint8_t  g_mac[6];
 
 static NET_Device* g_device;
 
@@ -149,8 +149,10 @@ bool i82574_init(NET_Device* device) {
         return false;
     }
 
+    memcpy(device->info.mac, g_mac, sizeof(device->info.mac));
 
-    printf("NET_init: MAC Address: %x%x:%x%x:%x%x:%x%x:%x%x:%x%x\n",
+
+    printf("i82574: MAC Address: %x%x:%x%x:%x%x:%x%x:%x%x:%x%x\n",
         g_mac[0] >> 4, g_mac[0] & 0xF,
         g_mac[1] >> 4, g_mac[1] & 0xF,
         g_mac[2] >> 4, g_mac[2] & 0xF,
@@ -159,7 +161,9 @@ bool i82574_init(NET_Device* device) {
         g_mac[5] >> 4, g_mac[5] & 0xF
         );
 
-    setup_interrupt(config);
+    if (initialize_network_with_interrupts) {
+        setup_interrupt(config);
+    }
 
     setup_transmit_ring();
     setup_receive_ring();
@@ -361,7 +365,7 @@ static void send_data(const void* data, u32 size, bool EOP){
     UNLOCK_INT(&g_ring_lock);
 }
 
-int i82574_send_packet(const void* data, int length){
+u32 i82574_send_packet(const void* data, u32 length){
     int sent = 0;
     // split the data into chunks and send them
     while (sent < length){

@@ -110,12 +110,11 @@ char g_thread_send_buffer[0x10000];
 
 #define TIME_RESOLUTION 1000000LLU
 
-// Through testing 8 seems to work best for QEMU
-// I will try on real hardware.
+// @TODO Tweak and optimize these values for QEMU and real hardware.
 #define MAX_TRANSFER_INFOS 8
 #define MAX_SESSIONS 10
 #define SESSION_IDLE_TIME (10 * TIME_RESOLUTION)
-#define RESEND_IDLE_TIME (TIME_RESOLUTION / 2) // if server is in australia and client in sweden then you will need to increase this value
+#define RESEND_IDLE_TIME (TIME_RESOLUTION / 60) // if server is in australia and client in sweden then you will need to increase this value
 #define MAX_RESEND_ATTEMPTS 10
 
 // #define debug(...) printf(__VA_ARGS__)
@@ -356,7 +355,7 @@ void work() {
                 session->file_size = totalFileSize - req->offset;
             }
 
-            printf("Request %s off=%d bytes=%d\n", fullpath, (int)session->file_offset, (int)session->file_size);
+            printf("Request %s off=%d bytes=%d\n", fullpath, (int)session->file_offset/1400, (int)session->file_size);
 
             refresh_transfers(session);
 
@@ -380,7 +379,7 @@ void work() {
                 }
             }
             if (completed_any) {
-                debug("ACK off=%d size=%d\n", (int)ack->offset, (int)ack->size);
+                debug("ACK off=%d size=%d\n", (int)ack->offset/1400, (int)ack->size);
 
                 if (session->file_size == 0) {
                     
@@ -514,7 +513,7 @@ void send_file_packet(Session* session, TransferInfo* info, void* send_buffer) {
     
     int packet_size = sizeof(NetBoot_Send_File) + sendf->size;
 
-    debug("Send off=%d size=%d\n", (int)sendf->offset, (int)sendf->size);
+    debug("Send off=%d size=%d\n", (int)sendf->offset/1400, (int)sendf->size);
 
     size_t sent_bytes = sendto(listenSocket, send_buffer, packet_size,
         0, (struct sockaddr*)&session->client, sizeof(session->client));

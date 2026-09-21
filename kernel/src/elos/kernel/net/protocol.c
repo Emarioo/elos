@@ -190,7 +190,6 @@ void construct_arp_reply(u8* message_buffer, int* buffer_len, u8 my_mac[6], uint
     message_arp->operation = ARP_REPLY;
     memcpy(message_arp->sender_hw_address, my_mac, 6);
     memcpy(message_arp->sender_proto_address, &my_address, 4);
-    memset(message_arp->sender_proto_address, 0, 4);
     memcpy(message_arp->target_hw_address, target_mac, 6);
     memcpy(message_arp->target_proto_address, &target_address, 4);
 
