@@ -250,6 +250,8 @@ bool NETBOOT_query_dhcp_ip(uint32_t* address) {
                         (offered_address>>16)&0xFF,
                         (offered_address>>24)&0xFF);
                     received_address = offered_address; // can't set this yet, we need to wait for ACK
+                    // @TODO In theory we should not assume our UDP DHCP packet reached the destination.
+                    //   If we didn't get a response from our request then we should send again.
                     send_dhcp_request(offered_address, dhcp->siaddr);
                 } else  if (msg_type == DHCP_ACK) {
                     printf("DHCP ACK\n");

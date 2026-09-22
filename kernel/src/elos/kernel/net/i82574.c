@@ -445,6 +445,10 @@ void i82574_receive_packet(void** out_buffer, u32* out_size) {
 
 
 void i82574_interrupt_handler(u32 vector, InterruptFrame* frame) {
+    if (!enable_network_interrupts) {
+        return;
+    }
+    
     // @TODO THIS IS SLOW. Implement high kernel mapping.
     u64 prev_cr3 = read_cr3();
     write_cr3((size_t)g_kernelPageTable);

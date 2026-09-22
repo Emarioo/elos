@@ -50,6 +50,8 @@ int        g_devices_max = MAX_NET_DEVICES;
 
 
 bool initialize_network_with_interrupts;
+bool enable_network_interrupts;
+bool skip_network_dhcp;
 
 #define MAX_NET_HANDLES 100
 
@@ -102,14 +104,34 @@ bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
     }
 
     if (device) {
-        // @TODO DHCP to get gateway, netmask, address.
-        // @TODO Automatic Private IP Addressing if DHCP is unavailable.
-        //   We currently use fixed address.
+        if (!skip_network_dhcp) {
+            int dhcpSize = sizeof(DHCP_Header) +8 +1; // +8 because of options, +1 because option end
+            int udpSize = sizeof(UDP_Header) + dhcpSize;
+            u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + sizeof(DHCP_Header) + 64] = {0};
+            int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + udpSize;
+            construct_dhcp_discover(message_buffer, &packet_size, device->info.mac);
+       
+            // @TODO In theory we should not assume our UDP DHCP packet reached the destination.
+            //   If we didn't get a response from our discovery then we should send again.
+            bool sent = NET_send_packet(device, message_buffer, packet_size);
+            if (sent) {
+                // chill for a moment, let DHCP messaging do it's thing.
+                CPU_spin_sleep(10 * 1000 * 1000);
+            }
+        }
 
-        device->info.ipv4_address     = ipv4_from_str("169.254.0.1");
-        device->info.ipv4_subnet_mask = ipv4_from_str("255.255.0.0");
-        device->info.ipv4_gateway     = 0; // no gateway
+        if (device->info.ipv4_gateway == 0) {
+            // DHCP failed, could not determine gateway.
+
+            // @TODO Automatic Private IP Addressing if DHCP is unavailable.
+            //   We currently use fixed address. We should check
+            //   if anyone has the address already and pick a free one.
+            device->info.ipv4_address     = ipv4_from_str("169.254.0.1");
+            device->info.ipv4_subnet_mask = ipv4_from_str("255.255.0.0");
+            device->info.ipv4_gateway     = 0; // no gateway
+        }
     }
+    
 
     if (device && scanInfo->count + 1 < scanInfo->maxCount) {
         scanInfo->devices[scanInfo->count] = device;
@@ -443,7 +465,7 @@ bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
                         u8  msg_type = 0xFF;
                         u32 offered_address = dhcp->yiaddr;
                         u32 subnet_mask = 0;
-                        u32 router = 0;
+                        u32 gateway = 0;
                         u32 lease = 0;
                         int head = 0;
                         while (head < opt_length) {
@@ -460,7 +482,7 @@ bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
                             } else if (opt == DHCP_OPTION_SUBNET_MASK) {
                                 subnet_mask = *((u32*)&dhcp->options[head]);
                             } else if (opt == DHCP_OPTION_ROUTER) {
-                                router = *((u32*)&dhcp->options[head]);
+                                gateway = *((u32*)&dhcp->options[head]);
                             } else if (opt == DHCP_OPTION_ADDRESS_TIME) {
                                 lease = *((u32*)&dhcp->options[head]);
                             } else if (opt == DHCP_OPTION_DOMAIN_SERVER) {
@@ -470,16 +492,31 @@ bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
                         }
 
                         if (msg_type == DHCP_OFFER) {
-                            printf("Recieved DHCP offer: %d.%d.%d.%d\n",
-                                offered_address&0xFF,
-                                (offered_address>>8)&0xFF,
-                                (offered_address>>16)&0xFF,
-                                (offered_address>>24)&0xFF);
-                            device->info.ipv4_address = offered_address; // can't set this yet, we need to wait for ACK
+                            char buf0[20];
+                            char buf1[20];
+                            char buf2[20];
+                            printf("Recieved DHCP offer: addr=%s subnet=%s gateway=%s\n",
+                                ipv4_int_str(offered_address, buf0),
+                                ipv4_int_str(subnet_mask, buf1),
+                                ipv4_int_str(gateway, buf2));
+                            
+                            // @TODO Can't set this until ACK but we do anyway so we don't have to store it somewhere.
+                            device->info.ipv4_address     = offered_address;
+                            device->info.ipv4_subnet_mask = subnet_mask;
+                            device->info.ipv4_gateway     = gateway;
+
+                            // @TODO Handle lease? Before lease runs out we should do a request again.
+                            
+                            // @TODO In theory we should not assume our UDP DHCP packet reached the destination.
+                            //   If we didn't get a response from our request then we should send again.
                             NET_send_dhcp_request(device, offered_address, dhcp->siaddr);
                             NET_free_packet(packet);
                             consumedPacket = true;
                         } else  if (msg_type == DHCP_ACK) {
+                            // @TODO Does ACK send the address,subnetmask,gateway,lease data again?
+                            //    We can set values in device here if so instead of when we get the offer.
+                            //    We need to check what address was ACKed because I assume it tells us?
+                            //    Don't assume it was the request we sent. It may be reordered and stuff?
                             printf("DHCP ACK\n");
                             NET_free_packet(packet);
                             consumedPacket = true;

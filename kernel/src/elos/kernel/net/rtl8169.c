@@ -471,6 +471,10 @@ void rtl8169_setup_interrupt(PCI_ConfigSpace* config) {
 }
 
 void rtl8169_interrupt_handler(u32 vector, InterruptFrame* frame) {
+    if (!enable_network_interrupts) {
+        return;
+    }
+
     printf("rtl8169: received interrupt!\n");
 
     // @TODO THIS IS SLOW. Implement high kernel mapping.

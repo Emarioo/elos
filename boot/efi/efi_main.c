@@ -541,9 +541,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     }
 
     // Comment out to disable network boot.
-    init_network();
-    // Or set this:
-    // can_load_kernel_from_network = false;
+    // init_network();
 
 
     EFI_GUID acpi20 = ACPI_20_TABLE_GUID;
@@ -602,7 +600,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
 
     printf("UEFI - Exit boot services\n");
 
-    FREEZE();
+    // FREEZE();
 
     // Sleep if we want.
     // EFI_EVENT timer_event;

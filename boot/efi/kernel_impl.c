@@ -214,6 +214,10 @@ void init_network() {
     // }
 
     if (!can_load_kernel_from_network) {
+
+        // @TODO NETBOOT does DHCP so we don't need kernel network code to also do that.
+        //   NETBOOT should let kernel code do DHCP but we need some refactoring.
+        skip_network_dhcp = true;
             
         NET_Device* devices[6];
         int devices_len = ARRAY_LENGTH(devices);
