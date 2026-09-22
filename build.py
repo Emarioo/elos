@@ -180,8 +180,8 @@ def main():
         if HAS_TAP:
             qemu_flags += f'''
             -device e1000e,netdev=net0  # e1000 ~= intel 8254x, e1000e ~= intel 82574L
-            -netdev tap,id=net0,ifname=tap0,script=no,downscript=no
-            #-netdev user,id=net0
+            #-netdev tap,id=net0,ifname=tap0,script=no,downscript=no
+            -netdev user,id=net0
             '''
 
         # @NOTE Not sure what these flags do but seems useful/important

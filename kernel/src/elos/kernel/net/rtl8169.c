@@ -227,22 +227,16 @@ static bool reset_nic() {
 
     while(read_byte(0x37) & 0x10) ;
     /*setting a timeout could be useful if the card is problematic*/
-
+    
+    // printf("RTL command after reset: %02x\n", read_byte(0x37));
+    // printf("ISR after reset: %04x\n", read_short(0x3E));
+    
+    write_short(0x3E, 0xFFFF); // reset interrupt status bits, just in case
     
     for (int i=0;i<6;i++) {
         g_mac[i] = read_byte(i);
     }
-    // memcpy(current_mac, controller.mac_address, 6);
 
-
-    // printf("NET_init: MAC Address: %x%x:%x%x:%x%x:%x%x:%x%x:%x%x\n",
-    //     controller.mac_address[0] >> 4, controller.mac_address[0] & 0xF,
-    //     controller.mac_address[1] >> 4, controller.mac_address[1] & 0xF,
-    //     controller.mac_address[2] >> 4, controller.mac_address[2] & 0xF,
-    //     controller.mac_address[3] >> 4, controller.mac_address[3] & 0xF,
-    //     controller.mac_address[4] >> 4, controller.mac_address[4] & 0xF,
-    //     controller.mac_address[5] >> 4, controller.mac_address[5] & 0xF
-    //     );
 
 
     // Prepare RX descriptors and buffers
@@ -474,8 +468,8 @@ void rtl8169_interrupt_handler(u32 vector, InterruptFrame* frame) {
     if (!enable_network_interrupts) {
         return;
     }
+    // printf("rtl8169: received interrupt!\n");
 
-    printf("rtl8169: received interrupt!\n");
 
     // @TODO THIS IS SLOW. Implement high kernel mapping.
     u64 prev_cr3 = read_cr3();
@@ -485,7 +479,10 @@ void rtl8169_interrupt_handler(u32 vector, InterruptFrame* frame) {
     // @TODO Check which network controller triggered.
 
 
-    // u32 cause = read_register(CARD_REG_ICR);
+    u32 cause = read_short(0x3E);
+
+    write_short(0x3E, 0xFFFF); // reset all interrupt status bits.
+
     // @TODO Don't assume interrupt is because we got a packet.
     //    It's fine because we can still check if we have packet and do nothing if we don't.
     // @TODO How to handle overrun.

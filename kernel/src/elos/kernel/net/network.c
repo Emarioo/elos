@@ -71,6 +71,8 @@ NET_Device* reserve_net_device() {
     return device;
 }
 
+// @TODO Don't put this here?
+u32 g_latest_dhcp_xid;
 
 bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
     bool returnValue = false;
@@ -104,19 +106,22 @@ bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
     }
 
     if (device) {
+        // printf("Send DHCP discover!\n");
         if (!skip_network_dhcp) {
+            g_latest_dhcp_xid = generate_dhcp_xid();
+
             int dhcpSize = sizeof(DHCP_Header) +8 +1; // +8 because of options, +1 because option end
             int udpSize = sizeof(UDP_Header) + dhcpSize;
             u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + sizeof(DHCP_Header) + 64] = {0};
             int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + udpSize;
-            construct_dhcp_discover(message_buffer, &packet_size, device->info.mac);
+            construct_dhcp_discover(message_buffer, &packet_size, device->info.mac, g_latest_dhcp_xid);
        
             // @TODO In theory we should not assume our UDP DHCP packet reached the destination.
             //   If we didn't get a response from our discovery then we should send again.
             bool sent = NET_send_packet(device, message_buffer, packet_size);
             if (sent) {
                 // chill for a moment, let DHCP messaging do it's thing.
-                CPU_spin_sleep(10 * 1000 * 1000);
+                CPU_spin_sleep(50 * 1000000);
             }
         }
 
@@ -126,9 +131,13 @@ bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
             // @TODO Automatic Private IP Addressing if DHCP is unavailable.
             //   We currently use fixed address. We should check
             //   if anyone has the address already and pick a free one.
-            device->info.ipv4_address     = ipv4_from_str("169.254.0.1");
+            const char* static_ip = "192.168.0.47"; // @NOCHECKIN Don't use this.
+            // const char* static_ip = "169.254.0.1";
+            device->info.ipv4_address     = ipv4_from_str(static_ip); 
             device->info.ipv4_subnet_mask = ipv4_from_str("255.255.0.0");
             device->info.ipv4_gateway     = 0; // no gateway
+
+            printf("Using Automatic Private IP Addressing: %s\n", static_ip);
         }
     }
     
@@ -509,7 +518,11 @@ bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
                             
                             // @TODO In theory we should not assume our UDP DHCP packet reached the destination.
                             //   If we didn't get a response from our request then we should send again.
-                            NET_send_dhcp_request(device, offered_address, dhcp->siaddr);
+                            u8 messageBuffer[128];
+                            
+                            int messageBufferSize = sizeof(messageBufferSize);
+                            construct_dhcp_request(messageBuffer, &messageBufferSize, device->info.mac, offered_address, dhcp->siaddr, g_latest_dhcp_xid);
+                            NET_send_packet(device, messageBuffer, messageBufferSize);
                             NET_free_packet(packet);
                             consumedPacket = true;
                         } else  if (msg_type == DHCP_ACK) {

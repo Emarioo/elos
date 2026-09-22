@@ -90,14 +90,27 @@ void recv_packet() {
 void send_packet(int packedId) {
     ELOS_Net_Address address = {0};
     address.protocol = ELOS_NET_PROTO_UDP_IPV4;
-    // address.udp_tcp4.address = net_ipv4_from_str("10.255.255.254");
-    address.udp_tcp4.address = net_ipv4_from_str("169.254.0.2");
     address.udp_tcp4.port    = 5002;
-
-    char messageBuffer[512];
-    int len = snprintf(messageBuffer, sizeof(messageBuffer), "packetid %d", packedId);
     
+    char messageBuffer[512];
+    int len;
     ELOS_Error error;
+
+    // address.udp_tcp4.address = net_ipv4_from_str("169.254.0.2");
+
+    // len = snprintf(messageBuffer, sizeof(messageBuffer), "packetid %d", packedId);
+    
+    
+    // error = net_write(g_net_handle, &address, messageBuffer, len);
+    // if (error != ELOS_OK) {
+    //     printf("Could not send packet, %s\n", elos_error(error));
+    // } else {
+    //     printf("sent: %s\n", messageBuffer);
+    // }
+    
+    address.udp_tcp4.address = net_ipv4_from_str("192.168.0.60");
+
+    len = snprintf(messageBuffer, sizeof(messageBuffer), "packetid %d", packedId);
     
     error = net_write(g_net_handle, &address, messageBuffer, len);
     if (error != ELOS_OK) {

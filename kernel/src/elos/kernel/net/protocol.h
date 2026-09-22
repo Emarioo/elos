@@ -207,14 +207,14 @@ extern uint8_t broadcast_mac[6];
 void construct_arp_reply(u8* message_buffer, int* buffer_len, u8 my_mac[6], uint32_t my_address, u8 target_mac[6], uint32_t target_address);
 void construct_arp(u8* message_buffer, int* buffer_len, u8 my_mac[6], uint32_t my_address, uint32_t target_address);
 
-void construct_dhcp_discover(u8* buffer, int* buffer_len, u8 mac[6]);
-void construct_dhcp_request(u8* buffer, int* buffer_len, u8 mac[6], u32 request_address, u32 dhcp_server);
-
+void construct_dhcp_discover(u8* buffer, int* buffer_len, u8 mac[6], u32 xid);
+void construct_dhcp_request(u8* buffer, int* buffer_len, u8 mac[6], u32 request_address, u32 dhcp_server, u32 xid);
+u32 generate_dhcp_xid();
     
 void NET_send_arp(NET_Device* device, uint32_t address);
 
-void NET_send_dhcp_discover(NET_Device* device);
-void NET_send_dhcp_request(NET_Device* device, u32 request_address, u32 dhcp_server);
+// void NET_send_dhcp_discover(NET_Device* device);
+// void NET_send_dhcp_request(NET_Device* device, u32 request_address, u32 dhcp_server);
 
 bool NET_send_udp(NET_Device* device, u8 dst_mac[6], u32 address, u16 src_port, u16 dst_port, const void* data, u32 size);
 

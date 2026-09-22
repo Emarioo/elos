@@ -6,6 +6,8 @@
 
 #include "elos/kernel_console.h"
 
+#include "elos/common/intrinsics.h"
+
 
 #define printf(...) KCON_printf(__VA_ARGS__)
 
@@ -225,7 +227,13 @@ void construct_arp(u8* message_buffer, int* buffer_len, u8 mac[6], uint32_t addr
     message_arp->operation     = bswap16(message_arp->operation);
 }
 
-void construct_dhcp_discover(u8* message_buffer, int* buffer_len, u8 mac[6]) {
+u32 generate_dhcp_xid() {
+    // static volatile u32 state = 0x3903F326;
+    return (u32)(rdtsc() & 0xFFFFFFFF);
+    // return __atomic_fetch_add(&state, 1,__ATOMIC_SEQ_CST);
+}
+
+void construct_dhcp_discover(u8* message_buffer, int* buffer_len, u8 mac[6], u32 xid) {
 
     int dhcpSize = sizeof(DHCP_Header) +8 +1; // +8 because of options, +1 because option end
     int udpSize = sizeof(UDP_Header) + dhcpSize;
@@ -279,7 +287,7 @@ void construct_dhcp_discover(u8* message_buffer, int* buffer_len, u8 mac[6]) {
     message_dhcp->htype = 1;
     message_dhcp->hlen = 6;
     message_dhcp->hops = 0;
-    message_dhcp->xid = 0x3903F326;
+    message_dhcp->xid = xid;
     message_dhcp->secs = 0;
     message_dhcp->flags = 0;
     message_dhcp->ciaddr = 0;
@@ -313,7 +321,7 @@ void construct_dhcp_discover(u8* message_buffer, int* buffer_len, u8 mac[6]) {
     message_udp->checksum = bswap16(compute_internet_checksum(message_udp, udpSize));
 }
 
-void construct_dhcp_request(u8* message_buffer, int* buffer_len, u8 mac[6], u32 request_address, u32 dhcp_server) {
+void construct_dhcp_request(u8* message_buffer, int* buffer_len, u8 mac[6], u32 request_address, u32 dhcp_server, u32 xid) {
     
     int dhcpSize = sizeof(DHCP_Header) +15 +1; // +15 because of options, +1 because option end
     int udpSize = sizeof(UDP_Header) + dhcpSize;
@@ -364,7 +372,7 @@ void construct_dhcp_request(u8* message_buffer, int* buffer_len, u8 mac[6], u32 
     message_dhcp->htype = 1;
     message_dhcp->hlen = 6;
     message_dhcp->hops = 0;
-    message_dhcp->xid = 0x3903F326;
+    message_dhcp->xid = xid;
     message_dhcp->secs = 0;
     message_dhcp->flags = 0;
     message_dhcp->ciaddr = 0;
@@ -429,187 +437,189 @@ void NET_send_arp(NET_Device* device, uint32_t address) {
     message_arp->protocol_type = bswap16(message_arp->protocol_type);
     message_arp->operation     = bswap16(message_arp->operation);
 
+    // printf("Send ARP\n");
+
     NET_send_packet(device, g_packet_buffer, packet_size);
 }
 
-void NET_send_dhcp_discover(NET_Device* device) {
+// void NET_send_dhcp_discover(NET_Device* device) {
     
-    int dhcpSize = sizeof(DHCP_Header) +8 +1; // +8 because of options, +1 because option end
-    int udpSize = sizeof(UDP_Header) + dhcpSize;
+//     int dhcpSize = sizeof(DHCP_Header) +8 +1; // +8 because of options, +1 because option end
+//     int udpSize = sizeof(UDP_Header) + dhcpSize;
 
-    u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + sizeof(DHCP_Header) + 64] = {0};
+//     u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + sizeof(DHCP_Header) + 64] = {0};
 
-    int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + udpSize;
+//     int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + udpSize;
 
-    if (packet_size > sizeof(message_buffer)) {
-        printf("NET: UDP packet data to big for static buffer, dropping\n");
-        return;
-    }
+//     if (packet_size > sizeof(message_buffer)) {
+//         printf("NET: UDP packet data to big for static buffer, dropping\n");
+//         return;
+//     }
 
-    EtherFrame* message_frame = (EtherFrame*)message_buffer;
-    memcpy(message_frame->destination, broadcast_mac, 6);
-    memcpy(message_frame->source, device->info.mac, 6);
-    message_frame->etherType = ETHER_IPV4;
-    IPV4_Header* message_ipv4 = (IPV4_Header*)(message_buffer + sizeof(EtherFrame));
-    message_ipv4->headerLength = sizeof(IPV4_Header) / 4;
-    message_ipv4->version = 4;
-    message_ipv4->totalLength = sizeof(IPV4_Header) + udpSize;
-    message_ipv4->identification = 0;
-    message_ipv4->fragmentPart = IPV4_FLAG_DONT_FRAGMENT;
-    message_ipv4->headerChecksum = 0;
-    message_ipv4->timeToLive = 64;
-    message_ipv4->protocol = IP_UDP;
-    message_ipv4->sourceAddress = 0;
-    message_ipv4->destinationAddress = 0xFFFFFFFF; // limited broadcast, can't use directed broadcast since we don't know subnet.
+//     EtherFrame* message_frame = (EtherFrame*)message_buffer;
+//     memcpy(message_frame->destination, broadcast_mac, 6);
+//     memcpy(message_frame->source, device->info.mac, 6);
+//     message_frame->etherType = ETHER_IPV4;
+//     IPV4_Header* message_ipv4 = (IPV4_Header*)(message_buffer + sizeof(EtherFrame));
+//     message_ipv4->headerLength = sizeof(IPV4_Header) / 4;
+//     message_ipv4->version = 4;
+//     message_ipv4->totalLength = sizeof(IPV4_Header) + udpSize;
+//     message_ipv4->identification = 0;
+//     message_ipv4->fragmentPart = IPV4_FLAG_DONT_FRAGMENT;
+//     message_ipv4->headerChecksum = 0;
+//     message_ipv4->timeToLive = 64;
+//     message_ipv4->protocol = IP_UDP;
+//     message_ipv4->sourceAddress = 0;
+//     message_ipv4->destinationAddress = 0xFFFFFFFF; // limited broadcast, can't use directed broadcast since we don't know subnet.
 
-    message_frame->etherType = bswap16(message_frame->etherType);
-    message_ipv4->totalLength = bswap16(message_ipv4->totalLength);
-    message_ipv4->identification = bswap16(message_ipv4->identification);
-    message_ipv4->fragmentPart = bswap16(message_ipv4->fragmentPart);
+//     message_frame->etherType = bswap16(message_frame->etherType);
+//     message_ipv4->totalLength = bswap16(message_ipv4->totalLength);
+//     message_ipv4->identification = bswap16(message_ipv4->identification);
+//     message_ipv4->fragmentPart = bswap16(message_ipv4->fragmentPart);
 
-    message_ipv4->headerChecksum = bswap16(compute_internet_checksum(message_ipv4, sizeof(IPV4_Header)));
+//     message_ipv4->headerChecksum = bswap16(compute_internet_checksum(message_ipv4, sizeof(IPV4_Header)));
 
-    UDP_Header* message_udp = (UDP_Header*)(message_buffer + sizeof(EtherFrame) + sizeof(IPV4_Header));
-    message_udp->sourcePort = 68;
-    message_udp->destinationPort = 67;
-    message_udp->checksum = 0;
-    message_udp->length = udpSize;
+//     UDP_Header* message_udp = (UDP_Header*)(message_buffer + sizeof(EtherFrame) + sizeof(IPV4_Header));
+//     message_udp->sourcePort = 68;
+//     message_udp->destinationPort = 67;
+//     message_udp->checksum = 0;
+//     message_udp->length = udpSize;
 
-    message_udp->sourcePort = bswap16(message_udp->sourcePort);
-    message_udp->destinationPort = bswap16(message_udp->destinationPort);
-    message_udp->length = bswap16(message_udp->length);
+//     message_udp->sourcePort = bswap16(message_udp->sourcePort);
+//     message_udp->destinationPort = bswap16(message_udp->destinationPort);
+//     message_udp->length = bswap16(message_udp->length);
 
-    DHCP_Header* message_dhcp = (DHCP_Header*)((char*)message_udp + sizeof(UDP_Header));
-    message_dhcp->op = 1;
-    message_dhcp->htype = 1;
-    message_dhcp->hlen = 6;
-    message_dhcp->hops = 0;
-    message_dhcp->xid = 0x3903F326;
-    message_dhcp->secs = 0;
-    message_dhcp->flags = 0;
-    message_dhcp->ciaddr = 0;
-    message_dhcp->yiaddr = 0;
-    message_dhcp->siaddr = 0;
-    memset(message_dhcp->chaddr, 0, 16);
-    memcpy(message_dhcp->chaddr, device->info.mac, 6);
-    memset(message_dhcp->zeros, 0, sizeof(message_dhcp->zeros));
-    message_dhcp->magicCookie = DHCP_MAGIC_COOKIE;
-    int opt_head = 0;
-    message_dhcp->options[opt_head++] = DHCP_OPTION_TYPE;
-    message_dhcp->options[opt_head++] = 1; // length of option
-    message_dhcp->options[opt_head++] = DHCP_DISCOVER;
-    message_dhcp->options[opt_head++] = DHCP_OPTION_PARAM_REQUEST_LIST;
-    message_dhcp->options[opt_head++] = 3;
-    message_dhcp->options[opt_head++] = DHCP_OPTION_SUBNET_MASK;
-    message_dhcp->options[opt_head++] = DHCP_OPTION_ROUTER;
-    message_dhcp->options[opt_head++] = DHCP_OPTION_DOMAIN_SERVER;
-    message_dhcp->options[opt_head++] = 0xFF;
+//     DHCP_Header* message_dhcp = (DHCP_Header*)((char*)message_udp + sizeof(UDP_Header));
+//     message_dhcp->op = 1;
+//     message_dhcp->htype = 1;
+//     message_dhcp->hlen = 6;
+//     message_dhcp->hops = 0;
+//     message_dhcp->xid = 0x3903F326;
+//     message_dhcp->secs = 0;
+//     message_dhcp->flags = 0;
+//     message_dhcp->ciaddr = 0;
+//     message_dhcp->yiaddr = 0;
+//     message_dhcp->siaddr = 0;
+//     memset(message_dhcp->chaddr, 0, 16);
+//     memcpy(message_dhcp->chaddr, device->info.mac, 6);
+//     memset(message_dhcp->zeros, 0, sizeof(message_dhcp->zeros));
+//     message_dhcp->magicCookie = DHCP_MAGIC_COOKIE;
+//     int opt_head = 0;
+//     message_dhcp->options[opt_head++] = DHCP_OPTION_TYPE;
+//     message_dhcp->options[opt_head++] = 1; // length of option
+//     message_dhcp->options[opt_head++] = DHCP_DISCOVER;
+//     message_dhcp->options[opt_head++] = DHCP_OPTION_PARAM_REQUEST_LIST;
+//     message_dhcp->options[opt_head++] = 3;
+//     message_dhcp->options[opt_head++] = DHCP_OPTION_SUBNET_MASK;
+//     message_dhcp->options[opt_head++] = DHCP_OPTION_ROUTER;
+//     message_dhcp->options[opt_head++] = DHCP_OPTION_DOMAIN_SERVER;
+//     message_dhcp->options[opt_head++] = 0xFF;
 
-    message_dhcp->magicCookie = bswap32(message_dhcp->magicCookie);
-    message_dhcp->xid = bswap32(message_dhcp->xid);
+//     message_dhcp->magicCookie = bswap32(message_dhcp->magicCookie);
+//     message_dhcp->xid = bswap32(message_dhcp->xid);
 
-    UDP_Pseudo_Header pseudo = {0};
-    pseudo.sourceAddress = message_ipv4->sourceAddress;
-    pseudo.destinationAddress = message_ipv4->destinationAddress;
-    pseudo.protocol = IP_UDP;
-    pseudo.udpLength = bswap16(udpSize);
+//     UDP_Pseudo_Header pseudo = {0};
+//     pseudo.sourceAddress = message_ipv4->sourceAddress;
+//     pseudo.destinationAddress = message_ipv4->destinationAddress;
+//     pseudo.protocol = IP_UDP;
+//     pseudo.udpLength = bswap16(udpSize);
 
-    message_udp->checksum = bswap16(~compute_internet_checksum(&pseudo, sizeof(UDP_Pseudo_Header)));
-    message_udp->checksum = bswap16(compute_internet_checksum(message_udp, udpSize));
+//     message_udp->checksum = bswap16(~compute_internet_checksum(&pseudo, sizeof(UDP_Pseudo_Header)));
+//     message_udp->checksum = bswap16(compute_internet_checksum(message_udp, udpSize));
 
-    NET_send_packet(device, message_buffer, packet_size);
-}
+//     NET_send_packet(device, message_buffer, packet_size);
+// }
 
-void NET_send_dhcp_request(NET_Device* device, u32 request_address, u32 dhcp_server) {
+// void NET_send_dhcp_request(NET_Device* device, u32 request_address, u32 dhcp_server) {
     
-    int dhcpSize = sizeof(DHCP_Header) +15 +1; // +15 because of options, +1 because option end
-    int udpSize = sizeof(UDP_Header) + dhcpSize;
+//     int dhcpSize = sizeof(DHCP_Header) +15 +1; // +15 because of options, +1 because option end
+//     int udpSize = sizeof(UDP_Header) + dhcpSize;
 
-    u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + sizeof(DHCP_Header) + 64] = {0};
+//     u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + sizeof(DHCP_Header) + 64] = {0};
 
-    int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + udpSize;
+//     int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + udpSize;
 
-    if (packet_size > sizeof(message_buffer)) {
-        printf("NET: UDP packet data to big for static buffer, dropping\n");
-        return;
-    }
+//     if (packet_size > sizeof(message_buffer)) {
+//         printf("NET: UDP packet data to big for static buffer, dropping\n");
+//         return;
+//     }
 
-    EtherFrame* message_frame = (EtherFrame*)message_buffer;
-    memcpy(message_frame->destination, broadcast_mac, 6);
-    memcpy(message_frame->source, device->info.mac, 6);
-    message_frame->etherType = ETHER_IPV4;
-    IPV4_Header* message_ipv4 = (IPV4_Header*)(message_buffer + sizeof(EtherFrame));
-    message_ipv4->headerLength = sizeof(IPV4_Header) / 4;
-    message_ipv4->version = 4;
-    message_ipv4->totalLength = sizeof(IPV4_Header) + udpSize;
-    message_ipv4->identification = 0;
-    message_ipv4->fragmentPart = IPV4_FLAG_DONT_FRAGMENT;
-    message_ipv4->headerChecksum = 0;
-    message_ipv4->timeToLive = 64;
-    message_ipv4->protocol = IP_UDP;
-    message_ipv4->sourceAddress = 0;
-    message_ipv4->destinationAddress = 0xFFFFFFFF; // limited broadcast, can't use directed broadcast since we don't know subnet.
+//     EtherFrame* message_frame = (EtherFrame*)message_buffer;
+//     memcpy(message_frame->destination, broadcast_mac, 6);
+//     memcpy(message_frame->source, device->info.mac, 6);
+//     message_frame->etherType = ETHER_IPV4;
+//     IPV4_Header* message_ipv4 = (IPV4_Header*)(message_buffer + sizeof(EtherFrame));
+//     message_ipv4->headerLength = sizeof(IPV4_Header) / 4;
+//     message_ipv4->version = 4;
+//     message_ipv4->totalLength = sizeof(IPV4_Header) + udpSize;
+//     message_ipv4->identification = 0;
+//     message_ipv4->fragmentPart = IPV4_FLAG_DONT_FRAGMENT;
+//     message_ipv4->headerChecksum = 0;
+//     message_ipv4->timeToLive = 64;
+//     message_ipv4->protocol = IP_UDP;
+//     message_ipv4->sourceAddress = 0;
+//     message_ipv4->destinationAddress = 0xFFFFFFFF; // limited broadcast, can't use directed broadcast since we don't know subnet.
 
-    message_frame->etherType = bswap16(message_frame->etherType);
-    message_ipv4->totalLength = bswap16(message_ipv4->totalLength);
-    message_ipv4->identification = bswap16(message_ipv4->identification);
-    message_ipv4->fragmentPart = bswap16(message_ipv4->fragmentPart);
+//     message_frame->etherType = bswap16(message_frame->etherType);
+//     message_ipv4->totalLength = bswap16(message_ipv4->totalLength);
+//     message_ipv4->identification = bswap16(message_ipv4->identification);
+//     message_ipv4->fragmentPart = bswap16(message_ipv4->fragmentPart);
 
-    message_ipv4->headerChecksum = bswap16(compute_internet_checksum(message_ipv4, sizeof(IPV4_Header)));
+//     message_ipv4->headerChecksum = bswap16(compute_internet_checksum(message_ipv4, sizeof(IPV4_Header)));
 
-    UDP_Header* message_udp = (UDP_Header*)(message_buffer + sizeof(EtherFrame) + sizeof(IPV4_Header));
-    message_udp->sourcePort = 68;
-    message_udp->destinationPort = 67;
-    message_udp->checksum = 0;
-    message_udp->length = udpSize;
+//     UDP_Header* message_udp = (UDP_Header*)(message_buffer + sizeof(EtherFrame) + sizeof(IPV4_Header));
+//     message_udp->sourcePort = 68;
+//     message_udp->destinationPort = 67;
+//     message_udp->checksum = 0;
+//     message_udp->length = udpSize;
 
-    message_udp->sourcePort = bswap16(message_udp->sourcePort);
-    message_udp->destinationPort = bswap16(message_udp->destinationPort);
-    message_udp->length = bswap16(message_udp->length);
+//     message_udp->sourcePort = bswap16(message_udp->sourcePort);
+//     message_udp->destinationPort = bswap16(message_udp->destinationPort);
+//     message_udp->length = bswap16(message_udp->length);
 
-    DHCP_Header* message_dhcp = (DHCP_Header*)((char*)message_udp + sizeof(UDP_Header));
-    message_dhcp->op = 1;
-    message_dhcp->htype = 1;
-    message_dhcp->hlen = 6;
-    message_dhcp->hops = 0;
-    message_dhcp->xid = 0x3903F326;
-    message_dhcp->secs = 0;
-    message_dhcp->flags = 0;
-    message_dhcp->ciaddr = 0;
-    message_dhcp->yiaddr = 0;
-    message_dhcp->siaddr = dhcp_server;
-    memset(message_dhcp->chaddr, 0, 16);
-    memcpy(message_dhcp->chaddr, device->info.mac, 6);
-    memset(message_dhcp->zeros, 0, sizeof(message_dhcp->zeros));
-    message_dhcp->magicCookie = DHCP_MAGIC_COOKIE;
-    int opt_head = 0;
-    message_dhcp->options[opt_head++] = DHCP_OPTION_TYPE;
-    message_dhcp->options[opt_head++] = 1; // length of option
-    message_dhcp->options[opt_head++] = DHCP_REQUEST;
-    message_dhcp->options[opt_head++] = DHCP_OPTION_REQUEST_IP;
-    message_dhcp->options[opt_head++] = 4;
-    *(u32*)&message_dhcp->options[opt_head] = request_address;
-    opt_head+=4;
-    message_dhcp->options[opt_head++] = DHCP_OPTION_DHCP_SERVER;
-    message_dhcp->options[opt_head++] = 4;
-    *(u32*)&message_dhcp->options[opt_head] = dhcp_server;
-    opt_head+=4;
-    message_dhcp->options[opt_head++] = 0xFF;
+//     DHCP_Header* message_dhcp = (DHCP_Header*)((char*)message_udp + sizeof(UDP_Header));
+//     message_dhcp->op = 1;
+//     message_dhcp->htype = 1;
+//     message_dhcp->hlen = 6;
+//     message_dhcp->hops = 0;
+//     message_dhcp->xid = 0x3903F326;
+//     message_dhcp->secs = 0;
+//     message_dhcp->flags = 0;
+//     message_dhcp->ciaddr = 0;
+//     message_dhcp->yiaddr = 0;
+//     message_dhcp->siaddr = dhcp_server;
+//     memset(message_dhcp->chaddr, 0, 16);
+//     memcpy(message_dhcp->chaddr, device->info.mac, 6);
+//     memset(message_dhcp->zeros, 0, sizeof(message_dhcp->zeros));
+//     message_dhcp->magicCookie = DHCP_MAGIC_COOKIE;
+//     int opt_head = 0;
+//     message_dhcp->options[opt_head++] = DHCP_OPTION_TYPE;
+//     message_dhcp->options[opt_head++] = 1; // length of option
+//     message_dhcp->options[opt_head++] = DHCP_REQUEST;
+//     message_dhcp->options[opt_head++] = DHCP_OPTION_REQUEST_IP;
+//     message_dhcp->options[opt_head++] = 4;
+//     *(u32*)&message_dhcp->options[opt_head] = request_address;
+//     opt_head+=4;
+//     message_dhcp->options[opt_head++] = DHCP_OPTION_DHCP_SERVER;
+//     message_dhcp->options[opt_head++] = 4;
+//     *(u32*)&message_dhcp->options[opt_head] = dhcp_server;
+//     opt_head+=4;
+//     message_dhcp->options[opt_head++] = 0xFF;
 
-    message_dhcp->magicCookie = bswap32(message_dhcp->magicCookie);
-    message_dhcp->xid = bswap32(message_dhcp->xid);
+//     message_dhcp->magicCookie = bswap32(message_dhcp->magicCookie);
+//     message_dhcp->xid = bswap32(message_dhcp->xid);
 
-    UDP_Pseudo_Header pseudo = {0};
-    pseudo.sourceAddress = message_ipv4->sourceAddress;
-    pseudo.destinationAddress = message_ipv4->destinationAddress;
-    pseudo.protocol = IP_UDP;
-    pseudo.udpLength = bswap16(udpSize);
+//     UDP_Pseudo_Header pseudo = {0};
+//     pseudo.sourceAddress = message_ipv4->sourceAddress;
+//     pseudo.destinationAddress = message_ipv4->destinationAddress;
+//     pseudo.protocol = IP_UDP;
+//     pseudo.udpLength = bswap16(udpSize);
 
-    message_udp->checksum = bswap16(~compute_internet_checksum(&pseudo, sizeof(UDP_Pseudo_Header)));
-    message_udp->checksum = bswap16(compute_internet_checksum(message_udp, udpSize));
+//     message_udp->checksum = bswap16(~compute_internet_checksum(&pseudo, sizeof(UDP_Pseudo_Header)));
+//     message_udp->checksum = bswap16(compute_internet_checksum(message_udp, udpSize));
 
-    NET_send_packet(device, message_buffer, packet_size);
-}
+//     NET_send_packet(device, message_buffer, packet_size);
+// }
 
 
 

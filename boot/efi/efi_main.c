@@ -541,7 +541,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     }
 
     // Comment out to disable network boot.
-    // init_network();
+    init_network();
 
 
     EFI_GUID acpi20 = ACPI_20_TABLE_GUID;
@@ -579,7 +579,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     }
     kernel_entry = kernel_address; // linker script for kernel (sections.ld) defines _start at beginning of kernel image.
 
-    // load_initrd();
+    load_initrd();
 
     boot_init_frame_buffer();
 

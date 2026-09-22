@@ -131,6 +131,8 @@ void send_arp(uint32_t address) {
     send_packet(g_send_buffer, packet_size);
 }
 
+static u32 latest_dhcp_xid;
+
 void send_dhcp_discover() {
     
     int dhcpSize = sizeof(DHCP_Header) +8 +1; // +8 because of options, +1 because option end
@@ -140,7 +142,9 @@ void send_dhcp_discover() {
 
     int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + udpSize;
 
-    construct_dhcp_discover(message_buffer, &packet_size, g_impl.mac);
+    latest_dhcp_xid = generate_dhcp_xid();
+
+    construct_dhcp_discover(message_buffer, &packet_size, g_impl.mac, latest_dhcp_xid);
 
     send_packet(message_buffer, packet_size);
 }
@@ -154,7 +158,7 @@ void send_dhcp_request(u32 request_address, u32 dhcp_server) {
     u8 message_buffer[sizeof(EtherFrame) + sizeof(IPV4_Header) + sizeof(UDP_Header) + sizeof(DHCP_Header) + 64] = {0};
     int packet_size = sizeof(EtherFrame) + sizeof(IPV4_Header) + udpSize;
 
-    construct_dhcp_request(message_buffer, &packet_size, g_impl.mac, request_address, dhcp_server);
+    construct_dhcp_request(message_buffer, &packet_size, g_impl.mac, request_address, dhcp_server, latest_dhcp_xid);
 
     send_packet(message_buffer, packet_size);
 }
