@@ -7,8 +7,9 @@ typedef enum {
 } MessageKind;
 
 typedef struct {
-    int id;
+    u32 id;
     float pos[3];
+    float rot[4];
 } PlayerLocation;
 
 typedef struct {

@@ -17,7 +17,7 @@ bool supper_load_font();
 
 void init_network();
 void network_send_updated_position();
-
+void network_handle_messages();
 Model* create_model();
 
 void render_entity(Entity* entity);
@@ -83,6 +83,10 @@ void game_loop() {
     session->entities_max = 100;
     session->entities_len = 0;
     session->entities = malloc(session->entities_max * sizeof(Entity));
+    
+    session->players_max = 20;
+    session->players_len = 0;
+    session->players = malloc(session->players_max * sizeof(Entity));
 
     g_model = create_model();
 
@@ -106,6 +110,7 @@ void game_loop() {
     g_entity = (Entity){ 0 };
     g_entity.model = g_model;
     g_entity.rot.W = 1;
+    g_entity.scale = 1;
 
     g_camera.pos = (HMM_Vec3){ { 0, 0, 5 } };
     g_camera.rot = (HMM_Vec3){ { 0, 0, 0 } };
@@ -179,12 +184,14 @@ void game_loop() {
 
         network_send_updated_position();
 
+        network_handle_messages();
+
         render_game();
 
         prism_presentSurface(g_surface);
         // sleep((1000/10)*1000000);
-        // sleep((1000/60)*1000000);
-        sleep((1000/30)*1000000);
+        sleep((1000/60)*1000000);
+        // sleep((1000/30)*1000000);
     }
 
 }
@@ -194,8 +201,8 @@ void game_loop() {
 void update_game() {
     SupperSession* session = &g_supperSession;
 
-    float speed = 0.04;
-    float rotSpeed = 0.03;
+    float speed = 0.13;
+    float rotSpeed = 0.069;
 
     if (heldKeys[ELOSKEY_LEFT_SHIFT]) {
         speed *= 2;
@@ -283,6 +290,13 @@ void render_game() {
 
     }
 
+    // @TODO Delete player if we didn't get a message for 5-10 seconds.
+    for (int i=0;i<session->players_len;i++) {
+        Entity* entity = &session->players[i];
+        render_entity(entity);
+
+    }
+
     
     // Entity entity = {0};
     // entity = (Entity){ 0 };
@@ -300,9 +314,13 @@ void render_entity(Entity* entity) {
 
     Model* model = entity->model;
 
-    HMM_Mat4 entityMatrix = HMM_QToM4(entity->rot);
+    HMM_Vec3 basePos = entity->pos;
+    HMM_Vec3 centerPos = HMM_V3(-entity->scale/2.0f, -entity->scale/2.0f, -entity->scale/2.0f);
+
+    HMM_Mat4 entityMatrix = HMM_Translate(basePos);
+    entityMatrix = HMM_MulM4(entityMatrix, HMM_QToM4(entity->rot));
+    entityMatrix = HMM_MulM4(entityMatrix, HMM_Translate(centerPos));
     entityMatrix = HMM_MulM4(entityMatrix, HMM_Scale((HMM_Vec3){{entity->scale,entity->scale,entity->scale}}));
-    entityMatrix = HMM_MulM4(entityMatrix, HMM_Translate(entity->pos));
 
     for (int i=0;i<model->triangles_len;i++) {
         Triangle3D triangle = model->triangles[i];
@@ -466,8 +484,9 @@ void init_network() {
     
     ELOS_Net_Address address = {0};
     address.protocol = ELOS_NET_PROTO_UDP_IPV4;
-    address.udp_tcp4.address = net_ipv4_from_str("127.0.0.1");
-    address.udp_tcp4.port    = 5001;
+    // address.udp_tcp4.address = net_ipv4_from_str("127.0.0.1");
+    address.udp_tcp4.address = 0;
+    address.udp_tcp4.port    = 5007;
     // snprintf(address.identifier, sizeof(address.identifier), "127.0.0.1:8080");
 
     ELOS_Error error = net_open(&address, &g_net_handle);
@@ -488,10 +507,30 @@ void network_send_updated_position() {
         return;
     }
 
-    ELOS_Net_Address address = {0};
-    address.protocol = ELOS_NET_PROTO_UDP_IPV4;
-    address.udp_tcp4.address = net_ipv4_from_str("10.1.4.54");
-    address.udp_tcp4.port    = 5002;
+    // @TODO Implement local network mode and online mode where we connect to public server.
+    // @TODO Implement DNS resolution.
+    u32 addresses[] = {
+        // net_ipv4_from_str("192.168.0.60"),
+        net_ipv4_from_str("192.168.0.2"),
+        net_ipv4_from_str("192.168.0.3"),
+    };
+
+    HMM_Quat pitch = HMM_QFromAxisAngle_RH(
+        HMM_V3(1.0f, 0.0f, 0.0f),
+        g_camera.rot.X
+    );
+
+    HMM_Quat yaw = HMM_QFromAxisAngle_RH(
+        HMM_V3(0.0f, 1.0f, 0.0f),
+        g_camera.rot.Y
+    );
+
+    HMM_Quat roll = HMM_QFromAxisAngle_RH(
+        HMM_V3(0.0f, 0.0f, 1.0f),
+        g_camera.rot.Z
+    );
+
+    HMM_Quat entity_rot = HMM_MulQ(yaw, HMM_MulQ(pitch, roll));
 
     char messageBuffer[512];
     MessageHeader* message = (void*)messageBuffer;
@@ -501,18 +540,108 @@ void network_send_updated_position() {
     message->location.locations[0].pos[0] = g_camera.pos.X;
     message->location.locations[0].pos[1] = g_camera.pos.Y;
     message->location.locations[0].pos[2] = g_camera.pos.Z;
-    
-    ELOS_Error error;
-    
-    error = net_write(g_net_handle, &address, message, sizeof(MessageHeader) + message->location.count * sizeof(PlayerLocation));
-    if (error != ELOS_OK) {
-        printf("net_write: Send pos %s\n", elos_error(error));
-    } else {
-        printf("net_write: Sent pos\n");
+    message->location.locations[0].rot[0] = entity_rot.X;
+    message->location.locations[0].rot[1] = entity_rot.Y;
+    message->location.locations[0].rot[2] = entity_rot.Z;
+    message->location.locations[0].rot[3] = entity_rot.W;
+
+
+    for (int i=0;i<sizeof(addresses)/sizeof(*addresses);i++) {
+        ELOS_Net_Address address = {0};
+        address.protocol = ELOS_NET_PROTO_UDP_IPV4;
+        address.udp_tcp4.address = addresses[i];
+        address.udp_tcp4.port    = 5007;
+
+        
+        ELOS_Error error;
+        
+        error = net_write(g_net_handle, &address, message, sizeof(MessageHeader) + message->location.count * sizeof(PlayerLocation));
+        if (error != ELOS_OK) {
+            // There should be one we can't send to?
+            // printf("net_write: Send pos %s\n", elos_error(error));
+        } else {
+            // printf("net_write: Sent pos\n");
+        }
     }
 }
 
+void network_handle_messages() {
+    SupperSession* session = &g_supperSession;
 
+    if (!g_net_handle) {
+        return;
+    }
+
+    ELOS_Error error;
+
+    while (1) {
+        ELOS_Net_Address address = {0};
+        char messageBuffer[512];
+        u32  bufferSize = sizeof(messageBuffer);
+        MessageHeader* message = (void*)messageBuffer;
+        
+        error = net_read(g_net_handle, &address, message, &bufferSize, 0);
+        if (error == ELOS_ERR_TIMEOUT) {
+            // no messages
+            break;
+        } else if (error != ELOS_OK) {
+            printf("net_read: Send pos %s\n", elos_error(error));
+        }
+
+        // printf("Message %d %d %d\n", message->kind, message->location.count, (int)(message->location.locations[0].pos[0]*10));
+
+        switch (message->kind) {
+            case MESSAGE_LOCATION: {
+                for (int i=0;i<message->location.count;i++) {
+                    PlayerLocation* loc = &message->location.locations[i];
+                    
+                    int foundIndex = -1;
+                    for (int ei=0;ei<session->players_len;ei++) {
+                        Entity* entity = &session->players[ei];
+
+                        if (entity->id == loc->id) {
+                            foundIndex = ei;
+                            break;
+                        }
+                    }
+                    
+                    Entity* entity = NULL;
+
+                    if (foundIndex != -1) {
+                        entity = &session->players[foundIndex];
+                    } else if (session->players_len < session->players_max) {
+                        entity = &session->players[session->players_len];
+                        session->players_len++;
+                        memset(entity, 0, sizeof(*entity));
+
+                        entity->rot.W = 1;
+                        entity->scale = 1;
+                        entity->model = g_model;
+                        entity->id = loc->id;
+                    }
+
+                    if (entity) {
+                        // @TODO Update color
+                        entity->pos.X = loc->pos[0];
+                        entity->pos.Y = loc->pos[1];
+                        entity->pos.Z = loc->pos[2];
+                        entity->rot.X = loc->rot[0];
+                        entity->rot.Y = loc->rot[1];
+                        entity->rot.Z = loc->rot[2];
+                        entity->rot.W = loc->rot[3];
+                    }
+                }
+            } break;
+            default: // skip
+        }
+
+        // printf("Got POS %d %d %d\n",
+        //     (int)(message->location.locations[0].pos[0]*10),
+        //     (int)(message->location.locations[0].pos[1]*10),
+        //     (int)(message->location.locations[0].pos[2]*10)
+        //     );
+    }
+}
 
 static void* font_allocator(Allocator* allocator, u64 size, void* old_ptr) {
     return realloc(old_ptr, size);

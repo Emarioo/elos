@@ -140,7 +140,7 @@ bool fetch_mac_from_address(u32 address, NET_Device** out_device, u8 out_mac[6])
 
     u64 tickStart = CPU_ticks();
     u64 tps = CPU_ticks_per_second();
-    u64 timeout_tick = tickStart + tps / 10;
+    u64 timeout_tick = tickStart + tps / 100;
 
     u32 prev_version = arpTableVersion;
 

@@ -46,6 +46,8 @@ def main():
     clean     = False
     netboot   = False
 
+    second_qemu = False
+
     argi = 1
     while argi < len(sys.argv):
         arg = sys.argv[argi]
@@ -79,6 +81,8 @@ def main():
             install = True
         elif arg == "netboot":
             netboot = True
+        elif arg == "second":
+            second_qemu = True
         else:
             print(f"Unknown argument '{arg}'")
             exit(1)
@@ -137,12 +141,26 @@ def main():
     if netboot:
         cmd(f"{netboot_server_bin}")
 
-    elif run:
+    elif run or second_qemu:
         # TODO: DON'T HARDCODE PATHS
         OVMF_FD = "extern/ovmf/OVMF.fd"
 
         DISK_IMG = "int/disk.img"
         # # if not os.path.exists(DISK_IMG):
+
+        log_file   = "bin/kernel.log"
+        img_file   = "bin/elos.img"
+        tap_device = "tap0"
+        net_name   = "net0"
+        mac = "52:54:00:12:34:56"
+        if second_qemu:
+            tap_device = "tap1"
+            new_img_file = "bin/elos1.img"
+            shutil.copy(img_file, new_img_file)
+            img_file = new_img_file
+            log_file = "bin/kernel1.log"
+            net_name   = "net1"
+            mac = "10:20:30:30:20:10"
             
         # DEPS_SPEC: list[tuple[str,str]] = [
         #     ("scripts/disk_fs/*", ""),
@@ -157,9 +175,8 @@ def main():
             -enable-kvm -cpu host
             -bios {OVMF_FD}
             -machine pc                # PS/2 keyboard input
-            -serial file:bin/kernel.log 
-            -s 
-            {"-S " if gdb else ""}
+            -serial file:{log_file}
+            {"-s -S " if gdb else ""}
             -smp {core_count}
 
             -device ahci,id=ahci
@@ -179,9 +196,9 @@ def main():
             '''
         if HAS_TAP:
             qemu_flags += f'''
-            -device e1000e,netdev=net0  # e1000 ~= intel 8254x, e1000e ~= intel 82574L
-            #-netdev tap,id=net0,ifname=tap0,script=no,downscript=no
-            -netdev user,id=net0
+            -device e1000e,netdev={net_name},mac={mac}  # e1000 ~= intel 8254x, e1000e ~= intel 82574L
+            -netdev tap,id={net_name},ifname={tap_device},script=no,downscript=no
+            #-netdev user,id={net_name}
             '''
 
         # @NOTE Not sure what these flags do but seems useful/important
@@ -191,7 +208,7 @@ def main():
 
         if not iso:
             qemu_flags += f'''
-                -drive file=bin/elos.img,if=none,id=disk0,format=raw
+                -drive file={img_file},if=none,id=disk0,format=raw
                 -device ide-hd,drive=disk0,bus=ahci.0
             '''
         else:

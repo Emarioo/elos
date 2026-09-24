@@ -127,17 +127,42 @@ bool find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
 
         if (device->info.ipv4_gateway == 0) {
             // DHCP failed, could not determine gateway.
+            // Some crude Automatic Private IP Addressing if DHCP is unavailable.
 
-            // @TODO Automatic Private IP Addressing if DHCP is unavailable.
-            //   We currently use fixed address. We should check
-            //   if anyone has the address already and pick a free one.
-            const char* static_ip = "192.168.0.47"; // @NOCHECKIN Don't use this.
-            // const char* static_ip = "169.254.0.1";
-            device->info.ipv4_address     = ipv4_from_str(static_ip); 
+            const char* static_ip = "192.168.0.2"; // @NOCHECKIN Don't use this.
+            u32 base_address = ipv4_from_str(static_ip);
+            u32 try_count = 250;
+            u32 index = 0;
+
+            u32 address_candidate;
+            while (index < try_count) {
+                address_candidate = base_address + (index << 24);
+                
+                NET_send_arp(device, address_candidate);
+                CPU_spin_sleep(100 * 1000000); // 1 ms
+
+                u8 mac[6];
+                NET_Device* dev;
+                bool found = find_mac(address_candidate, &dev, mac);
+                if (!found) {
+                    // printf("Is free 0x%x\n", address_candidate);
+                    // Pick the free address
+
+                    // @TODO We should wait a little and send ARP again in case
+                    //   we we're unlucky and sent ARP at similar time as another computer
+                    //   where both pick the same address.
+                    break;
+                }
+                // printf("Not free 0x%x\n", address_candidate);
+                index++;
+            }
+
+            device->info.ipv4_address     = address_candidate;
             device->info.ipv4_subnet_mask = ipv4_from_str("255.255.0.0");
             device->info.ipv4_gateway     = 0; // no gateway
 
-            printf("Using Automatic Private IP Addressing: %s\n", static_ip);
+            char buf0[20];
+            printf("Using Automatic Private IP Addressing: %s\n", ipv4_int_str(device->info.ipv4_address, buf0));
         }
     }
     
@@ -569,6 +594,7 @@ bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
                         UNLOCK_INT(&g_net_lock);
                         goto exit;
                     }
+                    // printf("Queuing %d\n", udp->destinationPort);
 
 
                     NET_PortMessage* portMessage = PMEM_alloc(sizeof(NET_PortMessage));
@@ -584,11 +610,17 @@ bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
                     portMessage->data               = body;
                     portMessage->data_len           = body_size;
 
-                    portMessage->nextMessage        = foundHandle->nextMessage;
-                    foundHandle->nextMessage        = portMessage; // Set in handle last when message is complete
+                    if (!foundHandle->firstMessage) {
+                        foundHandle->firstMessage = portMessage;
+                        foundHandle->lastMessage = portMessage;
+                    } else {
+                        // @TODO Limit amount of messages we can have queued.
+                        foundHandle->lastMessage->nextMessage = portMessage;
+                        foundHandle->lastMessage = portMessage;
+                    }
 
                     // foundHandle->packetVersion++;
-
+                    consumedPacket = true;
                     UNLOCK_INT(&g_net_lock);
 
                     // if (!memcmp(body, "ism", 3)) {
@@ -776,12 +808,12 @@ ELOS_Error NET_read(NET_Handle* handle, ELOS_Net_Address* address, void* buffer,
     // @TODO Better sleep and rescheduling.
     while (true) {
 
-        if (handle->nextMessage) {
+        if (handle->firstMessage) {
 
             LOCK_INT(&g_net_lock);
             
-            if (handle->nextMessage) {
-                NET_PortMessage* message = handle->nextMessage;
+            if (handle->firstMessage) {
+                NET_PortMessage* message = handle->firstMessage;
 
                 address->protocol = handle->address.protocol;
                 address->udp_tcp4.address = message->sourceAddress;
@@ -790,7 +822,13 @@ ELOS_Error NET_read(NET_Handle* handle, ELOS_Net_Address* address, void* buffer,
                 if (*bufferSize >= message->data_len) {
                     memcpy(buffer, message->data, message->data_len);
                     *bufferSize = message->data_len;
-                    handle->nextMessage = message->nextMessage;
+                    if (!message->nextMessage) {
+                        handle->firstMessage = NULL;
+                        handle->lastMessage = NULL;
+                    } else {
+                        handle->firstMessage = message->nextMessage;
+                    }
+                    NET_free_packet(&message->rawPacket);
                     PMEM_free(message);
                     UNLOCK_INT(&g_net_lock);
                     returnValue = ELOS_OK;

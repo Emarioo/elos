@@ -20,6 +20,9 @@ extern int        g_devices_max;
 
 bool net_handle_packet(NET_Device* device, NET_Packet* packet);
 
+
+bool find_mac(u32 address, NET_Device** device, u8 mac[6]);
+
 bool fetch_mac_from_address(u32 address, NET_Device** out_device, u8 out_mac[6]);
 
 void arp_update_table(u32 address, NET_Device* device, u8 mac[6]);

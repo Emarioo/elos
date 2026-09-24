@@ -46,6 +46,8 @@ typedef struct {
     HMM_Quat rot;
     Model*   model;
     float    scale;
+
+    u32      id;
 } Entity;
 
 /*
@@ -55,6 +57,10 @@ typedef struct {
     Entity* entities;
     int     entities_max;
     int     entities_len;
+
+    Entity* players;
+    int     players_max;
+    int     players_len;
 } SupperSession;
 
 

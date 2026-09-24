@@ -3,7 +3,7 @@ My attempt at kernel/OS development
 This project only builds on Linux (Linux has good tools for kernel development).
 Personally I use NixOS and Windows Subsystem for Linux.
 
-**DOOM in ELOS (a little buggy, work in progress)**
+**DOOM in ELOS**
 
 When building ELOS run `scripts/install_doom.sh` to clone and prepare DOOM repos. `build.py` will build and include DOOM if the repos are present.
 
@@ -13,8 +13,8 @@ When building ELOS run `scripts/install_doom.sh` to clone and prepare DOOM repos
 **Editor in ELOS**
 ![](docs/img/editor_in_elos.png)
 
-**Software rendered cubes**
-![](docs/img/cube3d.png)
+**Software rendered cubes and networking**
+![](docs/img/cube_net.png)
 
 
 # Building
@@ -43,8 +43,6 @@ gdb
 ```
 
 # What can you do
-
-First there is no deception here. Everything is buggy and unfinished.
 
 User-wise there is very little to do except play DOOM. Editing some text perhaps but the files are overwritten when you reboot or rebuild. The following programs exist:
 

@@ -76,7 +76,8 @@ struct NET_Device {
 typedef struct {
     bool             used;
     ELOS_Net_Address address;
-    NET_PortMessage* volatile nextMessage;
+    NET_PortMessage* volatile firstMessage;
+    NET_PortMessage* volatile lastMessage;
 } NET_Handle;
 
 // typedef bool(*FN_NET_recv_packet)(NET_Device* device, NET_Packet* packet, void* user_data);
