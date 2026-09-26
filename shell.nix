@@ -9,6 +9,8 @@ pkgs.mkShell {
   buildInputs = with pkgs; [
     pkgsCross.mingwW64.buildPackages.gcc
     pkgsCross.mingwW64.buildPackages.binutils
+    pkgsCross.mingw32.buildPackages.gcc
+    pkgsCross.mingw32.buildPackages.binutils
     
     # It seems like NixOS has to build these, takes about 20-30 min
     # on my laptop which isn't great. Any alternative approach?
@@ -22,3 +24,4 @@ pkgs.mkShell {
     export PATH="$PATH:${../mkgpt}"
   '';
 }
+# i686-w64-mingw32-gcc

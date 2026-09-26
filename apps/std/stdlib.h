@@ -23,6 +23,7 @@ static inline int abs(int x) {
 }
 
 void exit(int code);
+int system(const char* command);
 
 int puts(const char *s);
 int putchar(int c);

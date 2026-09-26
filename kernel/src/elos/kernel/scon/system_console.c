@@ -311,8 +311,16 @@ void send_command(cstring text) {
 
         char* message = 
             "Commands:\n"
-            "   cd ls             (you know what these do, flags not supported)\n"
-            "   doom slate prism  (programs to start, killed if already exists)\n"
+            "   cd ls             (flags not supported)\n"
+            "   mount             (prints mount points)\n"
+            "   start <path>      (start a program, e.g. /pkg/doom/doom.elf)\n"
+            "   kill <name>       (stop a program, e.g. doom)\n"
+            "   doom slate prism  (shorthand)\n"
+            "   sound             (play sound)\n"
+            "   sound             (play sound)\n"
+            "\n"
+            "Do not kill prism. The service endpoint cannot be\n"
+            "  reclaimed and OS must be restarted\n"
         ;
 
         respond_message((cstring){ .ptr = message, .len = strlen(message) });
@@ -388,6 +396,12 @@ void send_command(cstring text) {
     } else if (!strcmp(text.ptr, "supper")) {
         EXEC_kill("supper");
         EXEC_create_user_thread("/pkg/supper/supper.elf", -1);
+    } else if (!strncmp(text.ptr, "kill ", 5)) {
+        const char* program = text.ptr + 5;
+        EXEC_kill(program);
+    } else if (!strncmp(text.ptr, "start ", 6)) {
+        const char* program = text.ptr + 6;
+        EXEC_create_user_thread(program, -1);
     } else if (!strcmp(text.ptr, "mount")) {
         VFS_dump_mounts(printCallback, NULL);
     } else if (!strcmp(text.ptr, "sound")) {
