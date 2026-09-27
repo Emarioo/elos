@@ -103,7 +103,7 @@ exit:
 }
 
 
-bool VFS_mount(const char* _cpath, DiskDevice device, int partitionIndex) {
+bool VFS_mount(const char* _cpath, DiskDevice* device, int partitionIndex) {
     bool returnValue = false;
     LOCK_INT(&g_vfs_lock);
 

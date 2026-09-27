@@ -168,14 +168,14 @@ void kernel_entry(BootAPI* in_boot_api) {
 
     DISK_init(boot_api);
 
-    DiskDevice diskDevices[8];
+    DiskDevice* diskDevices[8];
     int diskDevices_len = ARRAY_LENGTH(diskDevices);
 
     DISK_scan_devices(diskDevices, &diskDevices_len);
     KCON_printf("Disk devices: %d\n", diskDevices_len);
 
     for (int i=0;i<diskDevices_len;i++) {
-        DiskDevice dev = diskDevices[i];
+        DiskDevice* dev = diskDevices[i];
         DiskInfo diskInfo = {0};
         DISK_get_info(dev, &diskInfo);
 

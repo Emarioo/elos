@@ -146,7 +146,10 @@ def main():
         OVMF_FD = "extern/ovmf/OVMF.fd"
 
         DISK_IMG = "int/disk.img"
+        DISK_NVME_IMG = "int/disk_nvme.img"
         # # if not os.path.exists(DISK_IMG):
+
+        HAS_NVME = True
 
         log_file   = "bin/kernel.log"
         img_file   = "bin/elos.img"
@@ -167,9 +170,13 @@ def main():
         # ]
         # make_gpt(DISK_IMG, DEPS_SPEC)
 
-            # cmd(f"qemu-img create -f raw {DISK_IMG} 64M")
+        if HAS_NVME and not os.path.exists(DISK_NVME_IMG):
+            cmd(f"qemu-img create -f raw {DISK_NVME_IMG} 64M")
             # cmd(f"gcc scripts/fwrite.c -g -o int/fwrite && int/fwrite {DISK_IMG}")
-        HAS_AUDIO = True
+        
+        HAS_AUDIO = False
+        # HAS_AUDIO = True
+
         core_count = 2
         qemu_flags = f'''
             -enable-kvm -cpu host
@@ -188,6 +195,11 @@ def main():
             # -device ide-hd,drive=disk1,bus=ahci.1
             # -nographic
         '''
+        if HAS_NVME:
+            qemu_flags += f'''
+            -drive  file={DISK_NVME_IMG},if=none,id=nvm1,format=raw
+            -device nvme,serial=deadbeef,drive=nvm1
+            '''
         if HAS_AUDIO:
             qemu_flags += f'''
             -device intel-hda #,debug=4

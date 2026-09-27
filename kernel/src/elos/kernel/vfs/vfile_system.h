@@ -21,10 +21,10 @@ struct VFS_Mount {
     char name[63]; // 62 is maximum which seems reasonable: "/boot/dajioda/jjeajoeo/andaaod/jöamödanld/aenlajepajepajepajeF"
     u8   name_len;
     
-    DiskDevice diskDevice;
-    int        partitionIndex;
-    u64        start_lba;
-    u64        end_lba;
+    DiskDevice* diskDevice;
+    int         partitionIndex;
+    u64         start_lba;
+    u64         end_lba;
 
     FileSystemKind fileSystemKind;
 };

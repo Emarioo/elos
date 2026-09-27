@@ -15,13 +15,9 @@ typedef enum {
     DISK_TYPE_NVME,
 } DiskDeviceType;
 
-typedef struct {
-    DiskDevice* devices;
-    int maxCount;
-    int count;
-} ScanInfo;
+typedef struct NVME_Context NVME_Context;
 
-typedef struct {
+struct DiskDevice {
     DiskDeviceType type;
     DiskInfo diskInfo;
 
@@ -38,14 +34,17 @@ typedef struct {
         } sata;
         struct {
             PCI_ConfigSpace configSpace;
-            HBA_MEM*  abar;
-            HBA_PORT* port;
-            int       portNo;
+            NVME_Context*   nvme_context;
         } nvme;
     };
+};
 
-} DiskDevice_impl;
+typedef struct {
+    DiskDevice** devices;
+    int maxCount;
+    int count;
+} ScanInfo;
 
 
 #define MAX_DISK_DEVICES 8
-extern DiskDevice_impl impl_diskDevices[MAX_DISK_DEVICES];
+extern DiskDevice g_diskDevices[MAX_DISK_DEVICES];

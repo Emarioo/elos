@@ -40,7 +40,7 @@ typedef void* VFS_Handle;
 //###############################
 
 
-bool VFS_mount(const char* path, DiskDevice device, int partitionIndex);
+bool VFS_mount(const char* path, DiskDevice* device, int partitionIndex);
 bool VFS_mkdir(const char* path);
 /*
     If targeted path is a mount then it is unmounted.

@@ -12,7 +12,7 @@
 #define printf(...) KCON_printf(__VA_ARGS__)
 
 
-bool gpt_find_partition(DiskDevice device, int partitionIndex, u64* start_lba, u64* end_lba) {
+bool gpt_find_partition(DiskDevice* device, int partitionIndex, u64* start_lba, u64* end_lba) {
     bool res;
 
     u64 sectorSize = 512;

@@ -32,7 +32,7 @@ typedef struct {
 
     u64 start_lba;
     u64 end_lba;
-    DiskDevice device;
+    DiskDevice* device;
 
     char _bootSector[512];
 

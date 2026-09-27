@@ -53,5 +53,5 @@ typedef struct gpt__Partition {
 
 
 
-bool gpt_find_partition(DiskDevice device, int partitionIndex, u64* start_lba, u64* end_lba);
+bool gpt_find_partition(DiskDevice* device, int partitionIndex, u64* start_lba, u64* end_lba);
 

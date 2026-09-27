@@ -45,11 +45,11 @@ void dump_port(HBA_PORT* port) {
 
 bool ahci_identify(HBA_PORT *port, void* buffer);
 
-DiskDevice_impl* reserve_device(ScanInfo* scanInfo) {
-    DiskDevice_impl* device = NULL;
+DiskDevice* reserve_device(ScanInfo* scanInfo) {
+    DiskDevice* device = NULL;
     for (int i=0;i<MAX_DISK_DEVICES;i++) {
-        if (impl_diskDevices[i].type == DISK_TYPE_NONE) {
-            device = &impl_diskDevices[i];
+        if (g_diskDevices[i].type == DISK_TYPE_NONE) {
+            device = &g_diskDevices[i];
             break;
         }
     }
@@ -127,7 +127,7 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
     */
 
 
-    DiskDevice_impl* diskDevices[32];
+    DiskDevice* diskDevices[32];
     int diskDevices_len = 0;
 
     u32 pi = abar->pi;
@@ -141,7 +141,7 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
         if (pi & (1 << i)) {
             int dt = check_type(&abar->ports[i]);
             if (dt == AHCI_DEV_SATA) {
-                DiskDevice_impl* dev = reserve_device(scanInfo);
+                DiskDevice* dev = reserve_device(scanInfo);
                 if (!dev) {
                     // No more room
                     stopSearching = true;
@@ -178,7 +178,7 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
     */
 
     for (int i = 0; i < diskDevices_len; i++) {
-        DiskDevice_impl* dev = diskDevices[i];
+        DiskDevice* dev = diskDevices[i];
         bool res = port_rebase(dev->sata.port);
         if (!res) {
             dev->type = DISK_TYPE_NONE;
@@ -196,7 +196,7 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
     void* phys_buffer = PMEM_virt_to_phys(g_kernelPageTable, buffer);  // In case buffer isn't identity mapped to physical page.
 
     for (int i = 0; i < diskDevices_len; i++) {
-        DiskDevice_impl* dev = diskDevices[i];
+        DiskDevice* dev = diskDevices[i];
 
         // Can this command write more than 512 bytes?
         // If it happens we ruin the stack.
@@ -262,14 +262,14 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
 
     
     for (int i = 0; i < diskDevices_len; i++) {
-        DiskDevice_impl* dev = diskDevices[i];
+        DiskDevice* dev = diskDevices[i];
 
         if (scanInfo->count >= scanInfo->maxCount) {
             // @TODO Free and cleanup PORT.
             dev->type = DISK_TYPE_NONE;
             continue;
         }
-        scanInfo->devices[scanInfo->count] = (DiskDevice)dev;
+        scanInfo->devices[scanInfo->count] = dev;
         scanInfo->count++;
     }
 
@@ -501,7 +501,7 @@ bool ahci_identify(HBA_PORT *port, void* buffer) {
     return true;
 }
 
-bool ahci_read(DiskDevice_impl* device, u64 byteOffset, u64 byteSize, void* buffer) {
+bool ahci_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
     HBA_PORT *port = device->sata.port;
     int sectorSize = device->diskInfo.blockSize;
 
@@ -602,7 +602,7 @@ bool ahci_read(DiskDevice_impl* device, u64 byteOffset, u64 byteSize, void* buff
 }
 
 
-bool ahci_write(DiskDevice_impl* device, u64 byteOffset, u64 byteSize, void* buffer) {
+bool ahci_write(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
     HBA_PORT *port = device->sata.port;
     int sectorSize = device->diskInfo.blockSize;
 

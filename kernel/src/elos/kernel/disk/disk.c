@@ -1,20 +1,24 @@
 #include "elos/disk.h"
 
+#include "elos/common/string.h"
+#include "elos/common/intrinsics.h"
+
 #include "elos/kernel_console.h"
 
 #include "elos/kernel/driver/pci.h"
 #include "elos/kernel/driver/pci_list.h"
 
-#include "elos/common/string.h"
-#include "elos/common/intrinsics.h"
-
 #include "elos/kernel/disk/disk_internal.h"
 #include "elos/kernel/disk/ahci.h"
+#include "elos/kernel/disk/nvme.h"
 
 
-DiskDevice_impl impl_diskDevices[MAX_DISK_DEVICES];
+DiskDevice g_diskDevices[MAX_DISK_DEVICES];
 
 #define printf(...) KCON_printf(__VA_ARGS__)
+
+
+DiskDevice* DISK_reserve_device();
 
 
 static void* g_initrd;
@@ -38,35 +42,28 @@ bool DISK_find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
         
         return ahci_scan(scanInfo, config);
 
-    // } else if (config->subclass == PCI_SUBCLASS__NON_VOLATILE_MEMORY_CONTROLLER && config->progIF == 0x2) { // NVM Express
-   
-    //     if (scanInfo->count >= scanInfo->maxCount) {
-    //         // Stop searching, no more room.
-    //         return true;
-    //     }
+    } else if (config->subclass == PCI_SUBCLASS__NON_VOLATILE_MEMORY_CONTROLLER) {
 
-    //     DiskDevice_impl* device = NULL;
-    //     for (int i=0;i<MAX_DISK_DEVICES;i++) {
-    //         if (impl_diskDevices[i].type == DISK_TYPE_NONE) {
-    //             device = &impl_diskDevices[i];
-    //             break;
-    //         }
-    //     }
-    //     if (!device) {
-    //         printf("[WARNING] Reached Disk Device limit (%d).\n", MAX_DISK_DEVICES);
-    //         // Stop searching, no more room.
-    //         return true;
-    //     }
+        // @TODO check config->progIF == 0x2 ?
+
+        DiskDevice* device = DISK_reserve_device();
+        if (!device) {
+            // no more disk devices to reserve.
+            return true;
+        }
+        device->type = DISK_TYPE_NVME;
+        device->nvme.configSpace = *config;
+
+        bool result = nvme_init(device);
 
 
-    //     device->type = DISK_TYPE_NVME;
-    //     device->nvme.configSpace = *config;
+        if (result && scanInfo->count < scanInfo->maxCount) {
+            scanInfo->devices[scanInfo->count] = device;
+            scanInfo->count++;
+        } else {
+            // @TODO Unreserve device.
+        }
 
-    //     scanInfo->devices[scanInfo->count] = (DiskDevice)device;
-    //     scanInfo->count++;
-
-        // nvme_init(device);
-   
     } else {
         return false;
     }
@@ -76,11 +73,11 @@ bool DISK_find_device(PCI_Scanner* scanner, PCI_ConfigSpace* config) {
     return false;
 }
   
-DiskDevice_impl* DISK_reserve_device() {
-    DiskDevice_impl* device = NULL;
+DiskDevice* DISK_reserve_device() {
+    DiskDevice* device = NULL;
     for (int i=0;i<MAX_DISK_DEVICES;i++) {
-        if (impl_diskDevices[i].type == DISK_TYPE_NONE) {
-            device = &impl_diskDevices[i];
+        if (g_diskDevices[i].type == DISK_TYPE_NONE) {
+            device = &g_diskDevices[i];
             break;
         }
     }
@@ -92,7 +89,7 @@ DiskDevice_impl* DISK_reserve_device() {
     return device;
 }
 
-void DISK_scan_devices(DiskDevice* devices, int* count) {
+void DISK_scan_devices(DiskDevice** devices, int* count) {
     ScanInfo scanInfo = {
         .devices = devices,
         .maxCount = *count,
@@ -102,7 +99,7 @@ void DISK_scan_devices(DiskDevice* devices, int* count) {
     scanner.user_data = (void*)&scanInfo;
 
     if (g_initrd) {
-        DiskDevice_impl* dev = DISK_reserve_device();
+        DiskDevice* dev = DISK_reserve_device();
 
         dev->type = DISK_TYPE_RAM;
         dev->ram.data = g_initrd;
@@ -111,7 +108,7 @@ void DISK_scan_devices(DiskDevice* devices, int* count) {
         dev->diskInfo.diskSize = g_initrd_size;
         dev->diskInfo.blockSize = 512; // Hardcoding this might cause problems.
 
-        scanInfo.devices[scanInfo.count] = (DiskDevice)dev;
+        scanInfo.devices[scanInfo.count] = dev;
         scanInfo.count++;
     }
 
@@ -120,13 +117,11 @@ void DISK_scan_devices(DiskDevice* devices, int* count) {
     *count = scanInfo.count;
 }
 
-void DISK_get_info(DiskDevice _device, DiskInfo* info) {
-    DiskDevice_impl* device = (DiskDevice_impl*)_device;
+void DISK_get_info(DiskDevice* device, DiskInfo* info) {
     memcpy(info, &device->diskInfo, sizeof(*info));
 }
 
-bool DISK_write(DiskDevice _device, u64 offset, u64 size, void* buffer) {
-    DiskDevice_impl* device = (DiskDevice_impl*)_device;
+bool DISK_write(DiskDevice* device, u64 offset, u64 size, void* buffer) {
 
     switch (device->type) {
         case DISK_TYPE_RAM: {
@@ -146,6 +141,13 @@ bool DISK_write(DiskDevice _device, u64 offset, u64 size, void* buffer) {
                 return false;
             }
         } break;
+        case DISK_TYPE_NVME: {
+            bool res = nvme_write(device, offset, size, buffer);
+            if (!res) {
+                printf("DISK_write: Could not read (%x, %d) from %s\n", offset, size, device->diskInfo.name);
+                return false;
+            }
+        } break;
         default: {
             printf("DISK_write: type %d not implemented\n", device->type);
             return false;
@@ -154,8 +156,7 @@ bool DISK_write(DiskDevice _device, u64 offset, u64 size, void* buffer) {
     return true;
 }
 
-bool DISK_read(DiskDevice _device, u64 offset, u64 size, void* buffer) {
-    DiskDevice_impl* device = (DiskDevice_impl*)_device;
+bool DISK_read(DiskDevice* device, u64 offset, u64 size, void* buffer) {
 
     switch (device->type) {
         case DISK_TYPE_RAM: {
@@ -175,6 +176,13 @@ bool DISK_read(DiskDevice _device, u64 offset, u64 size, void* buffer) {
                 return false;
             }
         } break;
+        case DISK_TYPE_NVME: {
+            bool res = nvme_read(device, offset, size, buffer);
+            if (!res) {
+                printf("DISK_read: Could not read (%x, %d) from %s\n", offset, size, device->diskInfo.name);
+                return false;
+            }
+        } break;
         default: {
             printf("DISK_read: type %d not implemented\n", device->type);
             return false;
@@ -183,7 +191,7 @@ bool DISK_read(DiskDevice _device, u64 offset, u64 size, void* buffer) {
     return true;
 }
 
-void DISK_flush(DiskDevice device) {
+void DISK_flush(DiskDevice* device) {
     // @TODO Implement
 }
 
