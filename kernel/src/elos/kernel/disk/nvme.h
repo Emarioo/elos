@@ -87,6 +87,9 @@ struct NVME_Context {
     u32 submission_tail;
     u32 completion_head;
 
+    u32 io_submission_tail;
+    u32 io_completion_head;
+
     NVME_Queue asq;
     NVME_Queue acq;
 
@@ -97,4 +100,4 @@ struct NVME_Context {
 
 bool nvme_init(DiskDevice* device);
 bool nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer);
-bool nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer);
+bool nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* buffer);

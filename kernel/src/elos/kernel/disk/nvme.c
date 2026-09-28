@@ -48,6 +48,7 @@ bool nvme_init(DiskDevice* device) {
     NVME_Context* context = PMEM_alloc(PAGE_SIZE);
     memset(context, 0, sizeof(*context));
     context->regs = regs;
+    device->nvme.nvme_context = context;
 
     u32 majorVersion = (regs->VS >> 16) & 0xFFFF;
     u32 minorVersion = (regs->VS >> 8) & 0xFF;
@@ -144,38 +145,40 @@ bool nvme_init(DiskDevice* device) {
     }
 
 
-    return false;
+    return true;
 }
 
 bool nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
     
+    u32 queue_identifier = 1;
+
     NVME_Context* context = device->nvme.nvme_context;
 
-    NVME_SubmissionQueueEntry* entry = (void*)(context->io_sq.address + context->submission_tail * sizeof(NVME_SubmissionQueueEntry));
+    NVME_SubmissionQueueEntry* entry = (void*)(context->io_sq.address + context->io_submission_tail * sizeof(NVME_SubmissionQueueEntry));
     memset(entry, 0, sizeof(*entry));
 
     // @TODO Handle alignment on the buffer?
-    // We read a block at a time.
-    // If we specified less then we need temporary buffer.
+    //   We read a block at a time.
+    //   If we specified less, then we need temporary buffer.
 
-    u64 blockSize = 4096;
-    u64 lba = byteOffset / blockSize; 
-    u64 num_blocks = byteSize / blockSize; 
+    u64 lba = byteOffset / context->blockSize;
+    u64 num_blocks = byteSize / context->blockSize;
 
     entry->command = NVME_CMD_READ;
     entry->data_pointer[0] = (u64)buffer;
     entry->body[0] = lba;
     entry->body[1] = lba >> 32;
     entry->body[3] = num_blocks;
+    entry->nsid = context->first_nsid;
 
-    context->submission_tail++;
-    write_submission_tail(context, 0, context->submission_tail);
+    context->io_submission_tail++;
+    write_submission_tail(context, queue_identifier, context->io_submission_tail);
     // @NOCHECKIN Is this correct?
-    if (context->submission_tail == context->asq.size + 1) {
-        context->submission_tail = 0;
+    if (context->io_submission_tail == context->io_sq.size + 1) {
+        context->io_submission_tail = 0;
     }
 
-    NVME_CompletionQueueEntry* completion = (void*)(context->io_cq.address + context->completion_head * sizeof(NVME_CompletionQueueEntry));
+    NVME_CompletionQueueEntry* completion = (void*)(context->io_cq.address + context->io_completion_head * sizeof(NVME_CompletionQueueEntry));
 
     // printf("Waiting for nvme cqe phase bit...\n");
     while (1) {
@@ -191,21 +194,82 @@ bool nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
         // printf("  command_id %d\n", completion->command_identifier);
         // printf("  status 0x%x\n", completion->status);
 
-        context->completion_head++;
-        write_completion_head(context, 0, context->completion_head);
-        if (context->completion_head == context->asq.size + 1) {
-            context->completion_head = 0;
+        context->io_completion_head++;
+        write_completion_head(context, queue_identifier, context->io_completion_head);
+        if (context->io_completion_head == context->io_sq.size + 1) {
+            context->io_completion_head = 0;
         }
 
         break;
     }
+    int status = completion->status >> 1;
+    if (status != 0) {
+        printf("nvme: could not read %d %x\n", status, status);
+    }
 
-
-    return true;   
+    return status == 0;
 }
 
-bool nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
-    return false;
+bool nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* buffer) {
+    
+    u32 queue_identifier = 1;
+
+    NVME_Context* context = device->nvme.nvme_context;
+
+    NVME_SubmissionQueueEntry* entry = (void*)(context->io_sq.address + context->io_submission_tail * sizeof(NVME_SubmissionQueueEntry));
+    memset(entry, 0, sizeof(*entry));
+
+    // @TODO Handle alignment on the buffer?
+    //   We read a block at a time.
+    //   If we specified less, then we need temporary buffer.
+
+    u64 lba = byteOffset / context->blockSize;
+    u64 num_blocks = byteSize / context->blockSize;
+
+    entry->command = NVME_CMD_WRITE;
+    entry->data_pointer[0] = (u64)buffer;
+    entry->body[0] = lba;
+    entry->body[1] = lba >> 32;
+    entry->body[3] = num_blocks;
+    entry->nsid = context->first_nsid;
+
+    context->io_submission_tail++;
+    write_submission_tail(context, queue_identifier, context->io_submission_tail);
+    // @NOCHECKIN Is this correct?
+    if (context->io_submission_tail == context->io_sq.size + 1) {
+        context->io_submission_tail = 0;
+    }
+
+    NVME_CompletionQueueEntry* completion = (void*)(context->io_cq.address + context->io_completion_head * sizeof(NVME_CompletionQueueEntry));
+
+    // printf("Waiting for nvme cqe phase bit...\n");
+    while (1) {
+        int phaseBit = NVME_HAS_PHASE_BIT(completion->status);
+        if (!phaseBit) {
+            continue;
+        }
+
+        // printf("Completed.\n");
+        // printf("  command 0x%x\n", completion->command);
+        // printf("  submission_q_head %d\n", completion->submission_queue_head_pointer);
+        // printf("  submission_q_id %d\n", completion->submission_queue_identifier);
+        // printf("  command_id %d\n", completion->command_identifier);
+        // printf("  status 0x%x\n", completion->status);
+
+        context->io_completion_head++;
+        write_completion_head(context, queue_identifier, context->io_completion_head);
+        if (context->io_completion_head == context->io_sq.size + 1) {
+            context->io_completion_head = 0;
+        }
+
+        break;
+    }
+    int status = completion->status >> 1;
+    if (status != 0) {
+        printf("nvme: could not read %d %x\n", status, status);
+    }
+
+    return status == 0;
 }
 
 
@@ -403,22 +467,8 @@ bool send_identify(NVME_Context* context, DiskDevice* device) {
             return false;
         }
 
-        printf("");
-
-        u32* nsids = (u32*)identify_data;
-        int index = 0;
-        while (1) {
-            u32 nsid = nsids[index];
-            if (nsid == 0) {
-                break;
-            }
-            printf("Namespace %d\n", nsid);
-            index++;
-
-            if (!context->first_nsid) {
-                context->first_nsid = nsid;
-            }
-        }
+        context->blockSize = 1 << LBADS;
+        // printf("Block Size %d\n", context->blockSize);
     }
 
     return true;

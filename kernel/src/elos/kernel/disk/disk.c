@@ -137,14 +137,14 @@ bool DISK_write(DiskDevice* device, u64 offset, u64 size, void* buffer) {
         case DISK_TYPE_SATA: {
             bool res = ahci_write(device, offset, size, buffer);
             if (!res) {
-                printf("DISK_write: Could not read (%x, %d) from %s\n", offset, size, device->diskInfo.name);
+                printf("DISK_write: Could not write (0x%zx, %d) from %s\n", offset, size, device->diskInfo.name);
                 return false;
             }
         } break;
         case DISK_TYPE_NVME: {
             bool res = nvme_write(device, offset, size, buffer);
             if (!res) {
-                printf("DISK_write: Could not read (%x, %d) from %s\n", offset, size, device->diskInfo.name);
+                printf("DISK_write: Could not write (0x%zx, %d) from %s\n", offset, size, device->diskInfo.name);
                 return false;
             }
         } break;
@@ -172,14 +172,14 @@ bool DISK_read(DiskDevice* device, u64 offset, u64 size, void* buffer) {
         case DISK_TYPE_SATA: {
             bool res = ahci_read(device, offset, size, buffer);
             if (!res) {
-                printf("DISK_read: Could not read (%x, %d) from %s\n", offset, size, device->diskInfo.name);
+                printf("DISK_read: Could not read (0x%zx, %d) from %s\n", offset, size, device->diskInfo.name);
                 return false;
             }
         } break;
         case DISK_TYPE_NVME: {
             bool res = nvme_read(device, offset, size, buffer);
             if (!res) {
-                printf("DISK_read: Could not read (%x, %d) from %s\n", offset, size, device->diskInfo.name);
+                printf("DISK_read: Could not read (0x%zx, %d) from %s\n", offset, size, device->diskInfo.name);
                 return false;
             }
         } break;
