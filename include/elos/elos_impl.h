@@ -14,31 +14,32 @@ typedef enum {
     _SYS_CAPABILITIES = 0,
     _SYS_REQUEST_CAPABILITIES = 1,
     _SYS_DEBUG_LOG = 2,
-    _SYS_HEAP_ALLOCATE = 3,
-    _SYS_HEAP_FREE = 4,
-    _SYS_HEAP_REALLOCATE = 5,
-    _SYS_HEAP_MAP = 6,
-    _SYS_HEAP_PROTECT = 7,
-    _SYS_DEFAULT_MONITOR = 8,
-    _SYS_TICKS_PER_SECOND = 9,
-    _SYS_SLEEP_NS = 10,
-    _SYS_SERVICE_CREATE = 11,
-    _SYS_SERVICE_CONNECT = 12,
-    _SYS_SERVICE_SEND = 13,
-    _SYS_SERVICE_RECV = 14,
-    _SYS_SHARED_MEMORY_CREATE = 15,
-    _SYS_SHARED_MEMORY_GRANT = 16,
-    _SYS_SHARED_MEMORY_INFO = 17,
-    _SYS_REQUEST_USER_EVENT_BUFFER = 18,
-    _SYS_EXIT = 19,
-    _SYS_DEFAULT_AUDIO = 20,
-    _SYS_AUDIO_INFO = 21,
-    _SYS_CREATE_AUDIO_BUFFER = 22,
-    _SYS_DESTROY_AUDIO_BUFFER = 23,
-    _SYS_CREATE_ASYNC_RINGS = 24,
-    _SYS_DESTROY_ASYNC_RINGS = 25,
-    _SYS_SUBMIT_ASYNC_RING = 26,
-    _SYS_WAIT_ASYNC_RING = 27,
+    _SYS_SYSTEM_OPERATION = 3,
+    _SYS_HEAP_ALLOCATE = 4,
+    _SYS_HEAP_FREE = 5,
+    _SYS_HEAP_REALLOCATE = 6,
+    _SYS_HEAP_MAP = 7,
+    _SYS_HEAP_PROTECT = 8,
+    _SYS_DEFAULT_MONITOR = 9,
+    _SYS_TICKS_PER_SECOND = 10,
+    _SYS_SLEEP_NS = 11,
+    _SYS_SERVICE_CREATE = 12,
+    _SYS_SERVICE_CONNECT = 13,
+    _SYS_SERVICE_SEND = 14,
+    _SYS_SERVICE_RECV = 15,
+    _SYS_SHARED_MEMORY_CREATE = 16,
+    _SYS_SHARED_MEMORY_GRANT = 17,
+    _SYS_SHARED_MEMORY_INFO = 18,
+    _SYS_REQUEST_USER_EVENT_BUFFER = 19,
+    _SYS_EXIT = 20,
+    _SYS_DEFAULT_AUDIO = 21,
+    _SYS_AUDIO_INFO = 22,
+    _SYS_CREATE_AUDIO_BUFFER = 23,
+    _SYS_DESTROY_AUDIO_BUFFER = 24,
+    _SYS_CREATE_ASYNC_RINGS = 25,
+    _SYS_DESTROY_ASYNC_RINGS = 26,
+    _SYS_SUBMIT_ASYNC_RING = 27,
+    _SYS_WAIT_ASYNC_RING = 28,
 } ELOS_SyscallID;
     
 #endif // ELOS_SYSCALL_IDS_INCLUDE
@@ -118,6 +119,35 @@ register size_t _arg1 asm ("ecx") = (size_t)length;
                 : "memory"
             );
         #endif
+}
+
+ELOS_Error SYS_system_operation(ELOS_System_Operation operation, uint8_t* data, u32 size)
+{
+    ELOS_Error retv;
+#if defined(__x86_64__)
+register size_t _arg0 asm ("rdi") = (size_t)operation;
+register size_t _arg1 asm ("rsi") = (size_t)data;
+register size_t _arg2 asm ("rdx") = (size_t)size;
+
+            asm volatile (
+                "syscall"
+                : "=a" (retv)
+                : "a" (_SYS_SYSTEM_OPERATION), "r" (_arg0), "r" (_arg1), "r" (_arg2)
+                : "rcx", "r11", "memory"
+            );
+        #else
+register size_t _arg0 asm ("ebx") = (size_t)operation;
+register size_t _arg1 asm ("ecx") = (size_t)data;
+register size_t _arg2 asm ("edx") = (size_t)size;
+
+            asm volatile (
+                "int $0x80"
+                : "=a" (retv)
+                : "a" (_SYS_SYSTEM_OPERATION), "r" (_arg0), "r" (_arg1), "r" (_arg2)
+                : "memory"
+            );
+        #endif
+    return retv;
 }
 
 ELOS_Error SYS_heap_allocate(void** newAddress, size_t size)

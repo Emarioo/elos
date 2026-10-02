@@ -22,7 +22,7 @@ typedef enum {
 
 typedef struct {
     u64  fileSize;
-    u32  blockSize;
+    u32  sectorSize;
     bool isDirectory;
     bool readOnly;
     u64  lastWriteTime_us;

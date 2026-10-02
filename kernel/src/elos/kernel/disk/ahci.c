@@ -248,11 +248,11 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
             words_per_sector = 512/2;
 
         dev->diskInfo.diskSize = (u64)lba_count * (u64)words_per_sector*2;
-        dev->diskInfo.blockSize = words_per_sector*2;
+        dev->diskInfo.sectorSize = words_per_sector*2;
 
         // printf("Model: %s\n", dev->diskInfo.name);
         // printf("Size: %d MB\n", dev->diskInfo.diskSize >> 20);
-        // printf("SectorSize: %d\n", dev->diskInfo.blockSize);
+        // printf("SectorSize: %d\n", dev->diskInfo.sectorSize);
     }
 
 
@@ -503,7 +503,7 @@ bool ahci_identify(HBA_PORT *port, void* buffer) {
 
 bool ahci_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
     HBA_PORT *port = device->sata.port;
-    int sectorSize = device->diskInfo.blockSize;
+    int sectorSize = device->diskInfo.sectorSize;
 
     port->is = (uint32_t) -1;		// Clear pending interrupt bits
     int spin = 0; // Spin lock timeout counter
@@ -604,7 +604,7 @@ bool ahci_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
 
 bool ahci_write(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
     HBA_PORT *port = device->sata.port;
-    int sectorSize = device->diskInfo.blockSize;
+    int sectorSize = device->diskInfo.sectorSize;
 
     port->is = (uint32_t) -1;		// Clear pending interrupt bits
     int spin = 0; // Spin lock timeout counter

@@ -82,7 +82,12 @@ struct NVME_Context {
     u32 MPSMAX;
 
     u32 first_nsid;
-    u32 blockSize;
+    u32 sectorSize;
+
+    volatile u32 buffer_lock;
+
+    void* tempSector;
+    void* tempMemoryPage;
 
     u32 submission_tail;
     u32 completion_head;

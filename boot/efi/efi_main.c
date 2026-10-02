@@ -461,10 +461,10 @@ EFI_STATUS read_kernel_config() {
     }
 
     char buffer0[30];
-    printf("static_ip = %s\n", ipv4_str((u8*)&kernel_config.static_ip, buffer0));
-    printf("netboot_port = %d\n", kernel_config.netboot_port);
-    printf("netboot_ips[0] = %s\n", ipv4_str((u8*)&kernel_config.netboot_ips[0], buffer0));
-    printf("netboot_ips[1] = %s\n", ipv4_str((u8*)&kernel_config.netboot_ips[1], buffer0));
+    // printf("static_ip = %s\n", ipv4_str((u8*)&kernel_config.static_ip, buffer0));
+    // printf("netboot_port = %d\n", kernel_config.netboot_port);
+    // printf("netboot_ips[0] = %s\n", ipv4_str((u8*)&kernel_config.netboot_ips[0], buffer0));
+    // printf("netboot_ips[1] = %s\n", ipv4_str((u8*)&kernel_config.netboot_ips[1], buffer0));
 
     return EFI_SUCCESS;
 }
@@ -499,7 +499,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
 
 
     // Print the actual base address of the loaded image
-    printf("Image loaded at: 0x%x\n", (uint32_t)(uint64_t)loaded_image->ImageBase);
+    // printf("Image loaded at: 0x%x\n", (uint32_t)(uint64_t)loaded_image->ImageBase);
 
     // while (1);
 
@@ -510,7 +510,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     *image_base_ptr = (uint64_t)loaded_image->ImageBase;  // Store ImageBase
     *marker_ptr = 0xDEADCE11;   // Set marker
 
-    printf("Hello World\n"); // EFI Applications use Unicode and CRLF, a la Windows
+    // printf("Hello World\n"); // EFI Applications use Unicode and CRLF, a la Windows
 
 
     efi_entry();
@@ -553,11 +553,11 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
             // We extract physical address from RSDP because pointer to RSDP is virtual address
             // and we need physical address when setting up our own page tables.
             g_boot_api.rsdt = (void*)(u64)rsdp->RsdtAddress;
-            printf("BOOT: Found ACPI 1.0, RSDP at %x.\n", rsdp);
+            // printf("BOOT: Found ACPI 1.0, RSDP at %x.\n", rsdp);
         } else if (!memcmp(&table->VendorGuid, &acpi20, sizeof(EFI_GUID))) {
             XSDP* xsdp = table->VendorTable;
             g_boot_api.rsdt = (void*)xsdp->XsdtAddress;
-            printf("BOOT: Found ACPI 2.0, XSDP at %x.\n", xsdp);
+            // printf("BOOT: Found ACPI 2.0, XSDP at %x.\n", xsdp);
             break;
         }
     }

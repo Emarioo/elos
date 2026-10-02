@@ -95,5 +95,11 @@ for i in range(256):
 
 os.makedirs(os.path.dirname(spath), exist_ok=True)
 
+if os.path.exists(spath):
+    os.chmod(spath, 0o644)
+
 with open(spath, "w") as file:
     file.write(text)
+
+os.chmod(spath, 0o644)
+

@@ -1,3 +1,8 @@
+/*
+    @TODO Interrupts
+
+    @TODO Multiple IO queues
+*/
 
 #include "elos/kernel/disk/nvme.h"
 
@@ -6,6 +11,8 @@
 
 #include "elos/physical_memory.h"
 #include "elos/kernel_console.h"
+
+#include "elos/cpu.h"
 
 #define printf(...) KCON_printf(__VA_ARGS__)
 
@@ -144,15 +151,23 @@ bool nvme_init(DiskDevice* device) {
         return false;
     }
 
+    context->tempSector     = PMEM_alloc(context->sectorSize);
+    context->tempMemoryPage = PMEM_alloc(context->MPS);
 
     return true;
 }
 
-bool nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
-    
+
+
+bool nvme_aligned_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
+
     u32 queue_identifier = 1;
 
     NVME_Context* context = device->nvme.nvme_context;
+
+    KERNEL_PANIC(byteOffset  % context->sectorSize == 0, "not aligned");
+    KERNEL_PANIC(byteSize    % context->sectorSize == 0, "not aligned");
+    KERNEL_PANIC((size_t)buffer % 3 == 0, "not aligned");
 
     NVME_SubmissionQueueEntry* entry = (void*)(context->io_sq.address + context->io_submission_tail * sizeof(NVME_SubmissionQueueEntry));
     memset(entry, 0, sizeof(*entry));
@@ -161,15 +176,46 @@ bool nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
     //   We read a block at a time.
     //   If we specified less, then we need temporary buffer.
 
-    u64 lba = byteOffset / context->blockSize;
-    u64 num_blocks = byteSize / context->blockSize;
+    u64 lba = byteOffset / context->sectorSize;
+    u64 num_blocks = (byteSize + context->sectorSize-1) / context->sectorSize;
 
     entry->command = NVME_CMD_READ;
-    entry->data_pointer[0] = (u64)buffer;
+    entry->nsid = context->first_nsid;
+
+    u32 max_prp_entries = context->MPS / 8 - 1;
+    u32 max_size = max_prp_entries * context->MPS;
+    if (byteSize > max_size) {
+        printf("nvme_aligned_read: Bytes to read (%zu) is larger than maximum (%zu)\n", byteSize, max_size);
+        return false;
+    }
+
+    if (byteSize <= context->MPS) {
+        entry->data_pointer[0] = (size_t)buffer;
+        size_t unaligned_offset = (size_t)buffer % context->MPS;
+        if ((size_t)buffer % context->MPS != 0 && unaligned_offset + byteSize > context->MPS) {
+            entry->data_pointer[1] = (size_t)buffer + context->MPS - unaligned_offset;
+        }
+    } else {
+        u64* prpList = context->tempMemoryPage;
+        size_t unaligned_offset = (size_t)buffer % context->MPS;
+
+        int index = 0;
+        int bufOffset = context->MPS - unaligned_offset;
+        int prp_entries = (byteSize + context->MPS -1) / context->MPS - 1;
+        while (index < prp_entries) {
+            prpList[index] = (size_t)buffer + bufOffset;
+
+            index++;
+            bufOffset += context->MPS;
+        }
+
+        entry->data_pointer[0] = (u64)buffer;
+        entry->data_pointer[1] = (u64)prpList;
+    }
+
     entry->body[0] = lba;
     entry->body[1] = lba >> 32;
-    entry->body[3] = num_blocks;
-    entry->nsid = context->first_nsid;
+    entry->body[3] = num_blocks - 1; // zero-based so we reduce one
 
     context->io_submission_tail++;
     write_submission_tail(context, queue_identifier, context->io_submission_tail);
@@ -210,11 +256,15 @@ bool nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
     return status == 0;
 }
 
-bool nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* buffer) {
-    
+bool nvme_aligned_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* buffer) {
+
     u32 queue_identifier = 1;
 
     NVME_Context* context = device->nvme.nvme_context;
+
+    KERNEL_PANIC(byteOffset  % context->sectorSize == 0, "not aligned");
+    KERNEL_PANIC(byteSize    % context->sectorSize == 0, "not aligned");
+    KERNEL_PANIC(((size_t)buffer & 3) == 0, "not aligned");
 
     NVME_SubmissionQueueEntry* entry = (void*)(context->io_sq.address + context->io_submission_tail * sizeof(NVME_SubmissionQueueEntry));
     memset(entry, 0, sizeof(*entry));
@@ -222,9 +272,9 @@ bool nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* bu
     // @TODO Handle alignment on the buffer?
     //   We read a block at a time.
     //   If we specified less, then we need temporary buffer.
-
-    u64 lba = byteOffset / context->blockSize;
-    u64 num_blocks = byteSize / context->blockSize;
+    // @TODO Handle big/small buffers.
+    u64 lba = byteOffset / context->sectorSize;
+    u64 num_blocks = byteSize / context->sectorSize;
 
     entry->command = NVME_CMD_WRITE;
     entry->data_pointer[0] = (u64)buffer;
@@ -272,6 +322,141 @@ bool nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* bu
     return status == 0;
 }
 
+
+bool nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
+
+    if (((size_t)buffer & 3) != 0) {
+        printf("nvme: Buffer is not 4-byte aligned on read.\n");
+        return false;
+    }
+
+    NVME_Context* context = device->nvme.nvme_context;
+
+    LOCK(&context->buffer_lock);
+
+    u64 sectorSize = context->sectorSize;
+
+    u64 cur_offset       = byteOffset;
+    u64 cur_size         = byteSize;
+    u64 cur_bufferOffset = 0;
+
+    bool anyFailed = false;
+
+    while (cur_size > 0) {
+
+        u64   offset       = cur_offset;
+        u64   size         = byteSize;
+        void* curBuffer    = (char*)buffer + cur_bufferOffset;
+        u64   realSize     = size;
+        bool  useTempBlock = false;
+
+        if (offset % sectorSize != 0) {
+            useTempBlock = true;
+            realSize     = sectorSize - offset % sectorSize;
+            offset       -= offset % sectorSize;
+            size         = sectorSize;
+            curBuffer    = context->tempSector;
+        }
+
+        if (size < sectorSize) {
+            useTempBlock = true;
+            size         = sectorSize;
+            curBuffer    = context->tempSector;
+        }
+        
+        if (size % sectorSize != 0) {
+            size     = size - (size % sectorSize);
+            realSize = size;
+        }
+
+        // printf("log %zx %zx %d\n", offset, size, context->sectorSize);
+        anyFailed = !nvme_aligned_read(device, offset, size, curBuffer);
+        if (!anyFailed) {
+            break;
+        }
+
+        if (useTempBlock) {
+            memcpy((char*)buffer + cur_bufferOffset, context->tempSector, realSize);
+        }
+
+        cur_offset       += realSize;
+        cur_size         -= realSize;
+        cur_bufferOffset += realSize;
+    }
+
+    UNLOCK(&context->buffer_lock);
+
+    return !anyFailed;
+}
+
+
+bool nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* buffer) {
+    if (((size_t)buffer & 3) != 0) {
+        printf("nvme: Buffer is not 4-byte aligned on write.\n");
+        return false;
+    }
+
+    NVME_Context* context = device->nvme.nvme_context;
+
+    LOCK(&context->buffer_lock);
+
+    u64 sectorSize = context->sectorSize;
+
+    u64 cur_offset       = byteOffset;
+    u64 cur_size         = byteSize;
+    u64 cur_bufferOffset = 0;
+
+    bool anyFailed = false;
+
+    while (cur_size > 0) {
+
+        u64   offset       = cur_offset;
+        u64   size         = byteSize;
+        void* curBuffer    = (char*)buffer + cur_bufferOffset;
+        u64   realSize     = size;
+        bool  useTempBlock = false;
+
+        if (offset % sectorSize != 0) {
+            useTempBlock = true;
+            realSize     = sectorSize - offset % sectorSize;
+            offset       -= offset % sectorSize;
+            size         = sectorSize;
+            curBuffer    = context->tempSector;
+        }
+
+        if (size < sectorSize) {
+            useTempBlock = true;
+            size         = sectorSize;
+            curBuffer    = context->tempSector;
+        }
+        
+        if (size % sectorSize != 0) {
+            size     = size - (size % sectorSize);
+            realSize = size;
+        }
+
+        if (useTempBlock) {
+            anyFailed = !nvme_aligned_read(device, offset, size, curBuffer);
+            if (!anyFailed) {
+                break;
+            }
+            memcpy(context->tempSector, (char*)buffer + cur_bufferOffset, realSize);
+        }
+
+        anyFailed = !nvme_aligned_write(device, offset, size, curBuffer);
+        if (!anyFailed) {
+            break;
+        }
+
+        cur_offset       += realSize;
+        cur_size         -= realSize;
+        cur_bufferOffset += realSize;
+    }
+
+    UNLOCK(&context->buffer_lock);
+
+    return !anyFailed;
+}
 
 
 bool init_admin_queues(NVME_Context* context) {
@@ -467,8 +652,8 @@ bool send_identify(NVME_Context* context, DiskDevice* device) {
             return false;
         }
 
-        context->blockSize = 1 << LBADS;
-        // printf("Block Size %d\n", context->blockSize);
+        context->sectorSize = 1 << LBADS;
+        // printf("Block Size %d\n", context->sectorSize);
     }
 
     return true;

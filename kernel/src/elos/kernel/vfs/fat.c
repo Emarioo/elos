@@ -1320,7 +1320,7 @@ bool fat_info(VFS_Mount* mount, FAT_ID file, VFS_HandleInfo* info) {
     info->isDirectory = entry->attributes & fat__DIRECTORY;
     info->readOnly = entry->attributes & fat__READ_ONLY;
     info->fileSize = entry->file_size;
-    info->blockSize = sectorSize;
+    info->sectorSize = sectorSize;
     info->lastWriteTime_us = fat__sane_mtime(entry);
     return true;
 }

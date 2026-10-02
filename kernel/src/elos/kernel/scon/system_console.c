@@ -104,7 +104,7 @@ void SCON_main() {
     inputBuffer_len = 0;
     inputBuffer.text[0] = 0;
 
-    printf("SCON main\n");
+    // printf("SCON main\n");
 
     // const char* path = "/pkg/wav/dream.wav";
     // play_sound(path);

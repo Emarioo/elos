@@ -15,7 +15,7 @@ typedef struct DiskDevice DiskDevice;
 typedef struct DiskInfo {
     char name[32];
     u64 diskSize;
-    u32 blockSize;
+    u32 sectorSize;
 } DiskInfo;
 
 //###########################

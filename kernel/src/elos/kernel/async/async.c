@@ -433,7 +433,7 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
             }
 
             safeFileInfo->fileSize          = info.fileSize;
-            safeFileInfo->blockSize         = info.blockSize;
+            safeFileInfo->sectorSize        = info.sectorSize;
             safeFileInfo->isDirectory       = info.isDirectory;
             safeFileInfo->readOnly          = info.readOnly;
             safeFileInfo->lastWriteTime_us  = info.lastWriteTime_us;

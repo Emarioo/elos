@@ -204,6 +204,18 @@ void SYS_request_capabilities(ELOS_Capabilities* capabilities);
 void SYS_debug_log(const char* text, u32 length);
 
 
+typedef enum {
+    ELOS_SYSOP_SHUTDOWN,
+} ELOS_System_Operation;
+
+/*
+    Special operations.
+
+    @pre ELOS_CAP_SYSTEM_OP capability is required.
+*/
+ELOS_Error SYS_system_operation(ELOS_System_Operation operation, uint8_t* data, u32 size);
+
+
 typedef enum ELOS_Heap_Protection {
     ELOS_HEAP_PROT_NONE  = 0x0,
     ELOS_HEAP_PROT_READ  = 0x1,
@@ -532,7 +544,13 @@ enum _ELOS_AsyncOperation {
     ELOS_ASYNC_NET_WRITE,
     ELOS_ASYNC_NET_READ,
 
-    // 
+    ELOS_ASYNC_DISK_OPEN,
+    ELOS_ASYNC_DISK_CLOSE,
+    ELOS_ASYNC_DISK_INFO,
+    ELOS_ASYNC_DISK_WRITE,
+    ELOS_ASYNC_DISK_READ,
+    ELOS_ASYNC_DISK_ENUMERATE,
+
 };
 typedef u16 ELOS_AsyncOperation;
 
@@ -582,7 +600,7 @@ typedef enum {
 typedef struct {
     u64  fileSize;
     u64  lastWriteTime_us;
-    u32  blockSize;
+    u32  sectorSize;
     bool isDirectory;
     bool readOnly;
 } ELOS_FileInfo;
@@ -595,6 +613,30 @@ typedef struct {
     bool isDirectory;
     bool isReadOnly;
 } ELOS_DirectoryEntry;
+
+typedef uint32_t ELOS_DiskID;
+typedef void*    ELOS_DiskHandle;
+
+typedef enum {
+    ELOS_DISK_ACCESS_READ      = 0x1,
+    ELOS_DISK_ACCESS_WRITE     = 0x2,
+    ELOS_DISK_ACCESS_EXCLUSIVE = 0x4,
+} ELOS_DiskAccessFlag;
+
+typedef struct {
+    char name[63];
+    u8   name_len;
+    u64  diskSize;
+    u32  sectorSize;
+} ELOS_DiskInfo;
+
+typedef struct {
+    ELOS_DiskID diskID;
+    char   name[63];
+    u8     name_len;
+    u64    diskSize;
+    u64    sectorSize;
+} ELOS_DiskEntry;
 
 typedef struct {
     ELOS_AsyncOperation operation;
@@ -690,6 +732,42 @@ typedef struct {
             u32                 bufferSize;
             u64                 timeout_ns;
         } net_read;
+
+        struct {
+            ELOS_DiskID         id;
+            ELOS_DiskAccessFlag flags;
+        } disk_open;
+        struct {
+            ELOS_DiskHandle     handle;
+            ELOS_PADDING
+        } disk_close;
+        struct {
+            ELOS_DiskID         id;
+            ELOS_DiskInfo*      info;
+            ELOS_PADDING
+        } disk_info;
+        struct {
+            ELOS_DiskHandle     handle;
+            ELOS_PADDING
+            u64                 offset;
+            u64                 size;
+            void*               buffer;
+            ELOS_PADDING
+        } disk_read;
+        struct {
+            ELOS_DiskHandle     handle;
+            ELOS_PADDING
+            u64                 offset;
+            u64                 size;
+            const void*         buffer;
+            ELOS_PADDING
+        } disk_write;
+        struct {
+            u64                 cookie;
+            u64                 maxEntries;
+            ELOS_DiskEntry*     buffer;
+            ELOS_PADDING
+        } disk_enumerate;
     };
 } ELOS_AsyncRequest;
 
@@ -721,6 +799,22 @@ typedef struct {
         struct {
             u32  readBytes;
         } net_read;
+
+
+        struct {
+            ELOS_DiskHandle handle;
+            ELOS_PADDING
+        } disk_open;
+        struct {
+            u64 readBytes;
+        } disk_read;
+        struct {
+            u64 writtenBytes;
+        } disk_write;
+        struct {
+            u64 cookie;
+            u64 entryCount;
+        } disk_enumerate;
     };
 } ELOS_AsyncCompletion;
 

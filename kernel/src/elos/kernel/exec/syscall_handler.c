@@ -1001,6 +1001,26 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             returnValue = ELOS_ERR_UNKNOWN;
         } break;
 
+        case _SYS_SYSTEM_OPERATION: {
+            ELOS_System_Operation operation = (u32)arg0;
+            uint8_t*              data      = (void*)arg1;
+            u32                   size      = (u32)arg2;
+
+            write_cr3((u64)g_kernelPageTable);
+
+            switch (operation) {
+                case ELOS_SYSOP_SHUTDOWN: {
+                    CPU_reset();
+                } break;
+                default: {
+                    returnValue = ELOS_ERR_INVALID_PARAM;
+                } break;
+            } break;
+            
+            write_cr3((u64)userPageTable);
+
+        } break;
+
     }
 
     return returnValue;

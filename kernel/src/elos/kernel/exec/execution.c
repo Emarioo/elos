@@ -156,7 +156,7 @@ void EXEC_init() {
     
     // @TODO Is this the first core?
     if (coreIndex == 0) {
-        printf("Enable scheduling\n");
+        // printf("Enable scheduling\n");
         scheduling_enabled = true;
     }
 }
@@ -221,6 +221,8 @@ bool EXEC_create_kernel_thread(void* entry, int pinnedCoreIndex) {
     frame->rdi = (u64)entry;
     frame->rip = (u64)thread_bootstrap;
     frame->cr3 = (u64)g_kernelPageTable;
+
+    returnValue = true;
 
 exit:
     UNLOCK_INT(&core->thread_lock);
@@ -311,6 +313,8 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex) {
         strncpy(name, path, 4096);
     }
     found_thread->elfBaseName = name;
+
+    returnValue = true;
 
 exit:
     // @TODO Cleanup allocated stuff.

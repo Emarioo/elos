@@ -139,7 +139,7 @@ void kernel_entry(BootAPI* in_boot_api) {
             // We are in serious trouble here.
         } else {
             KCON_add_write_hook(FB_write);
-            KCON_printf("Loaded default font\n");
+            // KCON_printf("Loaded default font\n");
         }
     } else {
         // No display.
@@ -149,7 +149,7 @@ void kernel_entry(BootAPI* in_boot_api) {
     //  - Memory regions we can access and how much RAM we have.
     //  - Virtual Paging.
 
-    KCON_printf("Initializing physical memory regions\n");
+    // KCON_printf("Initializing physical memory regions\n");
     PMEM_init(boot_api);
     
     MON_init(boot_api);
@@ -313,13 +313,88 @@ void os_entry() {
     EXEC_create_kernel_thread(SCON_main, 0);
     EXEC_create_kernel_thread(ASYNC_main, 0);
 
-    // EXEC_create_user_thread("/pkg/win32_loader/win32_loader.elf", 0);
+    
+    {
+        ELOS_Error err;
+        bool yes;
+        char* buffer = NULL;
+        VFS_Handle handle = VFS_NULL_HANDLE;
 
-    EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
-    EXEC_create_user_thread("/pkg/supper/supper.elf", 0);
-    // EXEC_create_user_thread("/pkg/netchat/netchat.elf", 0);
-    // EXEC_create_user_thread("/pkg/slate/slate.elf", 1);
-    // EXEC_create_user_thread("/pkg/doom/doom.elf", 0);
+        handle = VFS_open("/SYS/AUTORUN.TXT", VFS_FLAG_READ_ONLY);
+        if (handle == VFS_NULL_HANDLE) {
+            KCON_printf("[INFO] Cannot find /sys/autorun.txt\n");
+            goto default_elfs;
+        }
+
+        VFS_HandleInfo info;
+        yes = VFS_info(handle, &info);
+        if (!yes) {
+            KCON_printf("[INFO] Cannot get file info from /sys/autorun.txt\n");
+            goto default_elfs;
+        }
+        buffer = PMEM_alloc(info.fileSize + 1);
+        if (!buffer) {
+            KCON_printf("[INFO] Cannot allocate %d for /sys/autorun.txt\n", info.fileSize);
+            goto default_elfs;
+        }
+        u64 fileSize = VFS_read(handle, 0, info.fileSize, buffer);
+        if (info.fileSize != fileSize) {
+            KCON_printf("[INFO] Cannot read /sys/autorun.txt\n");
+            goto default_elfs;
+        }
+        buffer[info.fileSize] = '\0';
+        
+        VFS_close(handle);
+        handle = VFS_NULL_HANDLE;
+
+        int start = 0;
+        for (int i=0;i<info.fileSize;i++) {
+            
+            bool is_space = buffer[i] == ' ' || buffer[i] == '\t' || buffer[i] == '\n' || buffer[i] == '\f';
+
+            if (is_space || i == info.fileSize - 1) {
+                const char* elf_path = buffer + start;
+                int path_len = i - start;
+                if (is_space) {
+                    buffer[i] = '\0';
+                } else {
+                    path_len = i+1 - start;
+                }
+                start = i + 1;
+
+                if (path_len == 0) {
+                    continue;
+                }
+                
+                // @TODO Distribute on different cores.
+                bool started = EXEC_create_user_thread(elf_path, 0);
+                if (!started) {
+                    KCON_printf("Could not start %s\n", elf_path);
+                } else {
+                    KCON_printf("Started %s\n", elf_path);
+                }
+            }
+        }
+
+        goto autorun_done;
+
+    default_elfs:
+        // Debug extra stuff
+        // EXEC_create_user_thread("/pkg/win32_loader/win32_loader.elf", 0);
+        EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
+        EXEC_create_user_thread("/pkg/supper/supper.elf", 0);
+        // EXEC_create_user_thread("/pkg/netchat/netchat.elf", 0);
+        // EXEC_create_user_thread("/pkg/slate/slate.elf", 1);
+        // EXEC_create_user_thread("/pkg/doom/doom.elf", 0);
+    autorun_done:
+        if (buffer) {
+            PMEM_free(buffer);
+        }
+        if (handle != VFS_NULL_HANDLE) {
+            VFS_close(handle);
+        }
+    }
+
 
 
     while (1) {

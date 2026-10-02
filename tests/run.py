@@ -41,7 +41,15 @@ Kernel. In some tests we don't want to enable certain things like scheduling (in
 '''
 
 
-import os, sys, platform, shutil, shlex
+import os, sys, platform, shutil, shlex, glob
+
+ROOT = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+
+sys.path.append(ROOT)
+
+from scripts import tools
+from scripts.tools import cmd_async, wait_pool, cmd, cmd_back
+
 
 VERBOSE = False
 
@@ -61,6 +69,134 @@ def test_font_reader():
 
     cmd(f"{EXE}")
 
+
+
+def main(args):
+    global VERBOSE
+    # get test cases
+    
+    argi = 1
+    while argi < len(args):
+        arg = args[argi]
+        argi += 1
+
+        if arg == "-v" or arg == "--verbose":
+            VERBOSE = True
+        else:
+            print(f"Unknown argument '{arg}'")
+
+    tests = []
+
+
+    for filepath in glob.glob(f"{ROOT}/tests/**", recursive=True):
+        basename = os.path.basename(filepath)
+        if basename.startswith("test_"):
+            # print("Test", filepath)
+            tests.append(filepath)
+
+    # @TODO Filter tests
+    # @TODO Option to only re-run failed tests
+        
+    threads = []
+    
+    # cmd(f"make -f apps/libm/Makefile")
+    
+    INT_DIR = f"{ROOT}/int/kernel_test"
+
+    def sync0():
+        cmd(f"make -f {ROOT}/boot/Makefile INT_DIR={INT_DIR}/boot")
+    
+    def sync1():
+        cmd(f"make -f {ROOT}/kernel/Makefile INT_DIR={INT_DIR}/kernel")
+    
+    threads.append(cmd_async(sync1))
+    wait_pool(threads)
+
+    threads.append(cmd_async(sync0))
+    wait_pool(threads)
+
+    total_tests = len(tests)
+    passed_tests = 0
+
+    for test_path in tests:
+        print("Running", filepath)
+
+        test_name, ext = os.path.splitext(os.path.basename(test_path))
+        test_elf = f"{TEST_INT}/{test_name}.elf"
+
+        CFLAGS = ' '.join([s.strip() for s in f'''
+            -ggdb 
+            -O0
+            -fno-stack-protector -fno-plt   -nostdlib -nostartfiles -nodefaultlibs
+            -mno-red-zone
+            -Wall -Werror -fshort-wchar -Werror=implicit-function-declaration
+            -Wno-multichar
+            -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable
+            -I{ROOT}/tests
+            -I{ROOT}/include
+            -I{ROOT}/kernel/src
+            -I{ROOT}/kernel/include
+            -I{ROOT}/apps/std
+            -I{ROOT}/apps/prism/include
+            
+        '''.split("\n") if len(s) > 0])
+
+        for filepath in glob.glob(f"{ROOT}/kernel/src/elos/common/**", recursive=True):
+            # @TODO What about assembly files?
+            if filepath.endswith(".c"):
+                CFLAGS += f" {filepath} "
+
+        for filepath in glob.glob(f"{ROOT}/apps/std/**", recursive=True):
+            # @TODO What about assembly files?
+            if filepath.endswith(".c"):
+                CFLAGS += f" {filepath} "
+
+        os.makedirs(os.path.dirname(test_elf), exist_ok=True)
+
+        cmd(f"gcc -o {test_elf} {ROOT}/tests/trial.c {CFLAGS} {test_path}")
+
+        package = tools.default_package(f"{TEST_INT}/releases")
+        
+        package.items.append(tools.PackageItem(test_elf, "PKG/TEST/TEST.ELF"))
+        package.auto_run_paths = [
+            "/PKG/TEST/TEST.ELF"
+        ]
+
+        tools.package_elos(package)
+
+        # @TODO Headless flag?
+        runConfig = tools.RunConfig(
+            img_path = f"{package.temp_folder_path}/elos.img",
+            log_path = f"{TEST_INT}/{test_name}/kernel.log",
+            timeout_sec = 5,
+            auto_reboot=False,
+        )
+        print(runConfig.log_path, runConfig.img_path)
+        
+        cmd(f"objdump -d {test_elf} > test.dis")
+
+        tools.run_package(runConfig)
+
+        with open(runConfig.log_path) as f:
+            log_text = f.read()
+        
+        if VERBOSE:
+            print(f"########  {test_name}  ##########")
+            print(log_text, end="")
+            if len(log_text) == 0 or log_text[-1] != '\n':
+                print()
+
+        at = log_text.find("SUCCESS 100%")
+        if (at != -1):
+            passed_tests += 1
+
+    if VERBOSE:
+        print(f"#########################")
+
+    if passed_tests == total_tests:
+        print(f"\033[32mTotal SUCCESS {100*passed_tests/total_tests:0.2f}% ({passed_tests}/{total_tests})\033[0m")
+    else:
+        print(f"\033[31mTotal FAILED {100*passed_tests/total_tests:0.2f}% ({passed_tests}/{total_tests})\033[0m")
 
 def cmd(c):
     if platform.system() == "Windows":
@@ -82,8 +218,5 @@ def cmd(c):
             print("ERR",c)
         exit(1)
 
-def main():
-    test_font_reader();
-
 if __name__ == "__main__":
-    main()
+    main(sys.argv)

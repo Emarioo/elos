@@ -1085,7 +1085,7 @@ void CPU_set_irq(u32 coreIndex, u32 local_irq, u32 global_irq, FN_interrupt_hand
     u32 vector = IDT_START_OF_IRQS + local_irq;
     u32 ioapic_offset = 0x10 + 2 * global_irq;
 
-    printf("Set IRQ core=%u loc=%d glob=%d vec=%u ioapic_off=%u handler=%p\n", coreIndex, local_irq, global_irq, vector, ioapic_offset, handler);
+    // printf("Set IRQ core=%u loc=%d glob=%d vec=%u ioapic_off=%u handler=%p\n", coreIndex, local_irq, global_irq, vector, ioapic_offset, handler);
 
     if (handler) {
         // 1<<15 does level trigger instead of edge, seems to work better?

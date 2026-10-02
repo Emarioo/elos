@@ -8,7 +8,7 @@ ifeq ($(OS),Windows_NT)
   INT_DIR    ?= int/netchat_server_windows
   APP_OUTPUT ?= bin/netchat.exe
 else
-  INT_DIR    ?= int/$(APPNAME)_linux
+  INT_DIR    ?= int/netchat_server_linux
   APP_OUTPUT ?= bin/netchat
 endif
 

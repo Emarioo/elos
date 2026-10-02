@@ -106,7 +106,7 @@ void DISK_scan_devices(DiskDevice** devices, int* count) {
         dev->ram.size = g_initrd_size;
         snprintf(dev->diskInfo.name, sizeof(dev->diskInfo.name), "initrd");
         dev->diskInfo.diskSize = g_initrd_size;
-        dev->diskInfo.blockSize = 512; // Hardcoding this might cause problems.
+        dev->diskInfo.sectorSize = 512; // Hardcoding this might cause problems.
 
         scanInfo.devices[scanInfo.count] = dev;
         scanInfo.count++;
