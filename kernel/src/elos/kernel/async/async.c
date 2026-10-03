@@ -543,6 +543,30 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
             completion.error = NET_read(safeNetHandle, safeAddress, safeBuffer, &bufferSize, request->net_read.timeout_ns);
             completion.net_read.readBytes = bufferSize;
         } break;
+        
+        // case ELOS_ASYNC_DISK_OPEN: {
+
+        //     handle = DISK_open(safeAddress);
+        //     if (!handle) {
+        //         break;
+        //     }
+
+        //     completion.net_open.handle = (ELOS_Net_Handle)handle;
+        //     completion.error = ELOS_OK;
+        // } break;
+        
+        case ELOS_ASYNC_DISK_ENUMERATE: {
+
+            GET_SANITIZED_BUFFER(&safeBuffer, &safeBufferSize, request->disk_enumerate.buffer, request->disk_enumerate.maxEntries * sizeof(*request->disk_enumerate.buffer));
+
+            u64 cookie = request->disk_enumerate.cookie;
+            u64 entryCount = request->disk_enumerate.maxEntries;
+            DISK_enumerate(&cookie, &entryCount, safeBuffer);
+            completion.disk_enumerate.cookie = cookie;
+            completion.disk_enumerate.entryCount = entryCount;
+
+            completion.error = ELOS_OK;
+        } break;
 
         default: {
             printf("ASYNC_request_handler: Unhandled operation %d (0 is invalid)\n", request->operation);

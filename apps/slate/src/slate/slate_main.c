@@ -376,7 +376,7 @@ void editor_loop() {
 void dumpdir(const char* path, int depth) {
 
     u64 cookie = 0;
-    u64 entryCount;
+    u32 entryCount;
 
     ELOS_DirectoryEntry dirEntries[3]; // uneven number to encounter edge cases
     int dirEntries_cap = ARRAY_LENGTH(dirEntries);

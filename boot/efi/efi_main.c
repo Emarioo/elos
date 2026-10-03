@@ -328,7 +328,7 @@ EFI_STATUS load_initrd() {
         goto local_kernel;
     }
     
-    g_boot_api.initrd      = (void*)address;
+    g_boot_api.initrd_data = (void*)address;
     g_boot_api.initrd_size = file_size;
 
     return EFI_SUCCESS;
@@ -395,7 +395,7 @@ EFI_STATUS load_initrd_from_file() {
 
     // @TODO CLose handles.
 
-    g_boot_api.initrd      = (void*)initrd_data;
+    g_boot_api.initrd_data = (void*)initrd_data;
     g_boot_api.initrd_size = file_size;
     
     // printf("First word: %x\n", *(int*)address);

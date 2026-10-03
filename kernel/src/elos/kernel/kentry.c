@@ -176,7 +176,7 @@ void kernel_entry(BootAPI* in_boot_api) {
 
     for (int i=0;i<diskDevices_len;i++) {
         DiskDevice* dev = diskDevices[i];
-        DiskInfo diskInfo = {0};
+        ELOS_DiskInfo diskInfo = {0};
         DISK_get_info(dev, &diskInfo);
 
         char path[256];

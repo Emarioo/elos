@@ -10,7 +10,8 @@
 
 #ifndef ELOS_SYSCALL_IDS_INCLUDE
 #define ELOS_SYSCALL_IDS_INCLUDE
-typedef enum {
+typedef enum ELOS_SyscallID ELOS_SyscallID;
+enum ELOS_SyscallID {
     _SYS_CAPABILITIES = 0,
     _SYS_REQUEST_CAPABILITIES = 1,
     _SYS_DEBUG_LOG = 2,
@@ -40,7 +41,7 @@ typedef enum {
     _SYS_DESTROY_ASYNC_RINGS = 26,
     _SYS_SUBMIT_ASYNC_RING = 27,
     _SYS_WAIT_ASYNC_RING = 28,
-} ELOS_SyscallID;
+};
     
 #endif // ELOS_SYSCALL_IDS_INCLUDE
     
@@ -853,6 +854,7 @@ register size_t _arg1 asm ("ecx") = (size_t)timeout_ns;
         case ELOS_ERR_NOT_FOUND: return "ELOS_ERR_NOT_FOUND";
         case ELOS_ERR_BUSY: return "ELOS_ERR_BUSY";
         case ELOS_ERR_TIMEOUT: return "ELOS_ERR_TIMEOUT";
+        case ELOS_ERR_OUT_OF_BOUNDS: return "ELOS_ERR_OUT_OF_BOUNDS";
         case ELOS_ERR_UNSUPPORTED_AUDIO_FORMAT: return "ELOS_ERR_UNSUPPORTED_AUDIO_FORMAT";
         case ELOS_ERR_BUFFER_SIZE_NOT_FRAME_ALIGNED: return "ELOS_ERR_BUFFER_SIZE_NOT_FRAME_ALIGNED";
         case ELOS_ERR_BUFFER_SIZE_TOO_BIG: return "ELOS_ERR_BUFFER_SIZE_TOO_BIG";

@@ -276,7 +276,7 @@ def run_package(runConfig: RunConfig):
     DISK_NVME_IMG = "int/disk_nvme.img"
     # # if not os.path.exists(DISK_IMG):
 
-    HAS_NVME = False
+    HAS_NVME = True
 
 
     log_file   = runConfig.log_path
@@ -317,8 +317,6 @@ def run_package(runConfig: RunConfig):
         -smp {core_count}
 
         -device ahci,id=ahci
-
-        # -M q35
 
         # -trace "pci_cfg_write"
         # -drive  file={DISK_IMG},if=none,id=disk1,format=raw

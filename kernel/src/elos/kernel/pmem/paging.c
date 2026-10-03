@@ -94,8 +94,8 @@ void init_paging(BootAPI* boot_api) {
     memset((void*)dynamicTable_base, 0, dynamicTable_size);
 
     // May be huge so we don't use reserved page tables.
-    if (boot_api->initrd) {
-        PMEM_map_memory(rootTable, boot_api->initrd, boot_api->initrd, boot_api->initrd_size, 0);
+    if (boot_api->initrd_data) {
+        PMEM_map_memory(rootTable, boot_api->initrd_data, boot_api->initrd_data, boot_api->initrd_size, 0);
     }
 }
 

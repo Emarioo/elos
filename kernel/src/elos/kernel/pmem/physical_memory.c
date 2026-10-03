@@ -64,7 +64,7 @@ void PMEM_init(BootAPI* boot_api) {
         // when loading kernel.
         { (u64)__kernel_start, (u64)__kernel_end }, // Kernel .text, .rodata, .data, .bss
         { (u64)__stack_start,  (u64)__stack_end }, // Kernel stack
-        { (u64)boot_api->initrd,  (u64)boot_api->initrd + boot_api->initrd_size },
+        { (u64)boot_api->initrd_data,  (u64)boot_api->initrd_data + boot_api->initrd_size },
     };
 
     // Ensure ranges are page aligned

@@ -28,6 +28,11 @@
 #define debug(...) printf(__VA_ARGS__)
 // #define debug(...) 
 
+#define MAX_SATA_CONTEXTS 20
+
+Disk_SATA_Context sataContexts[MAX_SATA_CONTEXTS];
+volatile u32      sataContexts_len;
+
 
 void dump_port(HBA_PORT* port) {
     HBA_FIS* fis = (void*)(u64)port->fb;
@@ -45,23 +50,7 @@ void dump_port(HBA_PORT* port) {
 
 bool ahci_identify(HBA_PORT *port, void* buffer);
 
-DiskDevice* reserve_device(ScanInfo* scanInfo) {
-    DiskDevice* device = NULL;
-    for (int i=0;i<MAX_DISK_DEVICES;i++) {
-        if (g_diskDevices[i].type == DISK_TYPE_NONE) {
-            device = &g_diskDevices[i];
-            break;
-        }
-    }
-    if (!device) {
-        printf("[WARNING] Reached Disk Device limit (%d).\n", MAX_DISK_DEVICES);
-        return NULL;
-    }
-    memset(device, 0, sizeof(*device));
-    return device;
-}
-
-bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
+bool ahci_pci_scan(Disk_ScanInfo* scanInfo, PCI_ConfigSpace* config) {
     bool stopSearching = false;
 
     /*
@@ -141,17 +130,27 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
         if (pi & (1 << i)) {
             int dt = check_type(&abar->ports[i]);
             if (dt == AHCI_DEV_SATA) {
-                DiskDevice* dev = reserve_device(scanInfo);
+                DiskDevice* dev = disk_reserve_device(scanInfo);
                 if (!dev) {
                     // No more room
                     stopSearching = true;
                     break;
                 }
-                dev->sata.configSpace = *config;
+
+                u32 ctx_index = __atomic_fetch_add(&sataContexts_len, 1, __ATOMIC_SEQ_CST);
+                if (ctx_index >= MAX_SATA_CONTEXTS) {
+                    stopSearching = true;
+                    break;
+                }
+
+                Disk_SATA_Context* sata = &sataContexts[ctx_index];
                 dev->type = DISK_TYPE_SATA;
-                dev->sata.abar = abar;
-                dev->sata.portNo = i;
-                dev->sata.port = &abar->ports[i];
+                dev->userData = sata;
+
+                sata->configSpace = *config;
+                sata->abar = abar;
+                sata->portNo = i;
+                sata->port = &abar->ports[i];
                 diskDevices[diskDevices_len] = dev;
                 diskDevices_len++;
                 // debug("SATA drive found at port %d\n", i);
@@ -179,7 +178,8 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
 
     for (int i = 0; i < diskDevices_len; i++) {
         DiskDevice* dev = diskDevices[i];
-        bool res = port_rebase(dev->sata.port);
+        Disk_SATA_Context* sata = (Disk_SATA_Context*)dev->userData;
+        bool res = port_rebase(sata->port);
         if (!res) {
             dev->type = DISK_TYPE_NONE;
             diskDevices[i] = diskDevices[diskDevices_len - 1];
@@ -197,13 +197,14 @@ bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
 
     for (int i = 0; i < diskDevices_len; i++) {
         DiskDevice* dev = diskDevices[i];
+        Disk_SATA_Context* sata = (Disk_SATA_Context*)dev->userData;
 
         // Can this command write more than 512 bytes?
         // If it happens we ruin the stack.
         // If we do at the very least we should notice strange stuff
         // when calling this function. A static variable of PMEM_alloc_phys
         // may overwrite some other memory which will be much harder to detect.
-        bool res = ahci_identify(dev->sata.port, phys_buffer);
+        bool res = ahci_identify(sata->port, phys_buffer);
         if (!res) {
             // Device is in wierd state or we can't talk to it with our implementation.
             dev->type = DISK_TYPE_NONE;
@@ -501,15 +502,17 @@ bool ahci_identify(HBA_PORT *port, void* buffer) {
     return true;
 }
 
-bool ahci_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
-    HBA_PORT *port = device->sata.port;
+ELOS_Error ahci_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
+    Disk_SATA_Context* sata = (Disk_SATA_Context*)device->userData;
+    HBA_PORT *port = sata->port;
     int sectorSize = device->diskInfo.sectorSize;
 
     port->is = (uint32_t) -1;		// Clear pending interrupt bits
     int spin = 0; // Spin lock timeout counter
     int slot = find_cmdslot(port);
-    if (slot == -1)
-        return false;
+    if (slot == -1) {
+        return ELOS_ERR_UNKNOWN;
+    }
 
     u64 offset = byteOffset/sectorSize;
     u64 size = byteSize/sectorSize;
@@ -529,7 +532,7 @@ bool ahci_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
 
     if (byteSize >= 0x400000) {
         printf("ahci_read: Cannot read so many bytes, %d\n", byteSize);
-        return false;
+        return ELOS_ERR_UNKNOWN;
     }
 
     cmdtbl->prdt_entry[0].dba = (u64)buffer & 0xFFFFFFFF;
@@ -564,7 +567,7 @@ bool ahci_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
     if (spin == 1000000)
     {
         debug("Port is hung\n");
-        return false;
+        return ELOS_ERR_UNKNOWN;
     }
 
     // debug("port.is=0x%x\n", port->is);
@@ -587,7 +590,7 @@ bool ahci_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
             
 
             // printf("FIS status=0x%x error=0x%x\n", );
-            return false;
+            return ELOS_ERR_UNKNOWN;
         }
     }
 
@@ -595,22 +598,24 @@ bool ahci_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
     if (port->is & HBA_PxIS_TFES)
     {
         debug("Read disk error2, is=0x%x\n", port->is);
-        return false;
+        return ELOS_ERR_UNKNOWN;
     }
 
-    return true;
+    return ELOS_OK;
 }
 
 
-bool ahci_write(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
-    HBA_PORT *port = device->sata.port;
+ELOS_Error ahci_write(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
+    Disk_SATA_Context* sata = (Disk_SATA_Context*)device->userData;
+    HBA_PORT *port = sata->port;
     int sectorSize = device->diskInfo.sectorSize;
 
     port->is = (uint32_t) -1;		// Clear pending interrupt bits
     int spin = 0; // Spin lock timeout counter
     int slot = find_cmdslot(port);
-    if (slot == -1)
-        return false;
+    if (slot == -1) {
+        return ELOS_ERR_UNKNOWN;
+    }
 
     u64 offset = byteOffset/sectorSize;
     u64 size = byteSize/sectorSize;
@@ -630,7 +635,7 @@ bool ahci_write(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) 
 
     if (byteSize >= 0x400000) {
         printf("ahci_read: Cannot read so many bytes, %d\n", byteSize);
-        return false;
+        return ELOS_ERR_UNKNOWN;
     }
 
     cmdtbl->prdt_entry[0].dba = (u64)buffer & 0xFFFFFFFF;
@@ -665,7 +670,7 @@ bool ahci_write(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) 
     if (spin == 1000000)
     {
         debug("Port is hung\n");
-        return false;
+        return ELOS_ERR_UNKNOWN;
     }
     
     port->ci = 1<<slot;	// Issue command
@@ -681,7 +686,7 @@ bool ahci_write(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) 
         {
             debug("Read disk error, is=0x%x\n", port->is);
             
-            return false;
+            return ELOS_ERR_UNKNOWN;
         }
     }
 
@@ -689,10 +694,10 @@ bool ahci_write(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) 
     if (port->is & HBA_PxIS_TFES)
     {
         debug("Read disk error2, is=0x%x\n", port->is);
-        return false;
+        return ELOS_ERR_UNKNOWN;
     }
 
-    return true;
+    return ELOS_OK;
 }
 
 // Find a free command list slot

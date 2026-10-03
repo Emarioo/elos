@@ -112,12 +112,12 @@ int required_long_name_entries(const cstring name);
 
 
 bool init_context(FATContext* context, VFS_Mount* mount) {
-    int res;
+    ELOS_Error err;
 
     memset(context, 0, sizeof(*context));
 
-    res = DISK_read(mount->diskDevice, mount->start_lba * SECTOR_SIZE, SECTOR_SIZE, context->_bootSector);
-    if (res == 0) {
+    err = DISK_read(mount->diskDevice, mount->start_lba * SECTOR_SIZE, SECTOR_SIZE, context->_bootSector);
+    if (err != ELOS_OK) {
         return false;
     }
 
@@ -472,7 +472,7 @@ FAT_ID fat_lookup(VFS_Mount* mount, FAT_ID directory, const cstring subname) {
     FATContext* context = &_context;
     init_context(context, mount);
 
-    int res;
+    ELOS_Error err;
     fat_decode_id(context, directory, NULL, NULL, NULL, NULL, NULL, &context->current_cluster, &context->sector_start, &context->sector_end);
 
     char longName_buffer[256];
@@ -501,8 +501,8 @@ FAT_ID fat_lookup(VFS_Mount* mount, FAT_ID directory, const cstring subname) {
         }
 
         // printf("nextENT READ sector=0x%zx\n", (context->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE);
-        res = DISK_read(context->device, (context->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE, SECTOR_SIZE, context->tempSector);
-        if (res == 0) {
+        err = DISK_read(context->device, (context->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE, SECTOR_SIZE, context->tempSector);
+        if (err != ELOS_OK) {
             printf("Could not read\n");
             return false;
         }
@@ -603,6 +603,7 @@ FAT_ID fat_make_entry(VFS_Mount* mount, FAT_ID directory, const cstring subname,
     int freeEntries = 0;
 
     int res;
+    ELOS_Error err;
 
     fat_decode_id(context, directory, NULL, NULL, NULL, NULL, NULL, &context->current_cluster, &context->sector_start, &context->sector_end);
 
@@ -644,10 +645,10 @@ FAT_ID fat_make_entry(VFS_Mount* mount, FAT_ID directory, const cstring subname,
                 int dir_sector_start = fat__cluster_to_sector_offset(context, newCluster);
                 for (int i = 0; i < context->bpb->sectors_per_cluster; i++) {
                     // printf("CLEARING sector=0x%zx\n", (context->start_lba + dir_sector_start + i) * context->sector_size);
-                    res = DISK_write( context->device,
+                    err = DISK_write( context->device,
                         (context->start_lba + dir_sector_start + i) * context->sector_size,
                         context->sector_size, context->tempSector);
-                    if (!res) {
+                    if (err != ELOS_OK) {
                         goto exit;
                     }
                 }
@@ -669,8 +670,8 @@ FAT_ID fat_make_entry(VFS_Mount* mount, FAT_ID directory, const cstring subname,
         }
 
         // printf("nextENT READ sector=0x%zx\n", (context->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE);
-        res = DISK_read(context->device, (context->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE, SECTOR_SIZE, context->tempSector);
-        if (res == 0) {
+        err = DISK_read(context->device, (context->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE, SECTOR_SIZE, context->tempSector);
+        if (err != ELOS_OK) {
             printf("Could not read\n");
             return false;
         }
@@ -721,8 +722,8 @@ fill_entries:
     // We could try to undo our previous write (if any) but it may also fail.
     // Perhaps we should try to undo anyway.
     #define FLUSH_PREVIOUS_READ() if (prev_readByteOffset) { \
-        res = DISK_write(context->device, prev_readByteOffset, SECTOR_SIZE, context->tempSector); \
-        if (!res) { \
+        err = DISK_write(context->device, prev_readByteOffset, SECTOR_SIZE, context->tempSector); \
+        if (err != ELOS_OK) { \
             printf("fat_make_entry: Disk write failed %.*s\n", subname.len, subname.ptr); \
             goto exit; \
         } \
@@ -769,8 +770,8 @@ fill_entries:
         // printf("READ sector=0x%zx\n", (context->start_lba + sector_start + sector_index) * SECTOR_SIZE);
         FLUSH_PREVIOUS_READ()
         prev_readByteOffset = (context->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE;
-        res = DISK_read(context->device, prev_readByteOffset, SECTOR_SIZE, context->tempSector);
-        if (res == 0) {
+        err = DISK_read(context->device, prev_readByteOffset, SECTOR_SIZE, context->tempSector);
+        if (err != ELOS_OK) {
             printf("Could not read\n");
             return FAT_ID_NULL;
         }
@@ -884,7 +885,7 @@ fill_entries:
                     int dir_sector_start = fat__cluster_to_sector_offset(context, contentCluster);
                     for (int i = 0; i < context->bpb->sectors_per_cluster; i++) {
                         // printf("CLEARING sector=0x%zx\n", (context->start_lba + dir_sector_start + i) * context->sector_size);
-                        res = DISK_write( context->device,
+                        err = DISK_write( context->device,
                             (context->start_lba + dir_sector_start + i) * context->sector_size,
                             context->sector_size, context->tempSector);
                     }
@@ -915,6 +916,7 @@ bool fat_remove_entry(VFS_Mount* mount, FAT_ID id) {
     u32 contentCluster;
 
     int res;
+    ELOS_Error err;
     fat_decode_id(context, id, &context->current_cluster, &context->sector_index, &subEntryIndex, &context->sector_start, &context->sector_end, &contentCluster, NULL, NULL);
 
     u32 nextCluster = contentCluster;
@@ -933,8 +935,8 @@ bool fat_remove_entry(VFS_Mount* mount, FAT_ID id) {
     // We could try to undo our previous write (if any) but it may also fail.
     // Perhaps we should try to undo anyway.
     #define FLUSH_PREVIOUS_READ() if (prev_readByteOffset) { \
-        res = DISK_write(context->device, prev_readByteOffset, SECTOR_SIZE, context->tempSector); \
-        if (!res) { \
+        err = DISK_write(context->device, prev_readByteOffset, SECTOR_SIZE, context->tempSector); \
+        if (err != ELOS_OK) { \
             printf("fat_remove_entry: Disk write failed\n"); \
             goto exit; \
         } \
@@ -961,8 +963,8 @@ bool fat_remove_entry(VFS_Mount* mount, FAT_ID id) {
         // printf("nextENT READ sector=0x%zx\n", (context->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE);
         FLUSH_PREVIOUS_READ();
         prev_readByteOffset = (mount->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE;
-        res = DISK_read(mount->diskDevice, prev_readByteOffset, SECTOR_SIZE, context->tempSector);
-        if (res == 0) {
+        err = DISK_read(mount->diskDevice, prev_readByteOffset, SECTOR_SIZE, context->tempSector);
+        if (err != ELOS_OK) {
             printf("fat_remove_entry: Could not read\n");
                 goto exit;
         }
@@ -1001,6 +1003,7 @@ exit:
 u64 fat_read(VFS_Mount* mount, FAT_ID file, u64 offset, u64 size, void* buffer) {
 
     int res;
+    ELOS_Error err;
 
     #define SECTOR_SIZE 512
 
@@ -1017,8 +1020,8 @@ u64 fat_read(VFS_Mount* mount, FAT_ID file, u64 offset, u64 size, void* buffer) 
 
     fat__DirectoryEntry* direntryBlock = (fat__DirectoryEntry*)(context->tempSector);
 
-    res = DISK_read(mount->diskDevice, (context->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE, SECTOR_SIZE, direntryBlock);
-    if (!res) return 0;
+    err = DISK_read(mount->diskDevice, (context->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE, SECTOR_SIZE, direntryBlock);
+    if (err != ELOS_OK) return 0;
 
     fat__DirectoryEntry* direntry = &direntryBlock[subEntryIndex];
     u64 fileSize = direntry->file_size;
@@ -1073,8 +1076,8 @@ u64 fat_read(VFS_Mount* mount, FAT_ID file, u64 offset, u64 size, void* buffer) 
             // We must read the sector
             // memcpy in our partial data to write then
             // do a full sector write
-            res = DISK_read(mount->diskDevice, (context->start_lba + sector_offset) * context->sector_size, context->sector_size, data_sector);
-            if (!res) {
+            err = DISK_read(mount->diskDevice, (context->start_lba + sector_offset) * context->sector_size, context->sector_size, data_sector);
+            if (err != ELOS_OK) {
                 printf("read_fat: Failed read at sector %d\n", context->start_lba + sector_offset);
                 return buffer_offset;
             }
@@ -1091,8 +1094,8 @@ u64 fat_read(VFS_Mount* mount, FAT_ID file, u64 offset, u64 size, void* buffer) 
             buffer_offset += part_size;
             sector_index++;
         } else {
-            res = DISK_read(mount->diskDevice, (context->start_lba + sector_offset) * context->sector_size, context->sector_size, (char*)buffer + buffer_offset);
-            if (!res) {
+            err = DISK_read(mount->diskDevice, (context->start_lba + sector_offset) * context->sector_size, context->sector_size, (char*)buffer + buffer_offset);
+            if (err != ELOS_OK) {
                 printf("read_fat: Failed read at sector %d\n", context->start_lba + sector_offset);
                 return buffer_offset;
             }
@@ -1107,6 +1110,7 @@ u64 fat_read(VFS_Mount* mount, FAT_ID file, u64 offset, u64 size, void* buffer) 
 
 u64 fat_write(VFS_Mount* mount, FAT_ID file, u64 offset, u64 size, const void* buffer) {
     int res;
+    ELOS_Error err;
 
     #define SECTOR_SIZE 512
 
@@ -1188,8 +1192,8 @@ u64 fat_write(VFS_Mount* mount, FAT_ID file, u64 offset, u64 size, const void* b
             // memcpy in our partial data to write then
             // do a full sector write
             u64 byteOffset = (mount->start_lba + sector_offset) * context->sector_size;
-            res = DISK_read(mount->diskDevice, byteOffset, context->sector_size, data_sector);
-            if (!res) {
+            err = DISK_read(mount->diskDevice, byteOffset, context->sector_size, data_sector);
+            if (err != ELOS_OK) {
                 printf("write_fat: Failed read at 0x%zx\n", byteOffset);
                 goto update_entry;
             }
@@ -1200,8 +1204,8 @@ u64 fat_write(VFS_Mount* mount, FAT_ID file, u64 offset, u64 size, const void* b
             }
             memcpy(data_sector + sectorByteAlignment, (char*)buffer + buffer_offset, part_size);
 
-            res = DISK_write(mount->diskDevice, byteOffset, context->sector_size, data_sector);
-            if (!res) {
+            err = DISK_write(mount->diskDevice, byteOffset, context->sector_size, data_sector);
+            if (err != ELOS_OK) {
                 printf("write_fat: Failed write at 0x%zx\n", byteOffset);
                 goto update_entry;
             }
@@ -1209,8 +1213,8 @@ u64 fat_write(VFS_Mount* mount, FAT_ID file, u64 offset, u64 size, const void* b
             buffer_offset += part_size;
             sector_index++;
         } else {
-            res = DISK_write(mount->diskDevice, byteOffset, context->sector_size, (char*)buffer + buffer_offset);
-            if (!res) {
+            err = DISK_write(mount->diskDevice, byteOffset, context->sector_size, (char*)buffer + buffer_offset);
+            if (err != ELOS_OK) {
                 printf("write_fat: Failed write at 0x%zx\n", byteOffset);
                 goto update_entry;
             }
@@ -1229,8 +1233,8 @@ update_entry:
     // We could try to undo our previous write (if any) but it may also fail.
     // Perhaps we should try to undo anyway.
     #define FLUSH_PREVIOUS_READ() if (prev_readByteOffset) { \
-        res = DISK_write(context->device, prev_readByteOffset, SECTOR_SIZE, context->tempSector); \
-        if (!res) { \
+        err = DISK_write(context->device, prev_readByteOffset, SECTOR_SIZE, context->tempSector); \
+        if (err != ELOS_OK) { \
             printf("fat_remove_entry: Disk write failed\n"); \
             goto exit; \
         } \
@@ -1255,8 +1259,8 @@ update_entry:
         }
 
         prev_readByteOffset = (mount->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE;
-        res = DISK_read(mount->diskDevice, prev_readByteOffset, SECTOR_SIZE, context->tempSector);
-        if (res == 0) {
+        err = DISK_read(mount->diskDevice, prev_readByteOffset, SECTOR_SIZE, context->tempSector);
+        if (err != ELOS_OK) {
             printf("fat_remove_entry: Could not read\n");
                 goto exit;
         }
@@ -1294,6 +1298,7 @@ bool fat_info(VFS_Mount* mount, FAT_ID file, VFS_HandleInfo* info) {
 
 
     int res;
+    ELOS_Error err;
     char stackBuffer[512];
     int buffer_head = 0;
     int sectorSize = 512;
@@ -1312,8 +1317,8 @@ bool fat_info(VFS_Mount* mount, FAT_ID file, VFS_HandleInfo* info) {
 
     memset(info, 0, sizeof(*info));
     
-    res = DISK_read(mount->diskDevice, (mount->start_lba + context->sector_start + context->sector_index) * sectorSize, sectorSize, direntryBlock);
-    if (!res) return false;
+    err = DISK_read(mount->diskDevice, (mount->start_lba + context->sector_start + context->sector_index) * sectorSize, sectorSize, direntryBlock);
+    if (err != ELOS_OK) return false;
 
     fat__DirectoryEntry* entry = &direntryBlock[subEntryIndex];
     
@@ -1334,6 +1339,7 @@ bool fat_iterate(VFS_Mount* mount, FAT_ID directory, u64* cookie, u64* entryCoun
     init_context(context, mount);
 
     int res;
+    ELOS_Error err;
     fat_decode_id(context, directory, NULL, NULL, NULL, NULL, NULL, &context->current_cluster, &context->sector_start, &context->sector_end);
 
     char longName_buffer[256];
@@ -1367,8 +1373,8 @@ bool fat_iterate(VFS_Mount* mount, FAT_ID directory, u64* cookie, u64* entryCoun
         }
 
         // printf("nextENT READ sector=0x%zx\n", (context->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE);
-        res = DISK_read(context->device, (context->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE, SECTOR_SIZE, context->tempSector);
-        if (res == 0) {
+        err = DISK_read(context->device, (context->start_lba + context->sector_start + context->sector_index) * SECTOR_SIZE, SECTOR_SIZE, context->tempSector);
+        if (err != ELOS_OK) {
             printf("Could not read\n");
             goto exit;
         }
@@ -1499,6 +1505,7 @@ int required_long_name_entries(const cstring name) {
 
 int fat__get_fat(FATContext* context, int cluster) {
     int res;
+    ELOS_Error err;
     
     uint32_t value = -1;
 
@@ -1507,8 +1514,8 @@ int fat__get_fat(FATContext* context, int cluster) {
     if (context->fat_version == fat__FAT16 || context->fat_version == fat__FAT32) {
         // Clean cluster number divide, FAT entry can't span across sectors.
         int sector_index = context->bpb->reserved_sectors + cluster / context->fat_entries_per_sector;
-        res = DISK_read(context->device, (context->start_lba + sector_index) * context->sector_size, context->sector_size, tempBuffer);
-        if (!res) return FAT_CLUSTER_INVALID;
+        err = DISK_read(context->device, (context->start_lba + sector_index) * context->sector_size, context->sector_size, tempBuffer);
+        if (err != ELOS_OK) return FAT_CLUSTER_INVALID;
 
         void* sector_buffer = tempBuffer;
         int entry_index = cluster % context->fat_entries_per_sector;
@@ -1527,8 +1534,8 @@ int fat__get_fat(FATContext* context, int cluster) {
         
         int sector_index = context->bpb->reserved_sectors + fat_offset / context->sector_size;
 
-        res = DISK_read(context->device, (context->start_lba + sector_index) * context->sector_size, 2 * context->sector_size, tempBuffer);
-        if (!res) return FAT_CLUSTER_INVALID;
+        err = DISK_read(context->device, (context->start_lba + sector_index) * context->sector_size, 2 * context->sector_size, tempBuffer);
+        if (err != ELOS_OK) return FAT_CLUSTER_INVALID;
 
         char* sector_buffer = tempBuffer;
 
@@ -1549,6 +1556,7 @@ int fat__get_fat(FATContext* context, int cluster) {
 }
 int fat__set_fat(FATContext* context, int cluster, uint32_t value) {
     int res;
+    ELOS_Error err;
 
     char tempBuffer[2 * 512];
 
@@ -1559,13 +1567,13 @@ int fat__set_fat(FATContext* context, int cluster, uint32_t value) {
             context->bpb->reserved_sectors +
             cluster / context->fat_entries_per_sector;
 
-        res = DISK_read(
+        err = DISK_read(
             context->device,
             (context->start_lba + sector_index) * context->sector_size,
             context->sector_size,
             tempBuffer);
 
-        if (!res)
+        if (err != ELOS_OK)
             return false;
 
         void* sector_buffer = tempBuffer;
@@ -1581,13 +1589,13 @@ int fat__set_fat(FATContext* context, int cluster, uint32_t value) {
                 (uint16_t)value;
         }
 
-        res = DISK_write(
+        err = DISK_write(
             context->device,
             (context->start_lba + sector_index) * context->sector_size,
             context->sector_size,
             tempBuffer);
 
-        return res;
+        return err != ELOS_OK;
     }
     else
     {
@@ -1597,13 +1605,13 @@ int fat__set_fat(FATContext* context, int cluster, uint32_t value) {
             context->bpb->reserved_sectors +
             fat_offset / context->sector_size;
 
-        res = DISK_read(
+        err = DISK_read(
             context->device,
             (context->start_lba + sector_index) * context->sector_size,
             2 * context->sector_size,
             tempBuffer);
 
-        if (!res)
+        if (err != ELOS_OK)
             return false;
 
         char* sector_buffer = tempBuffer;
@@ -1630,13 +1638,13 @@ int fat__set_fat(FATContext* context, int cluster, uint32_t value) {
 
         *entry = current;
 
-        res = DISK_write(
+        err = DISK_write(
             context->device,
             (context->start_lba + sector_index) * context->sector_size,
             2 * context->sector_size,
             tempBuffer);
 
-        return res;
+        return err != ELOS_OK;
     }
 }
 

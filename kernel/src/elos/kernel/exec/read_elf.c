@@ -133,15 +133,20 @@ bool parse_elf(ParseContext* ctx) {
     for (int si = 1; si < EHDR_FIELD(elfHeader, e_shnum); si++) {
         Elf64_Shdr* section = SHDR_INDEX(sections, si);
         const char* name = &sectionNames[SHDR_FIELD(section, sh_name)];
-
-        if (!strcmp(name, ".text")
-            || !strcmp(name, ".rodata")
-            || !strcmp(name, ".data")
-            || !strcmp(name, ".bss")
-        ) {
-            vaddr_low = min(vaddr_low, SHDR_FIELD(section, sh_addr));
-            vaddr_high = max(vaddr_high, SHDR_FIELD(section, sh_addr) + SHDR_FIELD(section, sh_size));
+        
+        u64 sectionFlags = SHDR_FIELD(section, sh_flags);
+        if ((sectionFlags & SHF_ALLOC) == 0) {
+            // debug info, note sections
+            continue;
         }
+        // if (!strcmp(name, ".text")
+        //     || !strcmp(name, ".rodata")
+        //     || !strcmp(name, ".data")
+        //     || !strcmp(name, ".bss")
+        // ) {
+        // }
+        vaddr_low = min(vaddr_low, SHDR_FIELD(section, sh_addr));
+        vaddr_high = max(vaddr_high, SHDR_FIELD(section, sh_addr) + SHDR_FIELD(section, sh_size));
     }
 
     u64 image_size = vaddr_high;
@@ -205,32 +210,36 @@ bool parse_elf(ParseContext* ctx) {
         u8* paddr = (u8*)phys_image_base + SHDR_FIELD(section, sh_addr);
         u8* src = ctx->fileData + SHDR_FIELD(section, sh_offset);
 
+        if (strstr(name, ".rela")) {
+            relSection = section;
+            continue;
+        }
+
         // @TODO Check that the virtual addresses for sections don't overlap in pages.
         //    Issues with exec/read only flags otherwise.
+        u64 sectionType = SHDR_FIELD(section, sh_type);
+        u64 sectionFlags = SHDR_FIELD(section, sh_flags);
+        int memFlags = PMEM_FLAG_USER_SPACE;
 
+        if ((sectionFlags & SHF_ALLOC) == 0) {
+            // debug info, note sections
+            continue;
+        }
 
-        if (!strcmp(name, ".text")) {
+        if ((sectionFlags & SHF_WRITE) == 0) {
+            memFlags |= PMEM_FLAG_READ_ONLY;
+        }
+        if ((sectionFlags & SHF_EXECINSTR) != 0) {
+            memFlags |= PMEM_FLAG_EXECUTABLE;
+        }
+        
+        if (sectionType == SHT_NOBITS) {
             MAPPED
-            PMEM_map_memory(pageTable, vaddr, paddr, sectionSize, PMEM_FLAG_USER_SPACE|PMEM_FLAG_READ_ONLY|PMEM_FLAG_EXECUTABLE);
-            memcpy(vaddr, src, sectionSize);
-        } else if (!strcmp(name, ".rodata")) {
-            MAPPED
-            PMEM_map_memory(pageTable, vaddr, paddr, sectionSize, PMEM_FLAG_USER_SPACE|PMEM_FLAG_READ_ONLY);
-            memcpy(vaddr, src, sectionSize);
-        } else if (!strcmp(name, ".data")) {
-            MAPPED
-            PMEM_map_memory(pageTable, vaddr, paddr, sectionSize, PMEM_FLAG_USER_SPACE);
-            memcpy(vaddr, src, sectionSize);
-        } else if (!strcmp(name, ".data.rel.ro")) {
-            MAPPED
-            PMEM_map_memory(pageTable, vaddr, paddr, sectionSize, PMEM_FLAG_USER_SPACE|PMEM_FLAG_READ_ONLY);
-            memcpy(vaddr, src, sectionSize);
-        } else if (!strcmp(name, ".bss")) {
-            MAPPED
-            PMEM_map_memory(pageTable, vaddr, paddr, sectionSize, PMEM_FLAG_USER_SPACE);
+            PMEM_map_memory(pageTable, vaddr, paddr, sectionSize, memFlags);
             memset(vaddr, 0, sectionSize);
-        } else if (strstr(name, ".rela")) {
-            relSection = section;
+        } else {
+            PMEM_map_memory(pageTable, vaddr, paddr, sectionSize, memFlags);
+            memcpy(vaddr, src, sectionSize);
         }
     }
 
@@ -253,7 +262,10 @@ bool parse_elf(ParseContext* ctx) {
 
             if (type == R_X86_64_RELATIVE) {
                 u64* pos = (u64*)((u8*)virt_image_base + RELA_FIELD(rela, r_offset));
-                *pos = (u64)((u8*)virt_image_base + RELA_FIELD(rela, r_addend));
+                u64 value = (u64)((u8*)virt_image_base + RELA_FIELD(rela, r_addend));
+                *pos = value;
+                // printf("Relocated %p = %p\n", pos, (void*)value);
+                
             } else {
                 printf("WARNING: Unhandled relocation sym=%d type=%d addend=%x off=%x\n", sym, type, (int)RELA_FIELD(rela, r_addend), (int)RELA_FIELD(rela, r_offset));
             }

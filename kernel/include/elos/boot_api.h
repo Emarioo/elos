@@ -14,7 +14,7 @@ typedef struct {
     // Other stuff
     //
     void*    rsdt; // or xsdt
-    void*    initrd;
+    void*    initrd_data;
     uint64_t initrd_size;
     uint64_t utc_time_ns; // since_unix_epoch
 

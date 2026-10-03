@@ -616,7 +616,7 @@ void VFS_dump_mounts(FN_VFS_print printCallback, void* userData) {
     for (int i=0;i<g_mounts_len;i++) {
         VFS_Mount* mount = &g_mounts[i];
 
-        DiskInfo info;
+        ELOS_DiskInfo info;
         DISK_get_info(mount->diskDevice, &info);
         
         int length = snprintf(tempBuffer, sizeof(tempBuffer),

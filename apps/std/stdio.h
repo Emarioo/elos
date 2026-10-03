@@ -36,7 +36,8 @@ size_t fread(void* ptr, size_t size, size_t n, FILE *restrict stream);
 size_t fwrite(const void* ptr, size_t size, size_t n, FILE *restrict stream);
 
 // Move elos specific elsewhere
-ELOS_Error elos_readdir(const char* path, u64* cookie, u64* entryCount, ELOS_DirectoryEntry* buffer);
+ELOS_Error elos_readdir(const char* path, u64* cookie, u32* entryCount, ELOS_DirectoryEntry* buffer);
+ELOS_Error elos_disk_enumerate(u64* cookie, u32* entryCount, ELOS_DiskEntry* buffer);
 
 // Move elos specific elsewhere
 char *getcwd(char* buf, size_t size);

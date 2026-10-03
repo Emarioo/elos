@@ -56,6 +56,8 @@ typedef enum {
     ELOS_ERR_BUSY,
     ELOS_ERR_TIMEOUT,
 
+    ELOS_ERR_OUT_OF_BOUNDS,
+
 
     // ELOS_ERR_IPC_FULL,
 
@@ -635,11 +637,12 @@ typedef struct {
     char   name[63];
     u8     name_len;
     u64    diskSize;
-    u64    sectorSize;
+    u32    sectorSize;
 } ELOS_DiskEntry;
 
+
 typedef struct {
-    ELOS_AsyncOperation operation;
+    u16 operation;
     u16 flags;
     u32 _reserved;
     u64 userData;
@@ -700,7 +703,8 @@ typedef struct {
             const char*          path;
             ELOS_PADDING
             u64                  cookie;
-            u64                  maxEntries;
+            u32                  maxEntries;
+            u32                  _reserved;
             ELOS_DirectoryEntry* buffer;
             ELOS_PADDING
         } readdir;
@@ -730,6 +734,7 @@ typedef struct {
             void*               buffer;
             ELOS_PADDING
             u32                 bufferSize;
+            u32                 _reserved;
             u64                 timeout_ns;
         } net_read;
 
@@ -743,6 +748,7 @@ typedef struct {
         } disk_close;
         struct {
             ELOS_DiskID         id;
+            u32                 _reserved;
             ELOS_DiskInfo*      info;
             ELOS_PADDING
         } disk_info;
@@ -764,7 +770,8 @@ typedef struct {
         } disk_write;
         struct {
             u64                 cookie;
-            u64                 maxEntries;
+            u32                 maxEntries;
+            u32                 _reserved;
             ELOS_DiskEntry*     buffer;
             ELOS_PADDING
         } disk_enumerate;
@@ -772,7 +779,7 @@ typedef struct {
 } ELOS_AsyncRequest;
 
 typedef struct {
-    ELOS_AsyncOperation operation;
+    u16        operation;
     u16        flags;
     ELOS_Error error;
     u64        userData;

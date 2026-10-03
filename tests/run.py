@@ -73,8 +73,9 @@ def test_font_reader():
 
 def main(args):
     global VERBOSE
-    # get test cases
     
+    filters = []
+
     argi = 1
     while argi < len(args):
         arg = args[argi]
@@ -82,11 +83,12 @@ def main(args):
 
         if arg == "-v" or arg == "--verbose":
             VERBOSE = True
+        elif not arg.startswith("-"):
+            filters.append(arg)
         else:
             print(f"Unknown argument '{arg}'")
 
     tests = []
-
 
     for filepath in glob.glob(f"{ROOT}/tests/**", recursive=True):
         basename = os.path.basename(filepath)
@@ -94,7 +96,16 @@ def main(args):
             # print("Test", filepath)
             tests.append(filepath)
 
-    # @TODO Filter tests
+    if filters:
+        tests = [
+            filepath
+            for filepath in tests
+            if any(
+                test_filter in os.path.basename(filepath)
+                for test_filter in filters
+            )
+        ]
+
     # @TODO Option to only re-run failed tests
         
     threads = []
@@ -126,12 +137,14 @@ def main(args):
 
         CFLAGS = ' '.join([s.strip() for s in f'''
             -ggdb 
-            -O0
+            -O0 -fPIC -pie
             -fno-stack-protector -fno-plt   -nostdlib -nostartfiles -nodefaultlibs
             -mno-red-zone
             -Wall -Werror -fshort-wchar -Werror=implicit-function-declaration
             -Wno-multichar
             -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable
+            -Wl,--no-warn-execstack {ROOT}/extern/musl/libm.a
+            -T{ROOT}/tests/trial_sections.ld
             -I{ROOT}/tests
             -I{ROOT}/include
             -I{ROOT}/kernel/src

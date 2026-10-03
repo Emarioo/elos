@@ -130,14 +130,15 @@ def main(args):
 
 #ifndef ELOS_SYSCALL_IDS_INCLUDE
 #define ELOS_SYSCALL_IDS_INCLUDE
-typedef enum {
+typedef enum ELOS_SyscallID ELOS_SyscallID;
+enum ELOS_SyscallID {
 '''
 
     for i, (_, name, _, _) in enumerate(functions):
         enum_name = "_SYS_" + name[4:].upper()
         output += f"    {enum_name} = {i},\n"
 
-    output += '''} ELOS_SyscallID;
+    output += '''};
     
 #endif // ELOS_SYSCALL_IDS_INCLUDE
     '''

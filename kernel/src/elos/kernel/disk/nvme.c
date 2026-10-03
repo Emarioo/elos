@@ -30,17 +30,25 @@ static inline void write_completion_head(NVME_Context* context, u32 identifier, 
 
 bool init_admin_queues(NVME_Context* context);
 bool init_io_queues(NVME_Context* context);
-bool send_identify(NVME_Context* context, DiskDevice* device);
+bool send_identify(Disk_ScanInfo* scanInfo, NVME_Context* context);
 
 _align(4096) static char identify_data[4096];
 
 
-bool nvme_init(DiskDevice* device) {
+#define MAX_NVME_CONTEXTS 20
+#define MAX_NVME_NAMESPACES 20
 
-    // @TODO Each NVME controller has namespaces. Each namespace
-    //   can be a disk device, similar to ahci.
-    
-    PCI_ConfigSpace* config = &device->nvme.configSpace;
+NVME_Context nvmeContexts[MAX_NVME_CONTEXTS];
+volatile u32 nvmeContexts_len;
+
+NVME_Context_Namespace nvmeNamespaces[MAX_NVME_NAMESPACES];
+volatile u32 nvmeNamespaces_len;
+
+
+
+bool nvme_pci_scan(Disk_ScanInfo* scanInfo, PCI_ConfigSpace* config) {
+    // @TODO check config->progIF == 0x2 ? i left this comment, is it important?
+
 
     void* memory_bar = (void*)((u64)(config->header0.bar0 & ~0xF) | ((u64)config->header0.bar1 << 32));
 
@@ -52,10 +60,17 @@ bool nvme_init(DiskDevice* device) {
 
     volatile NVME_Registers* regs = memory_bar;
 
-    NVME_Context* context = PMEM_alloc(PAGE_SIZE);
+    u32 ctx_index = __atomic_fetch_add(&nvmeContexts_len, 1, __ATOMIC_SEQ_CST);
+    if (ctx_index >= MAX_NVME_CONTEXTS)  {
+        return false;
+    }
+    NVME_Context* context = &nvmeContexts[ctx_index];
     memset(context, 0, sizeof(*context));
-    context->regs = regs;
-    device->nvme.nvme_context = context;
+
+    context->config = *config;
+    context->regs   = regs;
+
+    // device->nvme.nvme_context = context;
 
     u32 majorVersion = (regs->VS >> 16) & 0xFFFF;
     u32 minorVersion = (regs->VS >> 8) & 0xFF;
@@ -137,7 +152,7 @@ bool nvme_init(DiskDevice* device) {
 
     printf("nvme: Enabled\n");
 
-    yes = send_identify(context, device);
+    yes = send_identify(scanInfo, context);
     if (!yes) {
         // @TODO Free resources
         printf("Could not identify NVME\n");
@@ -163,11 +178,12 @@ bool nvme_aligned_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* b
 
     u32 queue_identifier = 1;
 
-    NVME_Context* context = device->nvme.nvme_context;
+    NVME_Context_Namespace* namespaceContext = (NVME_Context_Namespace*)device->userData;
+    NVME_Context* context = namespaceContext->context;
 
     KERNEL_PANIC(byteOffset  % context->sectorSize == 0, "not aligned");
     KERNEL_PANIC(byteSize    % context->sectorSize == 0, "not aligned");
-    KERNEL_PANIC((size_t)buffer % 3 == 0, "not aligned");
+    KERNEL_PANIC(((size_t)buffer & 3) == 0, "not aligned");
 
     NVME_SubmissionQueueEntry* entry = (void*)(context->io_sq.address + context->io_submission_tail * sizeof(NVME_SubmissionQueueEntry));
     memset(entry, 0, sizeof(*entry));
@@ -180,7 +196,7 @@ bool nvme_aligned_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* b
     u64 num_blocks = (byteSize + context->sectorSize-1) / context->sectorSize;
 
     entry->command = NVME_CMD_READ;
-    entry->nsid = context->first_nsid;
+    entry->nsid = namespaceContext->nsid;
 
     u32 max_prp_entries = context->MPS / 8 - 1;
     u32 max_size = max_prp_entries * context->MPS;
@@ -260,7 +276,8 @@ bool nvme_aligned_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const 
 
     u32 queue_identifier = 1;
 
-    NVME_Context* context = device->nvme.nvme_context;
+    NVME_Context_Namespace* namespaceContext = (NVME_Context_Namespace*)device->userData;
+    NVME_Context* context = namespaceContext->context;
 
     KERNEL_PANIC(byteOffset  % context->sectorSize == 0, "not aligned");
     KERNEL_PANIC(byteSize    % context->sectorSize == 0, "not aligned");
@@ -281,7 +298,7 @@ bool nvme_aligned_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const 
     entry->body[0] = lba;
     entry->body[1] = lba >> 32;
     entry->body[3] = num_blocks;
-    entry->nsid = context->first_nsid;
+    entry->nsid = namespaceContext->nsid;
 
     context->io_submission_tail++;
     write_submission_tail(context, queue_identifier, context->io_submission_tail);
@@ -323,14 +340,15 @@ bool nvme_aligned_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const 
 }
 
 
-bool nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
+ELOS_Error nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
 
     if (((size_t)buffer & 3) != 0) {
         printf("nvme: Buffer is not 4-byte aligned on read.\n");
-        return false;
+        return ELOS_ERR_UNKNOWN;
     }
 
-    NVME_Context* context = device->nvme.nvme_context;
+    NVME_Context_Namespace* namespaceContext = (NVME_Context_Namespace*)device->userData;
+    NVME_Context* context = namespaceContext->context;
 
     LOCK(&context->buffer_lock);
 
@@ -386,17 +404,18 @@ bool nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
 
     UNLOCK(&context->buffer_lock);
 
-    return !anyFailed;
+    return !anyFailed ? ELOS_OK : ELOS_ERR_UNKNOWN;
 }
 
 
-bool nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* buffer) {
+ELOS_Error nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* buffer) {
     if (((size_t)buffer & 3) != 0) {
         printf("nvme: Buffer is not 4-byte aligned on write.\n");
-        return false;
+        return ELOS_ERR_UNKNOWN;
     }
 
-    NVME_Context* context = device->nvme.nvme_context;
+    NVME_Context_Namespace* namespaceContext = (NVME_Context_Namespace*)device->userData;
+    NVME_Context* context = namespaceContext->context;
 
     LOCK(&context->buffer_lock);
 
@@ -455,7 +474,7 @@ bool nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* bu
 
     UNLOCK(&context->buffer_lock);
 
-    return !anyFailed;
+    return !anyFailed ? ELOS_OK : ELOS_ERR_UNKNOWN;
 }
 
 
@@ -480,7 +499,7 @@ bool init_admin_queues(NVME_Context* context) {
 }
 
 
-bool send_identify(NVME_Context* context, DiskDevice* device) {
+bool send_identify(Disk_ScanInfo* scanInfo, NVME_Context* context) {
 
     NVME_SubmissionQueueEntry* entry = (void*)(context->asq.address + context->submission_tail * sizeof(NVME_SubmissionQueueEntry));
     memset(entry, 0, sizeof(*entry));
@@ -521,9 +540,20 @@ bool send_identify(NVME_Context* context, DiskDevice* device) {
         break;
     }
 
+    char controller_modelNumber[64];
+
     char* modelNumber = identify_data + 24;
-    snprintf(device->diskInfo.name, sizeof(device->diskInfo.name),
-        "%s", modelNumber);
+    int modelLength = 0;
+    while (modelLength < 64 - 24) {
+        char chr = modelNumber[modelLength];
+        if (chr == ' ' || chr == '\t' || chr == '\n' || chr == '\f' || chr < 32) {
+            break;
+        }
+        modelLength++;
+    }
+    
+    snprintf(controller_modelNumber, sizeof(controller_modelNumber),
+        "%*.s", modelLength, modelNumber);
 
     u32 MDTS = identify_data[77];
 
@@ -652,8 +682,39 @@ bool send_identify(NVME_Context* context, DiskDevice* device) {
             return false;
         }
 
+        // @TODO This should be in namespace struct, not context struct.
         context->sectorSize = 1 << LBADS;
         // printf("Block Size %d\n", context->sectorSize);
+
+        u32 ctx_index = __atomic_fetch_add(&nvmeNamespaces_len, 1, __ATOMIC_SEQ_CST);
+        if (ctx_index >= MAX_NVME_NAMESPACES) {
+            return false;
+        }
+        NVME_Context_Namespace* contextNamespace = &nvmeNamespaces[ctx_index];
+
+        contextNamespace->context = context;
+        contextNamespace->nsid = context->first_nsid;
+        
+        DiskDevice* device = disk_reserve_device();
+        if (!device) {
+            // no more disk devices to reserve.
+            return true;
+        }
+        device->type = DISK_TYPE_NVME;
+        device->userData = contextNamespace;
+
+        snprintf(device->diskInfo.name, sizeof(device->diskInfo.name),
+            "%*.s", modelLength, controller_modelNumber);
+
+        if (scanInfo->count < scanInfo->maxCount) {
+            scanInfo->devices[scanInfo->count] = device;
+            scanInfo->count++;
+        } else {
+            // Free device slot
+            device->type = DISK_TYPE_NONE;
+            return true;
+        }
+
     }
 
     return true;

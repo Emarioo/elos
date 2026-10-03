@@ -1,11 +1,6 @@
-/*
-    TEMPLATE = base.cfg
-*/
 
 #include "trial.h"
-
 #include "string.h"
-
 #include "elos/elos.h"
 
 

@@ -14,6 +14,7 @@
 
 bool gpt_find_partition(DiskDevice* device, int partitionIndex, u64* start_lba, u64* end_lba) {
     bool res;
+    ELOS_Error err;
 
     u64 sectorSize = 512;
 
@@ -26,8 +27,8 @@ bool gpt_find_partition(DiskDevice* device, int partitionIndex, u64* start_lba, 
     int gpt_header_lba = 1;
     int gpt_partArray_lba = 2;
 
-    res = DISK_read(device, gpt_header_lba * sectorSize, sectorSize, gptHeader);
-    if (!res) {
+    err = DISK_read(device, gpt_header_lba * sectorSize, sectorSize, gptHeader);
+    if (err != ELOS_OK) {
         return false;
     }
 
@@ -39,8 +40,8 @@ bool gpt_find_partition(DiskDevice* device, int partitionIndex, u64* start_lba, 
 
         mbr__Header* mbrHeader = (mbr__Header*)(gptHeader);
 
-        res = DISK_read(device, 0, sectorSize, mbrHeader);
-        if (!res) {
+        err = DISK_read(device, 0, sectorSize, mbrHeader);
+        if (err != ELOS_OK) {
             return false;
         }
 
@@ -75,8 +76,8 @@ bool gpt_find_partition(DiskDevice* device, int partitionIndex, u64* start_lba, 
         u64 partitionByteOffset = partitionIndex * gptHeader->entry_size;
 
 
-        res = DISK_read(device, gpt_partArray_lba * sectorSize + (partitionByteOffset / sectorSize) * sectorSize, sectorSize, partitionBlock);
-        if (!res) {
+        err = DISK_read(device, gpt_partArray_lba * sectorSize + (partitionByteOffset / sectorSize) * sectorSize, sectorSize, partitionBlock);
+        if (err != ELOS_OK) {
             return false;
         }
 

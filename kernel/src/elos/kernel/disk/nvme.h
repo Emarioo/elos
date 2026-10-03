@@ -2,7 +2,7 @@
 
 #include "elos/common/types.h"
 
-#include "elos/kernel/disk/disk_internal.h"
+#include "elos/kernel/disk/disk_private.h"
 
 
 #pragma pack(push, 1)
@@ -74,6 +74,8 @@ typedef enum {
 
 typedef struct NVME_Context NVME_Context;
 struct NVME_Context {
+    PCI_ConfigSpace config;
+
     volatile NVME_Registers* regs;
 
     u32 DRSTRD;
@@ -102,7 +104,14 @@ struct NVME_Context {
     NVME_Queue io_cq;
 };
 
+typedef struct NVME_Context_Namespace NVME_Context_Namespace;
+struct NVME_Context_Namespace {
+    NVME_Context* context;
+    u32           nsid;
+};
 
-bool nvme_init(DiskDevice* device);
-bool nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer);
-bool nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* buffer);
+
+bool nvme_pci_scan(Disk_ScanInfo* scanInfo, PCI_ConfigSpace* config);
+
+ELOS_Error nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer);
+ELOS_Error nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* buffer);

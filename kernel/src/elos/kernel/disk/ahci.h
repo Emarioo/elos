@@ -2,7 +2,7 @@
 
 #include "elos/common/types.h"
 
-#include "elos/kernel/disk/disk_internal.h"
+#include "elos/kernel/disk/disk_private.h"
 
 
 
@@ -323,13 +323,13 @@ typedef struct tagHBA_CMD_TBL
 } HBA_CMD_TBL;
 #pragma pack(pop)
 
-bool ahci_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config);
+bool ahci_pci_scan(Disk_ScanInfo* scanInfo, PCI_ConfigSpace* config);
 
 
 int find_cmdslot(HBA_PORT *port);
 
-bool ahci_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer);
-bool ahci_write(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer);
+ELOS_Error ahci_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer);
+ELOS_Error ahci_write(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer);
 
 void stop_cmd(HBA_PORT *port);
 void start_cmd(HBA_PORT *port);

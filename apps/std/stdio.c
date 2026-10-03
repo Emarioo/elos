@@ -803,7 +803,7 @@ int chdir(const char *path) {
 }
 
 
-ELOS_Error elos_readdir(const char* _path, u64* cookie, u64* entryCount, ELOS_DirectoryEntry* buffer) {
+ELOS_Error elos_readdir(const char* _path, u64* cookie, u32* entryCount, ELOS_DirectoryEntry* buffer) {
     
     ELOS_Error error;
 
@@ -829,6 +829,35 @@ ELOS_Error elos_readdir(const char* _path, u64* cookie, u64* entryCount, ELOS_Di
 
     *cookie = cqe.readdir.cookie;
     *entryCount = cqe.readdir.entryCount;
+
+    return cqe.error;
+}
+
+
+
+ELOS_Error elos_disk_enumerate(u64* cookie, u32* entryCount, ELOS_DiskEntry* buffer) {
+    
+    ELOS_Error error;
+
+    ELOS_AsyncRequest req = {0};
+    ELOS_AsyncCompletion cqe;
+    Async_RequestID requestID;
+
+    req.operation   = ELOS_ASYNC_DISK_ENUMERATE;
+    req.flags       = 0;
+
+    req.disk_enumerate.cookie = *cookie;
+    req.disk_enumerate.maxEntries = *entryCount;
+    req.disk_enumerate.buffer = buffer;
+
+    requestID = async_submit(&req);
+    bool res = async_wait(requestID, &cqe, 0);
+    if (!res) {
+        return ELOS_ERR_UNKNOWN;
+    }
+
+    *cookie = cqe.disk_enumerate.cookie;
+    *entryCount = cqe.disk_enumerate.entryCount;
 
     return cqe.error;
 }
