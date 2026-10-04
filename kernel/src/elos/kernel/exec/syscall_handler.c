@@ -288,6 +288,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
     int coreIndex = CPU_get_core_index();
     EXEC_Core* core = &cores[coreIndex];
     EXEC_Thread* thread = &core->threads[core->active_thread];
+    EXEC_Process* process = thread->process;
 
     PageTable* userPageTable = (void*)(read_cr3() & ~0xFFFLU);
 
@@ -295,20 +296,20 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
     //   access each others ELF image or HEAP or frame buffers.
 
     switch (syscall_id) {
-        case _SYS_CAPABILITIES: {
-            ELOS_Capabilities* cap = (ELOS_Capabilities*)arg0;
+        case _SYS_PERMISSIONS: {
+            ELOS_Permissions* cap = (ELOS_Permissions*)arg0;
 
             // @TODO Get current process capabilities.
-            memset(cap, 0, sizeof(ELOS_Capabilities));
+            memset(cap, 0, sizeof(ELOS_Permissions));
 
             returnValue = ELOS_OK;
 
         } break;
-        case _SYS_REQUEST_CAPABILITIES: {
-            ELOS_Capabilities* cap = (ELOS_Capabilities*)arg0;
+        case _SYS_REQUEST_PERMISSIONS: {
+            ELOS_Permissions* cap = (ELOS_Permissions*)arg0;
 
             // @TODO Get current process capabilities.
-            memset(cap, 0, sizeof(ELOS_Capabilities));
+            memset(cap, 0, sizeof(ELOS_Permissions));
 
             returnValue = ELOS_OK;
 
@@ -525,144 +526,144 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             returnValue = ELOS_OK;
         } break;
-        case _SYS_SERVICE_CREATE: {
-            const char* name = (void*)arg0;
-            ELOS_ServiceEndpoint* endpoint = (void*)arg1;
-            u32 queueSize = arg2;
+        // case _SYS_SERVICE_CREATE: {
+        //     const char* name = (void*)arg0;
+        //     ELOS_ServiceEndpoint* endpoint = (void*)arg1;
+        //     u32 queueSize = arg2;
 
-            int maxlen = 64;
-            int name_len = strnlen(name, maxlen + 1);
-            if (name_len > maxlen) {
-                returnValue = ELOS_ERR_INVALID_PARAM;
-                break;
-            }
+        //     int maxlen = 64;
+        //     int name_len = strnlen(name, maxlen + 1);
+        //     if (name_len > maxlen) {
+        //         returnValue = ELOS_ERR_INVALID_PARAM;
+        //         break;
+        //     }
 
-            // @TODO Check capability
+        //     // @TODO Check capability
 
-            write_cr3((u64)g_kernelPageTable);
+        //     write_cr3((u64)g_kernelPageTable);
 
-            const char* phys_name = PMEM_virt_to_phys(userPageTable, (void*)name);
+        //     const char* phys_name = PMEM_virt_to_phys(userPageTable, (void*)name);
 
-            bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)phys_name, (void*)phys_name, PAGE_SIZE, PMEM_FLAG_NONE);
-            if (!mapped) {
-                returnValue = ELOS_ERR_UNKNOWN;
-                break;
-            }
+        //     bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)phys_name, (void*)phys_name, PAGE_SIZE, PMEM_FLAG_NONE);
+        //     if (!mapped) {
+        //         returnValue = ELOS_ERR_UNKNOWN;
+        //         break;
+        //     }
 
-            ServiceEndpoint* tmp_endpoint;
-            bool result = SRV_service_create(phys_name, &tmp_endpoint, queueSize);
+        //     ServiceEndpoint* tmp_endpoint;
+        //     bool result = SRV_service_create(phys_name, &tmp_endpoint, queueSize);
             
-            write_cr3((u64)userPageTable);
+        //     write_cr3((u64)userPageTable);
             
-            if (!result) {
-                returnValue = ELOS_ERR_UNKNOWN;
-            } else {
-                SET_ADDRESS_SIZE_TYPE(endpoint, tmp_endpoint);
-                returnValue = ELOS_OK;
-            }
+        //     if (!result) {
+        //         returnValue = ELOS_ERR_UNKNOWN;
+        //     } else {
+        //         SET_ADDRESS_SIZE_TYPE(endpoint, tmp_endpoint);
+        //         returnValue = ELOS_OK;
+        //     }
 
-        } break;
-        case _SYS_SERVICE_CONNECT: {
-            const char* name = (void*)arg0;
-            ELOS_ServiceEndpoint* endpoint = (void*)arg1;
-            u32 queueSize = arg2;
+        // } break;
+        // case _SYS_SERVICE_CONNECT: {
+        //     const char* name = (void*)arg0;
+        //     ELOS_ServiceEndpoint* endpoint = (void*)arg1;
+        //     u32 queueSize = arg2;
             
-            int maxlen = 64;
-            int name_len = strnlen(name, maxlen + 1);
-            if (name_len > maxlen) {
-                returnValue = ELOS_ERR_INVALID_PARAM;
-                break;
-            }
+        //     int maxlen = 64;
+        //     int name_len = strnlen(name, maxlen + 1);
+        //     if (name_len > maxlen) {
+        //         returnValue = ELOS_ERR_INVALID_PARAM;
+        //         break;
+        //     }
 
-            // @TODO Check capability
+        //     // @TODO Check capability
 
-            write_cr3((u64)g_kernelPageTable);
+        //     write_cr3((u64)g_kernelPageTable);
 
-            const char* phys_name = PMEM_virt_to_phys(userPageTable, (void*)name);
+        //     const char* phys_name = PMEM_virt_to_phys(userPageTable, (void*)name);
 
-            bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)phys_name, (void*)phys_name, PAGE_SIZE, PMEM_FLAG_NONE);
-            if (!mapped) {
-                returnValue = ELOS_ERR_UNKNOWN;
-                break;
-            }
+        //     bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)phys_name, (void*)phys_name, PAGE_SIZE, PMEM_FLAG_NONE);
+        //     if (!mapped) {
+        //         returnValue = ELOS_ERR_UNKNOWN;
+        //         break;
+        //     }
 
-            ServiceEndpoint* tmp_endpoint;
-            bool result = SRV_service_connect(phys_name, &tmp_endpoint, queueSize);
+        //     ServiceEndpoint* tmp_endpoint;
+        //     bool result = SRV_service_connect(phys_name, &tmp_endpoint, queueSize);
             
-            write_cr3((u64)userPageTable);
+        //     write_cr3((u64)userPageTable);
             
-            if (!result) {
-                returnValue = ELOS_ERR_UNKNOWN;
-            } else {
-                SET_ADDRESS_SIZE_TYPE(endpoint, tmp_endpoint);
-                returnValue = ELOS_OK;
-            }
-        } break;
-        case _SYS_SERVICE_SEND: {
-            ELOS_ServiceEndpoint endpoint = (void*)arg0;
-            const u8* data = (void*)arg1;
-            u32 size = arg2;
+        //     if (!result) {
+        //         returnValue = ELOS_ERR_UNKNOWN;
+        //     } else {
+        //         SET_ADDRESS_SIZE_TYPE(endpoint, tmp_endpoint);
+        //         returnValue = ELOS_OK;
+        //     }
+        // } break;
+        // case _SYS_SERVICE_SEND: {
+        //     ELOS_ServiceEndpoint endpoint = (void*)arg0;
+        //     const u8* data = (void*)arg1;
+        //     u32 size = arg2;
 
-            // @TODO Check capability
+        //     // @TODO Check capability
             
-            write_cr3((u64)g_kernelPageTable);
+        //     write_cr3((u64)g_kernelPageTable);
 
-            const u8* phys_data = PMEM_virt_to_phys(userPageTable, (void*)data);
+        //     const u8* phys_data = PMEM_virt_to_phys(userPageTable, (void*)data);
             
-            bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)phys_data, (void*)phys_data, PAGE_SIZE, PMEM_FLAG_NONE);
-            if (!mapped) {
-                returnValue = ELOS_ERR_UNKNOWN;
-                break;
-            }
+        //     bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)phys_data, (void*)phys_data, PAGE_SIZE, PMEM_FLAG_NONE);
+        //     if (!mapped) {
+        //         returnValue = ELOS_ERR_UNKNOWN;
+        //         break;
+        //     }
 
-            bool result = SRV_service_send((ServiceEndpoint*)endpoint, phys_data, size);
+        //     bool result = SRV_service_send((ServiceEndpoint*)endpoint, phys_data, size);
             
-            write_cr3((u64)userPageTable);
+        //     write_cr3((u64)userPageTable);
 
-            if (!result) {
-                returnValue = ELOS_ERR_UNKNOWN;
-            } else {
-                returnValue = ELOS_OK;
-            }
-        } break;
-        case _SYS_SERVICE_RECV: {
-            ELOS_ServiceEndpoint endpoint = (void*)arg0;
-            ELOS_ServiceEndpoint* senderEndpoint = (void*)arg1;
-            u8** data = (void*)arg2;
-            u32* size = (void*)arg3;
-            u64  timeout_ns = arg4;
+        //     if (!result) {
+        //         returnValue = ELOS_ERR_UNKNOWN;
+        //     } else {
+        //         returnValue = ELOS_OK;
+        //     }
+        // } break;
+        // case _SYS_SERVICE_RECV: {
+        //     ELOS_ServiceEndpoint endpoint = (void*)arg0;
+        //     ELOS_ServiceEndpoint* senderEndpoint = (void*)arg1;
+        //     u8** data = (void*)arg2;
+        //     u32* size = (void*)arg3;
+        //     u64  timeout_ns = arg4;
 
-            // @TODO Check capability
+        //     // @TODO Check capability
             
-            write_cr3((u64)g_kernelPageTable);
+        //     write_cr3((u64)g_kernelPageTable);
 
-            ServiceEndpoint* tmp_senderEndpoint;
-            u8* tmp_data;
-            u64 tmp_size;
+        //     ServiceEndpoint* tmp_senderEndpoint;
+        //     u8* tmp_data;
+        //     u64 tmp_size;
 
-            bool result = SRV_service_recv((ServiceEndpoint*)endpoint, &tmp_senderEndpoint, &tmp_data, &tmp_size, timeout_ns);
+        //     bool result = SRV_service_recv((ServiceEndpoint*)endpoint, &tmp_senderEndpoint, &tmp_data, &tmp_size, timeout_ns);
             
-            if (tmp_data) {
-                PMEM_map_memory(userPageTable, tmp_data, tmp_data, tmp_size, PMEM_FLAG_USER_SPACE);
-            }
+        //     if (tmp_data) {
+        //         PMEM_map_memory(userPageTable, tmp_data, tmp_data, tmp_size, PMEM_FLAG_USER_SPACE);
+        //     }
 
-            write_cr3((u64)userPageTable);
+        //     write_cr3((u64)userPageTable);
 
-            if (senderEndpoint) {
-                SET_ADDRESS_SIZE_TYPE(senderEndpoint, (ELOS_ServiceEndpoint)tmp_senderEndpoint);
-            }
-            SET_ADDRESS_SIZE_TYPE(data, tmp_data);
-            *size = tmp_size;
+        //     if (senderEndpoint) {
+        //         SET_ADDRESS_SIZE_TYPE(senderEndpoint, (ELOS_ServiceEndpoint)tmp_senderEndpoint);
+        //     }
+        //     SET_ADDRESS_SIZE_TYPE(data, tmp_data);
+        //     *size = tmp_size;
 
-            if (!result) {
-                returnValue = ELOS_ERR_UNKNOWN;
-            } else {
-                returnValue = ELOS_OK;
-            }
-        } break;
+        //     if (!result) {
+        //         returnValue = ELOS_ERR_UNKNOWN;
+        //     } else {
+        //         returnValue = ELOS_OK;
+        //     }
+        // } break;
         case _SYS_SHARED_MEMORY_CREATE: {
             size_t size = arg0;
-            ELOS_SharedMemory* handle = (void*)arg1;
+            ELOS_SharedMemoryHandle* handle = (void*)arg1;
 
             // @TODO Check capability
             
@@ -682,14 +683,14 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             }
         } break;
         case _SYS_SHARED_MEMORY_GRANT: {
-            ELOS_SharedMemory handle = (void*)arg0;
-            ELOS_ServiceEndpoint endpoint = (void*)arg1;
+            ELOS_SharedMemoryHandle handle = (void*)arg0;
+            ELOS_ProcessID processID = arg1;
 
             // @TODO Check capability
             
             write_cr3((u64)g_kernelPageTable);
 
-            bool result = SRV_shared_memory_grant((SharedMemory*)handle, (ServiceEndpoint*)endpoint);
+            bool result = SRV_shared_memory_grant((SharedMemory*)handle, processID);
 
             write_cr3((u64)userPageTable);
 
@@ -700,7 +701,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             }
         } break;
         case _SYS_SHARED_MEMORY_INFO: {
-            ELOS_SharedMemory handle = (void*)arg0;
+            ELOS_SharedMemoryHandle handle = (void*)arg0;
             void** buffer = (void**)arg1;
             size_t* size = (void*)arg2;
 
@@ -909,6 +910,93 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             
             returnValue = ELOS_OK;
             
+        } break;
+
+        case _SYS_EXIT_THREAD: {
+            int exitCode = arg0;
+
+            // @TODO Implement exit thread.
+
+            int coreIndex = CPU_get_core_index();
+            EXEC_Core* core = &cores[coreIndex];
+            EXEC_Thread* activeThread = &core->threads[core->active_thread];
+
+            // @TODO Free resources.
+
+            core->rescheduleSyscall = true;
+            activeThread->used = false;
+            
+            returnValue = ELOS_OK;
+            
+        } break;
+        
+        case _SYS_SPAWN_THREAD: {
+            int exitCode = arg0;
+
+            // @TODO Implement spawn thread.
+            
+            returnValue = ELOS_ERR_UNKNOWN;
+            
+        } break;
+
+        case _SYS_JOIN_THREAD: {
+            int exitCode = arg0;
+
+            // @TODO Implement spawn thread.
+            
+            returnValue = ELOS_ERR_UNKNOWN;
+            
+        } break;
+        
+        case _SYS_THREAD_ID: {
+            // @TODO Implement thread id.
+            returnValue = core->active_thread;
+        } break;
+        
+        case _SYS_SPAWN_PROCESS: {
+            int exitCode = arg0;
+            
+            // write_cr3((u64)g_kernelPageTable);
+
+            // check current process's permission to spawn processes
+            // bool canSpawn = PERM_check(process->permissions, ELOS_PERM_PROCESS_SPAWN);
+            
+            // if () {
+            //     returnValue = ;
+            //     break;
+            // }
+
+            // open the elf file and hash it
+            // check process limit
+
+            // load file
+
+
+            // @TODO Implement spawn thread.
+            
+            returnValue = ELOS_ERR_UNKNOWN;
+            
+        } break;
+        
+        case _SYS_PROCESS_ID: {
+            // @TODO Implement process id.
+            returnValue = core->active_thread;
+        } break;
+
+        case _SYS_KILL_PROCESS: {
+            int exitCode = arg0;
+
+            // @TODO Implement spawn thread.
+            
+            returnValue = ELOS_ERR_UNKNOWN;
+        } break;
+
+        case _SYS_KILL_PROCESS_BY_NAME: {
+            int exitCode = arg0;
+
+            // @TODO Implement spawn thread.
+            
+            returnValue = ELOS_ERR_UNKNOWN;
         } break;
 
         case _SYS_DEFAULT_AUDIO: {

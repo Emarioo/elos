@@ -392,7 +392,10 @@ void send_command(cstring text) {
     } else if (!strcmp(text.ptr, "doom")) {
         // Kill doom if it exists
         EXEC_kill("doom");
-        EXEC_create_user_thread("/pkg/doom/doom.elf", -1);
+        bool create_doom = EXEC_create_user_thread("/pkg/doom/doom.elf", -1);
+        if (!create_doom) {
+            printf("Failed spawning doom\n");
+        }
     } else if (!strcmp(text.ptr, "supper")) {
         EXEC_kill("supper");
         EXEC_create_user_thread("/pkg/supper/supper.elf", -1);

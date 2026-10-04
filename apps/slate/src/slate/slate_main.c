@@ -125,6 +125,8 @@ void _start() {
     // play_sound("/pkg/wav/dream.wav");
 
     editor_loop();
+
+    exit(1);
 }
 
 

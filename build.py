@@ -137,6 +137,9 @@ def main():
     if img:
         release_dir = "releases"
         package = tools.default_package(release_dir)
+        package.auto_run_paths.append("/pkg/prism/prism.elf")
+        # package.auto_run_paths.append("/pkg/slate/slate.elf")
+        # package.auto_run_paths.append("/pkg/doom/doom.elf")
         tools.package_elos(package, iso)
 
 

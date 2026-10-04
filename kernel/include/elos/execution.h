@@ -3,11 +3,22 @@
 #include "elos/common/types.h"
 
 #include "elos/cpu.h"
+#include "elos/elos.h"
+
+#include "elos/permission.h"
 
 
 typedef void(*FN_ThreadEntry)();
 
-typedef struct {
+typedef struct EXEC_Process EXEC_Process;
+struct EXEC_Process {
+    // Permissions
+    Permissions* permissions;
+};
+
+
+typedef struct EXEC_Thread EXEC_Thread;
+struct EXEC_Thread {
     ContextFrame    frame;
     void*           stack;
     FN_ThreadEntry  entry;
@@ -22,7 +33,9 @@ typedef struct {
 
     u16             pcid;
 
-} EXEC_Thread;
+    EXEC_Process*   process;
+
+};
 
 #define CORE_LIMIT 32
 #define THREAD_LIMIT 32

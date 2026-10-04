@@ -6,7 +6,7 @@
 #include "elos/elos.h"
 
 typedef struct FILE FILE;
-typedef u32 mode_t;
+typedef uint32_t mode_t;
 
 #define SEEK_SET	0	/* Seek from beginning of file.  */
 #define SEEK_CUR	1	/* Seek from current position.  */
@@ -36,8 +36,8 @@ size_t fread(void* ptr, size_t size, size_t n, FILE *restrict stream);
 size_t fwrite(const void* ptr, size_t size, size_t n, FILE *restrict stream);
 
 // Move elos specific elsewhere
-ELOS_Error elos_readdir(const char* path, u64* cookie, u32* entryCount, ELOS_DirectoryEntry* buffer);
-ELOS_Error elos_disk_enumerate(u64* cookie, u32* entryCount, ELOS_DiskEntry* buffer);
+ELOS_Error elos_readdir(const char* path, uint64_t* cookie, uint32_t* entryCount, ELOS_DirectoryEntry* buffer);
+ELOS_Error elos_disk_enumerate(uint64_t* cookie, uint32_t* entryCount, ELOS_DiskEntry* buffer);
 
 // Move elos specific elsewhere
 char *getcwd(char* buf, size_t size);

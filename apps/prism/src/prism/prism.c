@@ -9,6 +9,7 @@
 
 #include "stdlib.h"
 #include "stdio.h"
+#include "stdnet.h"
 
 
 typedef struct {
@@ -20,9 +21,9 @@ typedef struct {
     int   stride;
     u64   size;
     void* buffer;
-    ELOS_SharedMemory sharedMemoryHandle;
+    ELOS_SharedMemoryHandle sharedMemoryHandle;
 
-    ELOS_ServiceEndpoint ownerEndpoint; // @TODO This assumes endpoints can't be reused.
+    ELOS_ProcessID ownerEndpoint; // @TODO This assumes process ids can't be reused.
 } Surface;
 
 
@@ -33,17 +34,23 @@ void destroy_surface(int surfaceID);
 Surface* get_surface(int surfaceID);
 void present_surface(int surfaceID);
 
-ELOS_ServiceEndpoint serviceEndpoint;
 ELOS_FrameBuffer monitorFrameBuffer;
+
+ELOS_Net_Handle netHandle;
 
 
 void _start() {
     ELOS_Error error;
 
-    error = SYS_service_create(PRISM_SERVICE_NAME, &serviceEndpoint, 4096);
+    ELOS_Net_Address address = {0};
+    address.protocol = ELOS_NET_PROTO_UDP_IPV4;
+    address.udp_tcp4.address = net_ipv4_from_str("127.0.0.1");
+    address.udp_tcp4.port = PRISM_PROTOCOL_PORT;
+
+    error = net_open(&address, &netHandle);
     if (error != ELOS_OK) {
         // Happens if another instance is open
-        printf("prism: Could not start service\n");
+        printf("prism: Could not start service at port %u\n", address.udp_tcp4.port);
         exit(1);
     }
 
@@ -54,6 +61,10 @@ void _start() {
     }
 
     prism_loop();
+
+    // printf("prism quit\n");
+
+    exit(1);
 }
 
 
@@ -61,22 +72,42 @@ void _start() {
 void prism_loop() {
     ELOS_Error error;
     while (1) {
-        const PrismMessage* message;
-        u32 messageSize;
-        ELOS_ServiceEndpoint senderEndpoint;
+        char _message_buffer[512];
+        u32 messageSize = sizeof(_message_buffer);
 
-        error = SYS_service_recv(serviceEndpoint, &senderEndpoint, (const void**)&message, &messageSize, 0);
-        if (error != ELOS_OK || !message) {
+        ELOS_Net_Address senderAddress = {0};
+
+        // printf("prism: Try read\n");
+
+        error = net_read(netHandle, &senderAddress, &_message_buffer, &messageSize, 0);
+        if (error == ELOS_ERR_TIMEOUT) {
             // Nothing to do.
             pause();
             continue;
+        } else if (error != ELOS_OK) {
+            printf("prism: net_read error %s\n", elos_error(error));
+            break;
         }
+
+        const PrismMessage* message = (const PrismMessage*)_message_buffer;
+
+        // @TODO Add magic number to message. To prevent accidental messages from doing stuff.
+        //    In theory it should be fine, prism should be sturdy and not allow super large surface width but still.
 
         // printf("prism: %d %d %d %d\n", message->type, message->moveSurface.surfaceID, message->moveSurface.x, message->moveSurface.y);
         
         switch (message->type) {
+            case PRISM_INVALID: break;
+            case PRISM_PING_RESPONSE:
             case PRISM_CREATE_SURFACE_RESPONSE: {
-                printf("prism: Received response type which shouldn't happen.\n");
+                printf("prism: Received response type %d which shouldn't happen.\n", message->type);
+            } break;
+            case PRISM_PING: {
+                PrismMessage response = {
+                    .type = PRISM_PING_RESPONSE,
+                };
+                error = net_write(netHandle, &senderAddress, &response, sizeof(response));
+                // Can't do much with an error.
             } break;
             case PRISM_CREATE_SURFACE: {
                 Surface* surface = create_surface(message->createSurface.width, message->createSurface.height);
@@ -88,18 +119,24 @@ void prism_loop() {
                             .sharedMemoryHandle = NULL,
                         },
                     };
-                    error = SYS_service_send(senderEndpoint, &response, sizeof(response));
+                    error = net_write(netHandle, &senderAddress, &response, sizeof(response));
                     // Can't do much with an error.
                     break;
                 }
 
-                error = SYS_shared_memory_grant(surface->sharedMemoryHandle, senderEndpoint);
+                if (message->processID == 0) {
+                    printf("prism: Client didn't provide process ID. Can't share memory buffer.\n");
+                    break;
+                }
+
+                error = SYS_shared_memory_grant(surface->sharedMemoryHandle, message->processID);
                 if (error != ELOS_OK) {
+                    printf("Could not grant\n");
                     destroy_surface(surface->surfaceId);
                     break;
                 }
 
-                surface->ownerEndpoint = senderEndpoint;
+                surface->ownerEndpoint = message->processID;
 
                 PrismMessage response = {
                     .type = PRISM_CREATE_SURFACE_RESPONSE,
@@ -109,8 +146,9 @@ void prism_loop() {
                         .stride = surface->stride,
                     },
                 };
-                error = SYS_service_send(senderEndpoint, &response, sizeof(response));
+                error = net_write(netHandle, &senderAddress, &response, sizeof(response));
                 if (error != ELOS_OK) {
+                    printf("Could not net_write response\n");
                     // Can't do much with an error.
                     destroy_surface(surface->surfaceId);
                     break;
@@ -118,21 +156,25 @@ void prism_loop() {
             } break;
             case PRISM_DESTROY_SURFACE: {
                 Surface* surface = get_surface(message->destroySurface.surfaceID);
-                if (!surface || surface->ownerEndpoint != senderEndpoint) {
+                // @TODO Any client can provide any processID and shutdown any surface if they guess.
+                //   We need better authorization.
+                if (!surface || surface->ownerEndpoint != message->processID) {
+                    printf("prism: Could not destroy\n");
                     break;
                 }
                 destroy_surface(message->destroySurface.surfaceID);
             } break;
             case PRISM_PRESENT_SURFACE: {
                 Surface* surface = get_surface(message->presentSurface.surfaceID);
-                if (!surface || surface->ownerEndpoint != senderEndpoint) {
+                if (!surface || surface->ownerEndpoint != message->processID) {
+                    printf("prism: Could not present\n");
                     break;
                 }
                 present_surface(surface->surfaceId);
             } break;
             case PRISM_MOVE_SURFACE: {
                 Surface* surface = get_surface(message->moveSurface.surfaceID);
-                if (!surface || surface->ownerEndpoint != senderEndpoint) {
+                if (!surface || surface->ownerEndpoint != message->processID) {
                     printf("prism: Bad surface %d\n", message->moveSurface.surfaceID);
                     break;
                 }
@@ -156,7 +198,7 @@ Surface* create_surface(int width, int height) {
     ELOS_Error error;
 
     size_t size = width * height * sizeof(u32);
-    ELOS_SharedMemory handle;
+    ELOS_SharedMemoryHandle handle;
     error = SYS_shared_memory_create(size, &handle);
     if (error != ELOS_OK) {
         return NULL;

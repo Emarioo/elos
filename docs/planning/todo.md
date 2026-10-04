@@ -19,8 +19,6 @@ The categories are:
 Tasks related to kernel and operating system
 
 ## @current
-- [ ] Add 'start \<path\>' and 'kill \<name\>' to system console.
-- [ ] Fix NetBoot for QEMU. It's broken? Also it waits 1-2 seconds to start in QEMU which is too long.
 - [ ] Audio server.
 - [ ] Networking ASYNC operations. classic berkley sockets API?
 - [ ] My laptop has 3-4 unknown PCI audio devices. Check if we still detect HDA and if playing sound works.
@@ -30,7 +28,7 @@ Tasks related to kernel and operating system
 - [ ] Text editor. Try to port https://github.com/martanne/vis?
 - [ ] Terminal.
 - [ ] PRISM Compositor, moving and resizing windows, double buffering, transparent windows, input passthrough. Keyboard and mouse input.
-- [ ] NVMe driver.
+- [ ] NVMe driver. Functional but doesn't use interrupts or multiple IO queues. (SATA driver doesn't either)
 - [ ] Kernel mouse syscalls. (maybe generic input syscalls for keyboard, controller, mouse?)
 - [ ] API to read/write disk device directlty from user space. Requires special capability. Kernel handles AHCI, NVMe details.
       And ensures the device isn't used or mounted by anyone else.
@@ -38,6 +36,8 @@ Tasks related to kernel and operating system
 - [ ] Debugger syscall API. And a small debugger to test it.
 - [ ] Plants VS Zombies port. A lot of working, implementing win32 wrappers, directsound, COM api eugh...
       - [ ] 32-bit user mode. GDT, syscalls, structures need to be updated.
+- [x] Fix NetBoot for QEMU. It's broken? Also it waits 1-2 seconds to start in QEMU which is too long.
+- [x] Add 'start \<path\>' and 'kill \<name\>' to system console.
 - [x] DOOM port.
 - [x] Kernel audio syscalls.
 - [x] Give interrupt routines some structure. Functions enable/disable/set them. Add redirection entries etc.

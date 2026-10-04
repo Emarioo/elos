@@ -50,7 +50,7 @@ struct NET_PortMessage {
     u32 destinationAddress;
     u16 sourcePort;
     u16 destinationPort;
-    u8* data;
+    const u8* data;
     u8  data_len;
 };
 

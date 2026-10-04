@@ -53,7 +53,7 @@ ELOS_Error net_close(ELOS_Net_Handle handle) {
     return cqe.error;
 }
 
-ELOS_Error net_write(ELOS_Net_Handle handle, const ELOS_Net_Address* address, const void* data, u32 size) {
+ELOS_Error net_write(ELOS_Net_Handle handle, const ELOS_Net_Address* address, const void* data, uint32_t size) {
     ELOS_Error error;
     
     ELOS_AsyncRequest req = {0};
@@ -78,7 +78,7 @@ ELOS_Error net_write(ELOS_Net_Handle handle, const ELOS_Net_Address* address, co
     return cqe.error;
 }
 
-ELOS_Error net_read(ELOS_Net_Handle handle, ELOS_Net_Address* address, void* buffer, u32* bufferSize, u64 timeout_ns) {
+ELOS_Error net_read(ELOS_Net_Handle handle, ELOS_Net_Address* address, void* buffer, uint32_t* bufferSize, uint64_t timeout_ns) {
     ELOS_Error error;
     
     ELOS_AsyncRequest req = {0};
@@ -106,17 +106,17 @@ ELOS_Error net_read(ELOS_Net_Handle handle, ELOS_Net_Address* address, void* buf
     return cqe.error;
 }
 
-u32 net_ipv4_from_str(const char* address) {
+uint32_t net_ipv4_from_str(const char* address) {
     char* string = (char*)address;
-    u32 num;
-    num  = (u32)strtol(string  , &string, 10);
-    num |= (u32)strtol(string+1, &string, 10) << 8;
-    num |= (u32)strtol(string+1, &string, 10) << 16;
-    num |= (u32)strtol(string+1, &string, 10) << 24;
+    uint32_t num;
+    num  = (uint32_t)strtol(string  , &string, 10);
+    num |= (uint32_t)strtol(string+1, &string, 10) << 8;
+    num |= (uint32_t)strtol(string+1, &string, 10) << 16;
+    num |= (uint32_t)strtol(string+1, &string, 10) << 24;
     return num;
 }
 
-const char* net_ipv4_str(u32 address) {
+const char* net_ipv4_str(uint32_t address) {
     static char buffer[50]; // @TODO Make it thread safe
     snprintf(buffer, sizeof(buffer), "%u.%u.%u.%u", 
         address & 0xFF, (address >> 8) & 0xFF, (address >> 16) & 0xFF, address >> 24

@@ -2,6 +2,7 @@
 
 #include "elos/boot_api.h"
 
+#include "elos/common/types.h"
 #include "elos/elos.h"
 
 void EVE_init(BootAPI* boot_api);

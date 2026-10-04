@@ -12,8 +12,8 @@
 #define ELOS_SYSCALL_IDS_INCLUDE
 typedef enum ELOS_SyscallID ELOS_SyscallID;
 enum ELOS_SyscallID {
-    _SYS_CAPABILITIES = 0,
-    _SYS_REQUEST_CAPABILITIES = 1,
+    _SYS_PERMISSIONS = 0,
+    _SYS_REQUEST_PERMISSIONS = 1,
     _SYS_DEBUG_LOG = 2,
     _SYS_SYSTEM_OPERATION = 3,
     _SYS_HEAP_ALLOCATE = 4,
@@ -24,23 +24,27 @@ enum ELOS_SyscallID {
     _SYS_DEFAULT_MONITOR = 9,
     _SYS_TICKS_PER_SECOND = 10,
     _SYS_SLEEP_NS = 11,
-    _SYS_SERVICE_CREATE = 12,
-    _SYS_SERVICE_CONNECT = 13,
-    _SYS_SERVICE_SEND = 14,
-    _SYS_SERVICE_RECV = 15,
-    _SYS_SHARED_MEMORY_CREATE = 16,
-    _SYS_SHARED_MEMORY_GRANT = 17,
-    _SYS_SHARED_MEMORY_INFO = 18,
-    _SYS_REQUEST_USER_EVENT_BUFFER = 19,
-    _SYS_EXIT = 20,
-    _SYS_DEFAULT_AUDIO = 21,
-    _SYS_AUDIO_INFO = 22,
-    _SYS_CREATE_AUDIO_BUFFER = 23,
-    _SYS_DESTROY_AUDIO_BUFFER = 24,
-    _SYS_CREATE_ASYNC_RINGS = 25,
-    _SYS_DESTROY_ASYNC_RINGS = 26,
-    _SYS_SUBMIT_ASYNC_RING = 27,
-    _SYS_WAIT_ASYNC_RING = 28,
+    _SYS_SHARED_MEMORY_CREATE = 12,
+    _SYS_SHARED_MEMORY_GRANT = 13,
+    _SYS_SHARED_MEMORY_INFO = 14,
+    _SYS_REQUEST_USER_EVENT_BUFFER = 15,
+    _SYS_EXIT = 16,
+    _SYS_EXIT_THREAD = 17,
+    _SYS_SPAWN_THREAD = 18,
+    _SYS_JOIN_THREAD = 19,
+    _SYS_THREAD_ID = 20,
+    _SYS_SPAWN_PROCESS = 21,
+    _SYS_KILL_PROCESS = 22,
+    _SYS_KILL_PROCESS_BY_NAME = 23,
+    _SYS_PROCESS_ID = 24,
+    _SYS_DEFAULT_AUDIO = 25,
+    _SYS_AUDIO_INFO = 26,
+    _SYS_CREATE_AUDIO_BUFFER = 27,
+    _SYS_DESTROY_AUDIO_BUFFER = 28,
+    _SYS_CREATE_ASYNC_RINGS = 29,
+    _SYS_DESTROY_ASYNC_RINGS = 30,
+    _SYS_SUBMIT_ASYNC_RING = 31,
+    _SYS_WAIT_ASYNC_RING = 32,
 };
     
 #endif // ELOS_SYSCALL_IDS_INCLUDE
@@ -48,55 +52,55 @@ enum ELOS_SyscallID {
 
 #ifdef ELOS_SYSCALL_IMPL
 #undef ELOS_SYSCALL_IMPL
-    void SYS_capabilities(ELOS_Capabilities* capabilities)
+    void SYS_permissions(ELOS_Permissions* permissions)
 {
     int retv;
 #if defined(__x86_64__)
-register size_t _arg0 asm ("rdi") = (size_t)capabilities;
+register size_t _arg0 asm ("rdi") = (size_t)permissions;
 
             asm volatile (
                 "syscall"
                 : "=a" (retv)
-                : "a" (_SYS_CAPABILITIES), "r" (_arg0)
+                : "a" (_SYS_PERMISSIONS), "r" (_arg0)
                 : "rcx", "r11", "memory"
             );
         #else
-register size_t _arg0 asm ("ebx") = (size_t)capabilities;
+register size_t _arg0 asm ("ebx") = (size_t)permissions;
 
             asm volatile (
                 "int $0x80"
                 : "=a" (retv)
-                : "a" (_SYS_CAPABILITIES), "r" (_arg0)
+                : "a" (_SYS_PERMISSIONS), "r" (_arg0)
                 : "memory"
             );
         #endif
 }
 
-void SYS_request_capabilities(ELOS_Capabilities* capabilities)
+void SYS_request_permissions(ELOS_Permissions* permissions)
 {
     int retv;
 #if defined(__x86_64__)
-register size_t _arg0 asm ("rdi") = (size_t)capabilities;
+register size_t _arg0 asm ("rdi") = (size_t)permissions;
 
             asm volatile (
                 "syscall"
                 : "=a" (retv)
-                : "a" (_SYS_REQUEST_CAPABILITIES), "r" (_arg0)
+                : "a" (_SYS_REQUEST_PERMISSIONS), "r" (_arg0)
                 : "rcx", "r11", "memory"
             );
         #else
-register size_t _arg0 asm ("ebx") = (size_t)capabilities;
+register size_t _arg0 asm ("ebx") = (size_t)permissions;
 
             asm volatile (
                 "int $0x80"
                 : "=a" (retv)
-                : "a" (_SYS_REQUEST_CAPABILITIES), "r" (_arg0)
+                : "a" (_SYS_REQUEST_PERMISSIONS), "r" (_arg0)
                 : "memory"
             );
         #endif
 }
 
-void SYS_debug_log(const char* text, u32 length)
+void SYS_debug_log(const char* text, uint32_t length)
 {
     int retv;
 #if defined(__x86_64__)
@@ -122,7 +126,7 @@ register size_t _arg1 asm ("ecx") = (size_t)length;
         #endif
 }
 
-ELOS_Error SYS_system_operation(ELOS_System_Operation operation, uint8_t* data, u32 size)
+ELOS_Error SYS_system_operation(ELOS_System_Operation operation, uint8_t* data, uint32_t size)
 {
     ELOS_Error retv;
 #if defined(__x86_64__)
@@ -315,7 +319,7 @@ register size_t _arg0 asm ("ebx") = (size_t)frameBuffer;
     return retv;
 }
 
-ELOS_Error SYS_ticks_per_second(u64* tps)
+ELOS_Error SYS_ticks_per_second(uint64_t* tps)
 {
     ELOS_Error retv;
 #if defined(__x86_64__)
@@ -340,7 +344,7 @@ register size_t _arg0 asm ("ebx") = (size_t)tps;
     return retv;
 }
 
-void SYS_sleep_ns(u64 nanoseconds)
+void SYS_sleep_ns(uint64_t nanoseconds)
 {
     int retv;
 #if defined(__x86_64__)
@@ -364,127 +368,7 @@ register size_t _arg0 asm ("ebx") = (size_t)nanoseconds;
         #endif
 }
 
-ELOS_Error SYS_service_create(const char* name, ELOS_ServiceEndpoint* endpoint, u32 queueSize)
-{
-    ELOS_Error retv;
-#if defined(__x86_64__)
-register size_t _arg0 asm ("rdi") = (size_t)name;
-register size_t _arg1 asm ("rsi") = (size_t)endpoint;
-register size_t _arg2 asm ("rdx") = (size_t)queueSize;
-
-            asm volatile (
-                "syscall"
-                : "=a" (retv)
-                : "a" (_SYS_SERVICE_CREATE), "r" (_arg0), "r" (_arg1), "r" (_arg2)
-                : "rcx", "r11", "memory"
-            );
-        #else
-register size_t _arg0 asm ("ebx") = (size_t)name;
-register size_t _arg1 asm ("ecx") = (size_t)endpoint;
-register size_t _arg2 asm ("edx") = (size_t)queueSize;
-
-            asm volatile (
-                "int $0x80"
-                : "=a" (retv)
-                : "a" (_SYS_SERVICE_CREATE), "r" (_arg0), "r" (_arg1), "r" (_arg2)
-                : "memory"
-            );
-        #endif
-    return retv;
-}
-
-ELOS_Error SYS_service_connect(const char* name, ELOS_ServiceEndpoint* endpoint, u32 queueSize)
-{
-    ELOS_Error retv;
-#if defined(__x86_64__)
-register size_t _arg0 asm ("rdi") = (size_t)name;
-register size_t _arg1 asm ("rsi") = (size_t)endpoint;
-register size_t _arg2 asm ("rdx") = (size_t)queueSize;
-
-            asm volatile (
-                "syscall"
-                : "=a" (retv)
-                : "a" (_SYS_SERVICE_CONNECT), "r" (_arg0), "r" (_arg1), "r" (_arg2)
-                : "rcx", "r11", "memory"
-            );
-        #else
-register size_t _arg0 asm ("ebx") = (size_t)name;
-register size_t _arg1 asm ("ecx") = (size_t)endpoint;
-register size_t _arg2 asm ("edx") = (size_t)queueSize;
-
-            asm volatile (
-                "int $0x80"
-                : "=a" (retv)
-                : "a" (_SYS_SERVICE_CONNECT), "r" (_arg0), "r" (_arg1), "r" (_arg2)
-                : "memory"
-            );
-        #endif
-    return retv;
-}
-
-ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, const void* data, u32 size)
-{
-    ELOS_Error retv;
-#if defined(__x86_64__)
-register size_t _arg0 asm ("rdi") = (size_t)endpoint;
-register size_t _arg1 asm ("rsi") = (size_t)data;
-register size_t _arg2 asm ("rdx") = (size_t)size;
-
-            asm volatile (
-                "syscall"
-                : "=a" (retv)
-                : "a" (_SYS_SERVICE_SEND), "r" (_arg0), "r" (_arg1), "r" (_arg2)
-                : "rcx", "r11", "memory"
-            );
-        #else
-register size_t _arg0 asm ("ebx") = (size_t)endpoint;
-register size_t _arg1 asm ("ecx") = (size_t)data;
-register size_t _arg2 asm ("edx") = (size_t)size;
-
-            asm volatile (
-                "int $0x80"
-                : "=a" (retv)
-                : "a" (_SYS_SERVICE_SEND), "r" (_arg0), "r" (_arg1), "r" (_arg2)
-                : "memory"
-            );
-        #endif
-    return retv;
-}
-
-ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint* senderEndpoint, const void** data, u32* size, u64 timeout_ns)
-{
-    ELOS_Error retv;
-#if defined(__x86_64__)
-register size_t _arg0 asm ("rdi") = (size_t)endpoint;
-register size_t _arg1 asm ("rsi") = (size_t)senderEndpoint;
-register size_t _arg2 asm ("rdx") = (size_t)data;
-register size_t _arg3 asm ("r10") = (size_t)size;
-register size_t _arg4 asm ("r8") = (size_t)timeout_ns;
-
-            asm volatile (
-                "syscall"
-                : "=a" (retv)
-                : "a" (_SYS_SERVICE_RECV), "r" (_arg0), "r" (_arg1), "r" (_arg2), "r" (_arg3), "r" (_arg4)
-                : "rcx", "r11", "memory"
-            );
-        #else
-register size_t _arg0 asm ("ebx") = (size_t)endpoint;
-register size_t _arg1 asm ("ecx") = (size_t)senderEndpoint;
-register size_t _arg2 asm ("edx") = (size_t)data;
-register size_t _arg3 asm ("esi") = (size_t)size;
-register size_t _arg4 asm ("edi") = (size_t)timeout_ns;
-
-            asm volatile (
-                "int $0x80"
-                : "=a" (retv)
-                : "a" (_SYS_SERVICE_RECV), "r" (_arg0), "r" (_arg1), "r" (_arg2), "r" (_arg3), "r" (_arg4)
-                : "memory"
-            );
-        #endif
-    return retv;
-}
-
-ELOS_Error SYS_shared_memory_create(size_t size, ELOS_SharedMemory* handle)
+ELOS_Error SYS_shared_memory_create(size_t size, ELOS_SharedMemoryHandle* handle)
 {
     ELOS_Error retv;
 #if defined(__x86_64__)
@@ -511,12 +395,12 @@ register size_t _arg1 asm ("ecx") = (size_t)handle;
     return retv;
 }
 
-ELOS_Error SYS_shared_memory_grant(ELOS_SharedMemory handle, ELOS_ServiceEndpoint endpoint)
+ELOS_Error SYS_shared_memory_grant(ELOS_SharedMemoryHandle handle, ELOS_ProcessID processID)
 {
     ELOS_Error retv;
 #if defined(__x86_64__)
 register size_t _arg0 asm ("rdi") = (size_t)handle;
-register size_t _arg1 asm ("rsi") = (size_t)endpoint;
+register size_t _arg1 asm ("rsi") = (size_t)processID;
 
             asm volatile (
                 "syscall"
@@ -526,7 +410,7 @@ register size_t _arg1 asm ("rsi") = (size_t)endpoint;
             );
         #else
 register size_t _arg0 asm ("ebx") = (size_t)handle;
-register size_t _arg1 asm ("ecx") = (size_t)endpoint;
+register size_t _arg1 asm ("ecx") = (size_t)processID;
 
             asm volatile (
                 "int $0x80"
@@ -538,7 +422,7 @@ register size_t _arg1 asm ("ecx") = (size_t)endpoint;
     return retv;
 }
 
-ELOS_Error SYS_shared_memory_info(ELOS_SharedMemory handle, void** buffer, size_t* size)
+ELOS_Error SYS_shared_memory_info(ELOS_SharedMemoryHandle handle, void** buffer, size_t* size)
 {
     ELOS_Error retv;
 #if defined(__x86_64__)
@@ -567,7 +451,7 @@ register size_t _arg2 asm ("edx") = (size_t)size;
     return retv;
 }
 
-ELOS_Error SYS_request_user_event_buffer(u32 minimumEvents, ELOS_UserEventBuffer** buffer)
+ELOS_Error SYS_request_user_event_buffer(uint32_t minimumEvents, ELOS_UserEventBuffer** buffer)
 {
     ELOS_Error retv;
 #if defined(__x86_64__)
@@ -616,6 +500,207 @@ register size_t _arg0 asm ("ebx") = (size_t)exitCode;
                 : "memory"
             );
         #endif
+}
+
+void SYS_exit_thread()
+{
+    int retv;
+#if defined(__x86_64__)
+
+            asm volatile (
+                "syscall"
+                : "=a" (retv)
+                : "a" (_SYS_EXIT_THREAD)
+                : "rcx", "r11", "memory"
+            );
+        #else
+
+            asm volatile (
+                "int $0x80"
+                : "=a" (retv)
+                : "a" (_SYS_EXIT_THREAD)
+                : "memory"
+            );
+        #endif
+}
+
+ELOS_Error SYS_spawn_thread(FN_thread_entry entry, ELOS_ThreadHandle* handle)
+{
+    ELOS_Error retv;
+#if defined(__x86_64__)
+register size_t _arg0 asm ("rdi") = (size_t)entry;
+register size_t _arg1 asm ("rsi") = (size_t)handle;
+
+            asm volatile (
+                "syscall"
+                : "=a" (retv)
+                : "a" (_SYS_SPAWN_THREAD), "r" (_arg0), "r" (_arg1)
+                : "rcx", "r11", "memory"
+            );
+        #else
+register size_t _arg0 asm ("ebx") = (size_t)entry;
+register size_t _arg1 asm ("ecx") = (size_t)handle;
+
+            asm volatile (
+                "int $0x80"
+                : "=a" (retv)
+                : "a" (_SYS_SPAWN_THREAD), "r" (_arg0), "r" (_arg1)
+                : "memory"
+            );
+        #endif
+    return retv;
+}
+
+ELOS_Error SYS_join_thread(ELOS_ThreadHandle handle)
+{
+    ELOS_Error retv;
+#if defined(__x86_64__)
+register size_t _arg0 asm ("rdi") = (size_t)handle;
+
+            asm volatile (
+                "syscall"
+                : "=a" (retv)
+                : "a" (_SYS_JOIN_THREAD), "r" (_arg0)
+                : "rcx", "r11", "memory"
+            );
+        #else
+register size_t _arg0 asm ("ebx") = (size_t)handle;
+
+            asm volatile (
+                "int $0x80"
+                : "=a" (retv)
+                : "a" (_SYS_JOIN_THREAD), "r" (_arg0)
+                : "memory"
+            );
+        #endif
+    return retv;
+}
+
+ELOS_ThreadID SYS_thread_id(ELOS_ThreadHandle handle)
+{
+    ELOS_ThreadID retv;
+#if defined(__x86_64__)
+register size_t _arg0 asm ("rdi") = (size_t)handle;
+
+            asm volatile (
+                "syscall"
+                : "=a" (retv)
+                : "a" (_SYS_THREAD_ID), "r" (_arg0)
+                : "rcx", "r11", "memory"
+            );
+        #else
+register size_t _arg0 asm ("ebx") = (size_t)handle;
+
+            asm volatile (
+                "int $0x80"
+                : "=a" (retv)
+                : "a" (_SYS_THREAD_ID), "r" (_arg0)
+                : "memory"
+            );
+        #endif
+    return retv;
+}
+
+ELOS_Error SYS_spawn_process(const char* path, const char* data, uint32_t data_len)
+{
+    ELOS_Error retv;
+#if defined(__x86_64__)
+register size_t _arg0 asm ("rdi") = (size_t)path;
+register size_t _arg1 asm ("rsi") = (size_t)data;
+register size_t _arg2 asm ("rdx") = (size_t)data_len;
+
+            asm volatile (
+                "syscall"
+                : "=a" (retv)
+                : "a" (_SYS_SPAWN_PROCESS), "r" (_arg0), "r" (_arg1), "r" (_arg2)
+                : "rcx", "r11", "memory"
+            );
+        #else
+register size_t _arg0 asm ("ebx") = (size_t)path;
+register size_t _arg1 asm ("ecx") = (size_t)data;
+register size_t _arg2 asm ("edx") = (size_t)data_len;
+
+            asm volatile (
+                "int $0x80"
+                : "=a" (retv)
+                : "a" (_SYS_SPAWN_PROCESS), "r" (_arg0), "r" (_arg1), "r" (_arg2)
+                : "memory"
+            );
+        #endif
+    return retv;
+}
+
+ELOS_Error SYS_kill_process(ELOS_ProcessHandle handle)
+{
+    ELOS_Error retv;
+#if defined(__x86_64__)
+register size_t _arg0 asm ("rdi") = (size_t)handle;
+
+            asm volatile (
+                "syscall"
+                : "=a" (retv)
+                : "a" (_SYS_KILL_PROCESS), "r" (_arg0)
+                : "rcx", "r11", "memory"
+            );
+        #else
+register size_t _arg0 asm ("ebx") = (size_t)handle;
+
+            asm volatile (
+                "int $0x80"
+                : "=a" (retv)
+                : "a" (_SYS_KILL_PROCESS), "r" (_arg0)
+                : "memory"
+            );
+        #endif
+    return retv;
+}
+
+ELOS_Error SYS_kill_process_by_name(const char* name)
+{
+    ELOS_Error retv;
+#if defined(__x86_64__)
+register size_t _arg0 asm ("rdi") = (size_t)name;
+
+            asm volatile (
+                "syscall"
+                : "=a" (retv)
+                : "a" (_SYS_KILL_PROCESS_BY_NAME), "r" (_arg0)
+                : "rcx", "r11", "memory"
+            );
+        #else
+register size_t _arg0 asm ("ebx") = (size_t)name;
+
+            asm volatile (
+                "int $0x80"
+                : "=a" (retv)
+                : "a" (_SYS_KILL_PROCESS_BY_NAME), "r" (_arg0)
+                : "memory"
+            );
+        #endif
+    return retv;
+}
+
+ELOS_ProcessID SYS_process_id()
+{
+    ELOS_ProcessID retv;
+#if defined(__x86_64__)
+
+            asm volatile (
+                "syscall"
+                : "=a" (retv)
+                : "a" (_SYS_PROCESS_ID)
+                : "rcx", "r11", "memory"
+            );
+        #else
+
+            asm volatile (
+                "int $0x80"
+                : "=a" (retv)
+                : "a" (_SYS_PROCESS_ID)
+                : "memory"
+            );
+        #endif
+    return retv;
 }
 
 ELOS_Error SYS_default_audio(ELOS_AudioDevice* device)
@@ -670,7 +755,7 @@ register size_t _arg1 asm ("ecx") = (size_t)info;
     return retv;
 }
 
-ELOS_Error SYS_create_audio_buffer(ELOS_AudioDevice device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer)
+ELOS_Error SYS_create_audio_buffer(ELOS_AudioDevice device, ELOS_AudioFormat* format, uint32_t bufferSize, ELOS_AudioBuffer** buffer)
 {
     ELOS_Error retv;
 #if defined(__x86_64__)
@@ -728,7 +813,7 @@ register size_t _arg1 asm ("ecx") = (size_t)buffer;
     return retv;
 }
 
-ELOS_Error SYS_create_async_rings(u32 maxEntries, ELOS_AsyncCreateFlag flags, ELOS_AsyncRequestRing** requestRing, ELOS_AsyncCompletionRing** completionRing)
+ELOS_Error SYS_create_async_rings(uint32_t maxEntries, ELOS_AsyncCreateFlag flags, ELOS_AsyncRequestRing** requestRing, ELOS_AsyncCompletionRing** completionRing)
 {
     ELOS_Error retv;
 #if defined(__x86_64__)
@@ -811,7 +896,7 @@ register size_t _arg0 asm ("ebx") = (size_t)requestRing;
     return retv;
 }
 
-ELOS_Error SYS_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, u64 timeout_ns)
+ELOS_Error SYS_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, uint64_t timeout_ns)
 {
     ELOS_Error retv;
 #if defined(__x86_64__)
@@ -850,7 +935,7 @@ register size_t _arg1 asm ("ecx") = (size_t)timeout_ns;
         case ELOS_ERR_UNKNOWN: return "ELOS_ERR_UNKNOWN";
         case ELOS_ERR_INVALID_PARAM: return "ELOS_ERR_INVALID_PARAM";
         case ELOS_ERR_INVALID_SYSCALL: return "ELOS_ERR_INVALID_SYSCALL";
-        case ELOS_ERR_CAP_DENIED: return "ELOS_ERR_CAP_DENIED";
+        case ELOS_ERR_PERMISSION_DENIED: return "ELOS_ERR_PERMISSION_DENIED";
         case ELOS_ERR_NOT_FOUND: return "ELOS_ERR_NOT_FOUND";
         case ELOS_ERR_BUSY: return "ELOS_ERR_BUSY";
         case ELOS_ERR_TIMEOUT: return "ELOS_ERR_TIMEOUT";

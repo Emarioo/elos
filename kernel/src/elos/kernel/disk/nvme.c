@@ -80,25 +80,25 @@ bool nvme_pci_scan(Disk_ScanInfo* scanInfo, PCI_ConfigSpace* config) {
     u32 MQES = ((regs->CAP) & 0xFFFF) + 1;
     u32 MPS = 0x1000 << ((regs->CC >> 7) & 0xF);
 
-    printf("BAR0 %p\n", memory_bar);
-    printf("  CAP 0x%zx\n", regs->CAP);
-    printf("  VS 0x%x\n", regs->VS);
-    printf("  INTMS 0x%x\n", regs->INTMS);
-    printf("  INTMC 0x%x\n", regs->INTMC);
-    printf("  CC 0x%x\n", regs->CC);
-    printf("  CSTS 0x%x\n", regs->CSTS);
-    printf("  AQA 0x%x\n", regs->AQA);
-    printf("  ASQ 0x%zx\n", regs->ASQ);
-    printf("  ACQ 0x%zx\n", regs->ACQ);
+    // printf("BAR0 %p\n", memory_bar);
+    // printf("  CAP 0x%zx\n", regs->CAP);
+    // printf("  VS 0x%x\n", regs->VS);
+    // printf("  INTMS 0x%x\n", regs->INTMS);
+    // printf("  INTMC 0x%x\n", regs->INTMC);
+    // printf("  CC 0x%x\n", regs->CC);
+    // printf("  CSTS 0x%x\n", regs->CSTS);
+    // printf("  AQA 0x%x\n", regs->AQA);
+    // printf("  ASQ 0x%zx\n", regs->ASQ);
+    // printf("  ACQ 0x%zx\n", regs->ACQ);
     
-    printf("\n");
+    // printf("\n");
 
-    printf("  DRSTRD %u\n", DRSTRD);
-    printf("  MPS %u\n", MPS);
-    printf("  MQES %u\n", MQES);
-    printf("  NVMe v%u.%u\n", majorVersion, minorVersion);
+    // printf("  DRSTRD %u\n", DRSTRD);
+    // printf("  MPS %u\n", MPS);
+    // printf("  MQES %u\n", MQES);
+    // printf("  NVMe v%u.%u\n", majorVersion, minorVersion);
 
-    printf("\n");
+    // printf("\n");
 
     context->DRSTRD = DRSTRD;
     context->MPS = MPS;
@@ -149,8 +149,6 @@ bool nvme_pci_scan(Disk_ScanInfo* scanInfo, PCI_ConfigSpace* config) {
     while (0 == (regs->CSTS & NVME_CSTS_BIT_READY)) {
         pause();
     }
-
-    printf("nvme: Enabled\n");
 
     yes = send_identify(scanInfo, context);
     if (!yes) {
@@ -544,16 +542,15 @@ bool send_identify(Disk_ScanInfo* scanInfo, NVME_Context* context) {
 
     char* modelNumber = identify_data + 24;
     int modelLength = 0;
-    while (modelLength < 64 - 24) {
-        char chr = modelNumber[modelLength];
-        if (chr == ' ' || chr == '\t' || chr == '\n' || chr == '\f' || chr < 32) {
-            break;
+    for (int i=0;i < 64 - 24;i++) {
+        char chr = modelNumber[i];
+        if (!(chr == ' ' || chr == '\t' || chr == '\n' || chr == '\f' || chr < 32)) {
+            modelLength = i + 1;
         }
-        modelLength++;
     }
     
     snprintf(controller_modelNumber, sizeof(controller_modelNumber),
-        "%*.s", modelLength, modelNumber);
+        "%.*s", modelLength, modelNumber);
 
     u32 MDTS = identify_data[77];
 
@@ -607,7 +604,7 @@ bool send_identify(Disk_ScanInfo* scanInfo, NVME_Context* context) {
             if (nsid == 0) {
                 break;
             }
-            printf("Namespace %d\n", nsid);
+            // printf("Namespace %d\n", nsid);
             index++;
 
             if (!context->first_nsid) {
@@ -704,7 +701,7 @@ bool send_identify(Disk_ScanInfo* scanInfo, NVME_Context* context) {
         device->userData = contextNamespace;
 
         snprintf(device->diskInfo.name, sizeof(device->diskInfo.name),
-            "%*.s", modelLength, controller_modelNumber);
+            "%.*s", modelLength, controller_modelNumber);
 
         if (scanInfo->count < scanInfo->maxCount) {
             scanInfo->devices[scanInfo->count] = device;

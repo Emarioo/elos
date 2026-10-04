@@ -529,7 +529,10 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
             GET_SANITIZED_CSTRUCT(&safeAddress, request->net_write.address);
             GET_SANITIZED_BUFFER(&safeConstBuffer, &safeBufferSize, request->net_write.data, request->net_write.size);
 
-            completion.error = NET_write(safeNetHandle, safeAddress, safeConstBuffer, safeBufferSize);
+            // Save to stack in case caller i cheeky and changes address on another thread.
+            // If they do we may still have an incomplete address.
+            ELOS_Net_Address savedAddress = *safeAddress;
+            completion.error = NET_write(safeNetHandle, &savedAddress, safeConstBuffer, safeBufferSize);
         } break;
         
         case ELOS_ASYNC_NET_READ: {

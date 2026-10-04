@@ -250,7 +250,9 @@ bool NET_poll_packet(NET_Device* device, NET_Packet* packet) {
     return true;
 }
 void NET_free_packet(NET_Packet* packet) {
-    PMEM_free(packet->buffer);
+    if (packet->buffer) {
+        PMEM_free(packet->buffer);
+    }
     memset(packet, 0, sizeof(*packet));
 }
 
@@ -285,6 +287,75 @@ bool NET_send_packet(NET_Device* device, const void* buffer, int size) {
     return returnValue;
 }
 
+static bool handle_udp_packet(const u8* body, int body_size, u16 destinationPort, u32 destinationAddress, u16 sourcePort, u32 sourceAddress, NET_Packet* packet) {
+    bool consumedPacket = false;
+
+    LOCK_INT(&g_net_lock);
+
+    NET_Handle* foundHandle = NULL;
+    for (int i=0;i<g_netHandles_max;i++) {
+        NET_Handle* handle = &g_netHandles[i];
+        if (!handle->used) {
+            continue;
+        }
+
+        // printf("CMP %d %d : %x %x\n", handle->address.udp_tcp4.port, udp->destinationPort, handle->address.udp_tcp4.address, ip->destinationAddress);
+
+        if (handle->address.udp_tcp4.port == destinationPort && (handle->address.udp_tcp4.address == 0 || handle->address.udp_tcp4.address == destinationAddress)) {
+            foundHandle = handle;
+            break;
+        }
+    }
+
+    if (!foundHandle) {
+        goto exit;
+    }
+    
+    if (foundHandle->address.protocol != ELOS_NET_PROTO_UDP_IPV4) {
+        goto exit;
+    }
+    // printf("Queuing %d\n", udp->destinationPort);
+
+    u32 remainingSize = PAGE_SIZE - sizeof(NET_PortMessage);
+    if (!packet && body_size > remainingSize) {
+        goto exit;
+    }
+
+    NET_PortMessage* portMessage = PMEM_alloc(sizeof(NET_PortMessage));
+    memset(portMessage, 0, sizeof(*portMessage));
+
+    // foundHandle->packetVersion++;
+
+    if (packet) {
+        portMessage->rawPacket = *packet;
+        portMessage->data      = body;
+    } else {
+        void* savedData   = (char*)portMessage + sizeof(*portMessage);
+        portMessage->data = savedData;
+        memcpy(savedData, body, body_size);
+    }
+    portMessage->sourceAddress      = sourceAddress;
+    portMessage->destinationAddress = destinationAddress;
+    portMessage->sourcePort         = sourcePort;
+    portMessage->destinationPort    = destinationPort;
+    portMessage->data_len           = body_size;
+
+    if (!foundHandle->firstMessage) {
+        foundHandle->firstMessage = portMessage;
+        foundHandle->lastMessage = portMessage;
+    } else {
+        // @TODO Limit amount of messages we can have queued.
+        foundHandle->lastMessage->nextMessage = portMessage;
+        foundHandle->lastMessage = portMessage;
+    }
+
+    // foundHandle->packetVersion++;
+    consumedPacket = true;
+    
+exit:
+    UNLOCK_INT(&g_net_lock);
+    return consumedPacket;
+}
 
 bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
     bool consumedPacket = false;
@@ -567,61 +638,7 @@ bool net_handle_packet(NET_Device* device, NET_Packet* packet) {
                     int body_size = udpSize - sizeof(UDP_Header);
                     u8* body = (u8*)udp + sizeof(UDP_Header);
 
-
-                    LOCK_INT(&g_net_lock);
-
-                    NET_Handle* foundHandle = NULL;
-                    for (int i=0;i<g_netHandles_max;i++) {
-                        NET_Handle* handle = &g_netHandles[i];
-                        if (!handle->used) {
-                            continue;
-                        }
-
-                        // printf("CMP %d %d : %x %x\n", handle->address.udp_tcp4.port, udp->destinationPort, handle->address.udp_tcp4.address, ip->destinationAddress);
-
-                        if (handle->address.udp_tcp4.port == udp->destinationPort && (handle->address.udp_tcp4.address == 0 || handle->address.udp_tcp4.address == ip->destinationAddress)) {
-                            foundHandle = handle;
-                            break;
-                        }
-                    }
-
-                    if (!foundHandle) {
-                        UNLOCK_INT(&g_net_lock);
-                        goto exit;
-                    }
-                    
-                    if (foundHandle->address.protocol != ELOS_NET_PROTO_UDP_IPV4) {
-                        UNLOCK_INT(&g_net_lock);
-                        goto exit;
-                    }
-                    // printf("Queuing %d\n", udp->destinationPort);
-
-
-                    NET_PortMessage* portMessage = PMEM_alloc(sizeof(NET_PortMessage));
-                    memset(portMessage, 0, sizeof(*portMessage));
-
-                    // foundHandle->packetVersion++;
-
-                    portMessage->rawPacket          = *packet;
-                    portMessage->sourceAddress      = ip->sourceAddress;
-                    portMessage->destinationAddress = ip->destinationAddress;
-                    portMessage->sourcePort         = udp->sourcePort;
-                    portMessage->destinationPort    = udp->destinationPort;
-                    portMessage->data               = body;
-                    portMessage->data_len           = body_size;
-
-                    if (!foundHandle->firstMessage) {
-                        foundHandle->firstMessage = portMessage;
-                        foundHandle->lastMessage = portMessage;
-                    } else {
-                        // @TODO Limit amount of messages we can have queued.
-                        foundHandle->lastMessage->nextMessage = portMessage;
-                        foundHandle->lastMessage = portMessage;
-                    }
-
-                    // foundHandle->packetVersion++;
-                    consumedPacket = true;
-                    UNLOCK_INT(&g_net_lock);
+                    consumedPacket = handle_udp_packet(body, body_size, udp->destinationPort, ip->destinationAddress, udp->sourcePort, ip->sourceAddress, packet);
 
                     // if (!memcmp(body, "ism", 3)) {
                     //     // My router sends this message now and then.
@@ -698,7 +715,7 @@ NET_Handle* NET_open(const ELOS_Net_Address* address) {
     }
 
     if (portCollision) {
-        return NULL;
+        goto exit;
     }
 
     if (!foundHandle) {
@@ -739,29 +756,29 @@ ELOS_Error NET_write(NET_Handle* handle, const ELOS_Net_Address* address, const 
     ELOS_Error returnValue = ELOS_ERR_UNKNOWN;
     // printf("NET_write: %p %d\n", handle, size);
 
-    NET_Device* device;
-    u8  mac[6];
-    u32 ip_address;
-    u16 dst_port;
-    u16 src_port;
+    NET_Device* device = NULL;
+    u8  mac[6] = {0};
+    u32 ip_address = 0;
+    u16 dst_port = 0;
+    u16 src_port = 0;
+    bool useLocalAddress = false;
 
     // @TODO Validate parameters? Valid device for raw packets for example?
     //    Or does the caller do that (async handling code).
 
-    // Save to stack in case caller i cheeky and changes address on another thread.
-    // If they do we may still have an incomplete address.
-    ELOS_Net_Address savedAddress = *address;
-
-    if (savedAddress.protocol == ELOS_NET_PROTO_RAW) {
-        device = savedAddress.raw.device;
+    if (address->protocol == ELOS_NET_PROTO_RAW) {
+        device = address->raw.device;
     } else {
+        useLocalAddress = handle->address.udp_tcp4.address == 0x0100007F;
         src_port = handle->address.udp_tcp4.port;
-        bool didResolve = fetch_mac_from_address(savedAddress.udp_tcp4.address, &device, mac);
-        if (!didResolve) {
-            return ELOS_ERR_NOT_FOUND;
+        ip_address = address->udp_tcp4.address;
+        dst_port = address->udp_tcp4.port;
+        if (!useLocalAddress) {
+            bool didResolve = fetch_mac_from_address(address->udp_tcp4.address, &device, mac);
+            if (!didResolve) {
+                return ELOS_ERR_NOT_FOUND;
+            }
         }
-        ip_address = savedAddress.udp_tcp4.address;
-        dst_port = savedAddress.udp_tcp4.port;
     }
 
 
@@ -781,10 +798,19 @@ ELOS_Error NET_write(NET_Handle* handle, const ELOS_Net_Address* address, const 
 
             // printf("NET_write: udp, mac %s\n", mac_str(mac, macbuff));
 
-            bool yes = NET_send_udp(device, mac, ip_address, src_port, dst_port, data, size);
-            if (!yes) {
-                returnValue = ELOS_ERR_UNKNOWN;
-                goto exit;
+            if (useLocalAddress) {
+                u32 localAddress = 0x0100007F;
+                bool yes = handle_udp_packet(data, size, dst_port, ip_address, src_port, localAddress, NULL);
+                if (!yes) {
+                    returnValue = ELOS_ERR_UNKNOWN;
+                    goto exit;
+                }
+            } else {
+                bool yes = NET_send_udp(device, mac, ip_address, src_port, dst_port, data, size);
+                if (!yes) {
+                    returnValue = ELOS_ERR_UNKNOWN;
+                    goto exit;
+                }
             }
 
             returnValue = ELOS_OK;

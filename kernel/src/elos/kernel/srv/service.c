@@ -8,340 +8,340 @@
 #include "elos/physical_memory.h"
 
 
-#define MARK_ENDPOINT(ADDR) ( (u64)(ADDR) | 1LU )
-#define NORMALIZE_ENDPOINT(ADDR) (void*) ( (u64)(ADDR) & ~1LU )
-#define IS_ENDPOINT_MARKED(ADDR) ( ( (u64)(ADDR) & 1LU ) != 0 )
+// #define MARK_ENDPOINT(ADDR) ( (u64)(ADDR) | 1LU )
+// #define NORMALIZE_ENDPOINT(ADDR) (void*) ( (u64)(ADDR) & ~1LU )
+// #define IS_ENDPOINT_MARKED(ADDR) ( ( (u64)(ADDR) & 1LU ) != 0 )
 
-#define MESSAGE_HEADER_LENGTH sizeof(u16)
-#define MAX_MESSAGE_SIZE ((1 << (8*MESSAGE_HEADER_LENGTH))-1)
+// #define MESSAGE_HEADER_LENGTH sizeof(u16)
+// #define MAX_MESSAGE_SIZE ((1 << (8*MESSAGE_HEADER_LENGTH))-1)
 
 
-#define MAX_SERVICES 128
+// #define MAX_SERVICES 128
 
-Service g_services[MAX_SERVICES];
+// Service g_services[MAX_SERVICES];
 
 volatile u32 g_service_lock;
 
 
-void ringbuf_write(RingBuffer* ringBuffer, const void* data, u64 size) {
-    uint64_t head = ringBuffer->head % ringBuffer->capacity;
-    if (size + head > ringBuffer->capacity) {
-        memcpy((char*)ringBuffer->buffer + head, data, ringBuffer->capacity - head);
-        memcpy((char*)ringBuffer->buffer, (char*)data + ringBuffer->capacity - head, size - (ringBuffer->capacity - head));
-    } else {
-        memcpy((char*)ringBuffer->buffer + head, data, size);
-    }
-    ringBuffer->head = (ringBuffer->head + size) % ringBuffer->capacity;
-}
+// void ringbuf_write(RingBuffer* ringBuffer, const void* data, u64 size) {
+//     uint64_t head = ringBuffer->head % ringBuffer->capacity;
+//     if (size + head > ringBuffer->capacity) {
+//         memcpy((char*)ringBuffer->buffer + head, data, ringBuffer->capacity - head);
+//         memcpy((char*)ringBuffer->buffer, (char*)data + ringBuffer->capacity - head, size - (ringBuffer->capacity - head));
+//     } else {
+//         memcpy((char*)ringBuffer->buffer + head, data, size);
+//     }
+//     ringBuffer->head = (ringBuffer->head + size) % ringBuffer->capacity;
+// }
 
-void ringbuf_read(RingBuffer* ringBuffer, void* data, u64 size) {
-    uint64_t tail = ringBuffer->tail % ringBuffer->capacity;
-    if (size + tail > ringBuffer->capacity) {
-        memcpy((char*)data, (char*)ringBuffer->buffer + tail, ringBuffer->capacity - tail);
-        memcpy((char*)data + ringBuffer->capacity - tail, (char*)ringBuffer->buffer, size - (ringBuffer->capacity - tail));
-    } else {
-        memcpy((char*)data, (char*)ringBuffer->buffer + tail, size);
-    }
-    ringBuffer->tail = (ringBuffer->tail + size) % ringBuffer->capacity;
-}
-
-
-Service* service_lookup(const char* name) {
-    for (int i=0;i<MAX_SERVICES;i++) {
-        Service* service = &g_services[i];
-        if (!service->used)
-            continue;
-        if (strcmp(service->name, name))
-            continue;
-        return service;
-    }
-    return NULL;
-}
-Service* service_create(const char* name) {
-    int name_len = strlen(name);
-    if (name_len > sizeof(((Service*)NULL)->name) - 1) {
-        // Name to big
-        return NULL;
-    }
-
-    Service* avail_service = NULL;
-    for (int i=0;i<MAX_SERVICES;i++) {
-        Service* service = &g_services[i];
-        if (!service->used) {
-            if (!avail_service) {
-                avail_service = service;
-            }
-            continue;
-        }
-        if (!strcmp(service->name, name)) {
-            // Service already exists
-            return false;
-        }
-    }
-    if (avail_service) {
-        avail_service->used = true;
-        memcpy(avail_service->name, name, name_len);
-    }
-    return avail_service;
-}
-
-#define MAX_ENDPOINTS 128
-ServiceEndpoint g_endpoints[MAX_ENDPOINTS];
-int g_endpoints_len;
-
-ServiceEndpoint* service_create_endpoint() {
-    if (g_endpoints_len >= MAX_ENDPOINTS)
-        return NULL;
-    ServiceEndpoint* endpoint = &g_endpoints[g_endpoints_len];
-    g_endpoints_len++;
-    return endpoint;
-}
+// void ringbuf_read(RingBuffer* ringBuffer, void* data, u64 size) {
+//     uint64_t tail = ringBuffer->tail % ringBuffer->capacity;
+//     if (size + tail > ringBuffer->capacity) {
+//         memcpy((char*)data, (char*)ringBuffer->buffer + tail, ringBuffer->capacity - tail);
+//         memcpy((char*)data + ringBuffer->capacity - tail, (char*)ringBuffer->buffer, size - (ringBuffer->capacity - tail));
+//     } else {
+//         memcpy((char*)data, (char*)ringBuffer->buffer + tail, size);
+//     }
+//     ringBuffer->tail = (ringBuffer->tail + size) % ringBuffer->capacity;
+// }
 
 
-bool SRV_service_create(const char* name, ServiceEndpoint** endpoint, u64 queueSize) {
-    bool returnValue = false;
-    LOCK_INT(&g_service_lock);
+// Service* service_lookup(const char* name) {
+//     for (int i=0;i<MAX_SERVICES;i++) {
+//         Service* service = &g_services[i];
+//         if (!service->used)
+//             continue;
+//         if (strcmp(service->name, name))
+//             continue;
+//         return service;
+//     }
+//     return NULL;
+// }
+// Service* service_create(const char* name) {
+//     int name_len = strlen(name);
+//     if (name_len > sizeof(((Service*)NULL)->name) - 1) {
+//         // Name to big
+//         return NULL;
+//     }
 
-    Service* service = service_create(name);
-    if (!service) {
-        goto exit;
-    }
-    ServiceEndpoint* newEndpoint = service_create_endpoint();
-    if (!newEndpoint) {
-        // @TODO Free service using a function?
-        service->used = false;
-        goto exit;
-    }
+//     Service* avail_service = NULL;
+//     for (int i=0;i<MAX_SERVICES;i++) {
+//         Service* service = &g_services[i];
+//         if (!service->used) {
+//             if (!avail_service) {
+//                 avail_service = service;
+//             }
+//             continue;
+//         }
+//         if (!strcmp(service->name, name)) {
+//             // Service already exists
+//             return false;
+//         }
+//     }
+//     if (avail_service) {
+//         avail_service->used = true;
+//         memcpy(avail_service->name, name, name_len);
+//     }
+//     return avail_service;
+// }
 
-    // @TODO Set queueSize limit. Maybe capability in syscall layer checks, sets, controls this.
+// #define MAX_ENDPOINTS 128
+// ServiceEndpoint g_endpoints[MAX_ENDPOINTS];
+// int g_endpoints_len;
 
-    service->queueSize = queueSize;
-    service->serviceEndpoint = newEndpoint;
-    service->clientLinkedList = NULL;
-
-    newEndpoint->service = service;
-    newEndpoint->isService = true;
-
-    if (queueSize <= MAX_MESSAGE_SIZE)
-        newEndpoint->recvBuffer_size = queueSize;
-    else
-        newEndpoint->recvBuffer_size = MAX_MESSAGE_SIZE;
-    newEndpoint->phys_recvBuffer = PMEM_alloc_phys(newEndpoint->recvBuffer_size, PMEM_FLAG_IDENTITY_MAPPED);
-
-    *endpoint = newEndpoint;
-    returnValue = true;
-
-exit:
-    UNLOCK_INT(&g_service_lock);
-    return returnValue;
-}
-
-bool SRV_service_connect(const char* name, ServiceEndpoint** endpoint, u64 queueSize) {
-    bool returnValue = false;
-    LOCK_INT(&g_service_lock);
-
-    Service* service = service_lookup(name);
-    if (!service) {
-        goto exit;
-    }
-    ServiceEndpoint* newEndpoint = service_create_endpoint();
-    if (!newEndpoint) {
-        // @TODO Free service using a function?
-        service->used = false;
-        goto exit;
-    }
-    newEndpoint->service = service;
-    newEndpoint->isService = false;
-
-    if (queueSize <= MAX_MESSAGE_SIZE)
-        newEndpoint->recvBuffer_size = queueSize;
-    else
-        newEndpoint->recvBuffer_size = MAX_MESSAGE_SIZE;
-    newEndpoint->phys_recvBuffer = PMEM_alloc_phys(newEndpoint->recvBuffer_size, PMEM_FLAG_IDENTITY_MAPPED);
-
-    newEndpoint->toClient.capacity = queueSize;
-    newEndpoint->toClient.buffer = PMEM_alloc(queueSize);
-    newEndpoint->toClient.head = 0;
-    newEndpoint->toClient.tail = 0;
-
-    newEndpoint->toService.capacity = service->queueSize;
-    newEndpoint->toService.buffer = PMEM_alloc(service->queueSize);
-    newEndpoint->toService.head = 0;
-    newEndpoint->toService.tail = 0;
-
-    newEndpoint->nextEndpoint = service->clientLinkedList;
-    service->clientLinkedList = newEndpoint;
-    if (!service->clientLinkedList_last) {
-        service->clientLinkedList_last = newEndpoint;
-    }
-    service->clientLinkedList_last->nextEndpoint = newEndpoint;
-
-    *endpoint = newEndpoint;
-    returnValue = true;
-
-exit:
-    UNLOCK_INT(&g_service_lock);
-    return returnValue;
-}
-
-bool SRV_service_send(ServiceEndpoint* _endpoint, const u8* data, u64 size) {
-    if (size > MAX_MESSAGE_SIZE || size <= 0)
-        return false;
-
-    bool returnValue = false;
-    LOCK_INT(&g_service_lock);
+// ServiceEndpoint* service_create_endpoint() {
+//     if (g_endpoints_len >= MAX_ENDPOINTS)
+//         return NULL;
+//     ServiceEndpoint* endpoint = &g_endpoints[g_endpoints_len];
+//     g_endpoints_len++;
+//     return endpoint;
+// }
 
 
-    // @TODO Validate endpoint handle/pointer. Maybe we can do it in syscall instead?
-    //    A user process may accidently or intentionally pass another process's endpoint that
-    //    they guessed the address/id of or received from the other process through file or other method.
-    //    Very strange of course but we must validated that endpoint actually exists and that it is owned
-    //    by the user process making the syscall.
+// bool SRV_service_create(const char* name, ServiceEndpoint** endpoint, u64 queueSize) {
+//     bool returnValue = false;
+//     LOCK_INT(&g_service_lock);
 
-    ServiceEndpoint* endpoint = NORMALIZE_ENDPOINT(_endpoint);
+//     Service* service = service_create(name);
+//     if (!service) {
+//         goto exit;
+//     }
+//     ServiceEndpoint* newEndpoint = service_create_endpoint();
+//     if (!newEndpoint) {
+//         // @TODO Free service using a function?
+//         service->used = false;
+//         goto exit;
+//     }
 
-    RingBuffer* buffer;
-    if (endpoint->isService || IS_ENDPOINT_MARKED(_endpoint)) {
-        buffer = &endpoint->toClient;
-    } else {
-        buffer = &endpoint->toService;
-    }
+//     // @TODO Set queueSize limit. Maybe capability in syscall layer checks, sets, controls this.
 
-    u32 available;
-    if (buffer->head >= buffer->tail) {
-        available = buffer->head - buffer->tail + buffer->capacity;
-    } else {
-        available = buffer->tail - buffer->head;
-    }
+//     service->queueSize = queueSize;
+//     service->serviceEndpoint = newEndpoint;
+//     service->clientLinkedList = NULL;
+
+//     newEndpoint->service = service;
+//     newEndpoint->isService = true;
+
+//     if (queueSize <= MAX_MESSAGE_SIZE)
+//         newEndpoint->recvBuffer_size = queueSize;
+//     else
+//         newEndpoint->recvBuffer_size = MAX_MESSAGE_SIZE;
+//     newEndpoint->phys_recvBuffer = PMEM_alloc_phys(newEndpoint->recvBuffer_size, PMEM_FLAG_IDENTITY_MAPPED);
+
+//     *endpoint = newEndpoint;
+//     returnValue = true;
+
+// exit:
+//     UNLOCK_INT(&g_service_lock);
+//     return returnValue;
+// }
+
+// bool SRV_service_connect(const char* name, ServiceEndpoint** endpoint, u64 queueSize) {
+//     bool returnValue = false;
+//     LOCK_INT(&g_service_lock);
+
+//     Service* service = service_lookup(name);
+//     if (!service) {
+//         goto exit;
+//     }
+//     ServiceEndpoint* newEndpoint = service_create_endpoint();
+//     if (!newEndpoint) {
+//         // @TODO Free service using a function?
+//         service->used = false;
+//         goto exit;
+//     }
+//     newEndpoint->service = service;
+//     newEndpoint->isService = false;
+
+//     if (queueSize <= MAX_MESSAGE_SIZE)
+//         newEndpoint->recvBuffer_size = queueSize;
+//     else
+//         newEndpoint->recvBuffer_size = MAX_MESSAGE_SIZE;
+//     newEndpoint->phys_recvBuffer = PMEM_alloc_phys(newEndpoint->recvBuffer_size, PMEM_FLAG_IDENTITY_MAPPED);
+
+//     newEndpoint->toClient.capacity = queueSize;
+//     newEndpoint->toClient.buffer = PMEM_alloc(queueSize);
+//     newEndpoint->toClient.head = 0;
+//     newEndpoint->toClient.tail = 0;
+
+//     newEndpoint->toService.capacity = service->queueSize;
+//     newEndpoint->toService.buffer = PMEM_alloc(service->queueSize);
+//     newEndpoint->toService.head = 0;
+//     newEndpoint->toService.tail = 0;
+
+//     newEndpoint->nextEndpoint = service->clientLinkedList;
+//     service->clientLinkedList = newEndpoint;
+//     if (!service->clientLinkedList_last) {
+//         service->clientLinkedList_last = newEndpoint;
+//     }
+//     service->clientLinkedList_last->nextEndpoint = newEndpoint;
+
+//     *endpoint = newEndpoint;
+//     returnValue = true;
+
+// exit:
+//     UNLOCK_INT(&g_service_lock);
+//     return returnValue;
+// }
+
+// bool SRV_service_send(ServiceEndpoint* _endpoint, const u8* data, u64 size) {
+//     if (size > MAX_MESSAGE_SIZE || size <= 0)
+//         return false;
+
+//     bool returnValue = false;
+//     LOCK_INT(&g_service_lock);
+
+
+//     // @TODO Validate endpoint handle/pointer. Maybe we can do it in syscall instead?
+//     //    A user process may accidently or intentionally pass another process's endpoint that
+//     //    they guessed the address/id of or received from the other process through file or other method.
+//     //    Very strange of course but we must validated that endpoint actually exists and that it is owned
+//     //    by the user process making the syscall.
+
+//     ServiceEndpoint* endpoint = NORMALIZE_ENDPOINT(_endpoint);
+
+//     RingBuffer* buffer;
+//     if (endpoint->isService || IS_ENDPOINT_MARKED(_endpoint)) {
+//         buffer = &endpoint->toClient;
+//     } else {
+//         buffer = &endpoint->toService;
+//     }
+
+//     u32 available;
+//     if (buffer->head >= buffer->tail) {
+//         available = buffer->head - buffer->tail + buffer->capacity;
+//     } else {
+//         available = buffer->tail - buffer->head;
+//     }
     
-    // We check less than or equal because filling up buffer fully makes it ambiguous whether it's empty or full since head == tail.
-    // So we can never be ful land if head == tail then we're empty.
-    if (available <= MESSAGE_HEADER_LENGTH + size)
-        goto exit;
+//     // We check less than or equal because filling up buffer fully makes it ambiguous whether it's empty or full since head == tail.
+//     // So we can never be ful land if head == tail then we're empty.
+//     if (available <= MESSAGE_HEADER_LENGTH + size)
+//         goto exit;
 
-    u16 payloadSize = size;
-    ringbuf_write(buffer, &payloadSize, sizeof(payloadSize));
-    ringbuf_write(buffer, data, payloadSize);
+//     u16 payloadSize = size;
+//     ringbuf_write(buffer, &payloadSize, sizeof(payloadSize));
+//     ringbuf_write(buffer, data, payloadSize);
 
-    returnValue = true;
+//     returnValue = true;
 
-exit:
-    UNLOCK_INT(&g_service_lock);
-    return returnValue;
-}
+// exit:
+//     UNLOCK_INT(&g_service_lock);
+//     return returnValue;
+// }
 
-bool SRV_service_recv(ServiceEndpoint* _endpoint, ServiceEndpoint** senderEndpoint, u8** data, u64* size, u64 timeout_ns) {
-    if (IS_ENDPOINT_MARKED(_endpoint)) {
-        // Not allowed to receive from "senderEndpoints".
-        // senderEndpoints are only meant to be used with SRV_service_send OR SRV_shared_memory_grant.
-        // If you do receive from it then you are receiving as client which makes no sense.
+// bool SRV_service_recv(ServiceEndpoint* _endpoint, ServiceEndpoint** senderEndpoint, u8** data, u64* size, u64 timeout_ns) {
+//     if (IS_ENDPOINT_MARKED(_endpoint)) {
+//         // Not allowed to receive from "senderEndpoints".
+//         // senderEndpoints are only meant to be used with SRV_service_send OR SRV_shared_memory_grant.
+//         // If you do receive from it then you are receiving as client which makes no sense.
         
-        // @TODO Current "mark" implementation lets us determine who to send to using the same ServiceEndpoint.
-        //   But we should probably clone the endpoint and flip the isService flag instead.
-        //   However, the idea is that the ring buffers are used for them both.
-        //   I think really what want is a ServiceChannel which stores the ring buffers and two
-        //   ServiceEndpoints which refer to the channel anc contain the 'isService' boolean which
-        //   determines which ring buffer to push/pull to/from when sending and receiving.
-        return false;
-    }
+//         // @TODO Current "mark" implementation lets us determine who to send to using the same ServiceEndpoint.
+//         //   But we should probably clone the endpoint and flip the isService flag instead.
+//         //   However, the idea is that the ring buffers are used for them both.
+//         //   I think really what want is a ServiceChannel which stores the ring buffers and two
+//         //   ServiceEndpoints which refer to the channel anc contain the 'isService' boolean which
+//         //   determines which ring buffer to push/pull to/from when sending and receiving.
+//         return false;
+//     }
     
-    bool returnValue = false;
-    LOCK_INT(&g_service_lock);
+//     bool returnValue = false;
+//     LOCK_INT(&g_service_lock);
 
-    if (senderEndpoint) {
-        *senderEndpoint = NULL;
-    }
-    *data = NULL;
-    *size = 0;
+//     if (senderEndpoint) {
+//         *senderEndpoint = NULL;
+//     }
+//     *data = NULL;
+//     *size = 0;
 
-    // @TODO Validate endpoint handle/pointer. Maybe we can do it in syscall instead?
+//     // @TODO Validate endpoint handle/pointer. Maybe we can do it in syscall instead?
 
-    RingBuffer* buffer;
-    if (_endpoint->isService) {
-        Service* service = _endpoint->service;
-        ServiceEndpoint* firstEndpoint = service->clientLinkedList;
-        while (1) {
-            ServiceEndpoint* endpoint = service->clientLinkedList;
-            if (!endpoint) {
-                // No endpoints
-                goto exit;
-            }
-            buffer = &endpoint->toService;
+//     RingBuffer* buffer;
+//     if (_endpoint->isService) {
+//         Service* service = _endpoint->service;
+//         ServiceEndpoint* firstEndpoint = service->clientLinkedList;
+//         while (1) {
+//             ServiceEndpoint* endpoint = service->clientLinkedList;
+//             if (!endpoint) {
+//                 // No endpoints
+//                 goto exit;
+//             }
+//             buffer = &endpoint->toService;
             
-            u32 available;
-            if (buffer->head >= buffer->tail) {
-                available = buffer->head - buffer->tail;
-            } else {
-                available = buffer->tail - buffer->head + buffer->capacity;
-            }
+//             u32 available;
+//             if (buffer->head >= buffer->tail) {
+//                 available = buffer->head - buffer->tail;
+//             } else {
+//                 available = buffer->tail - buffer->head + buffer->capacity;
+//             }
 
-            if (available <= 2) {
-                if (available > 0 && available <= 2) {
-                    kernel_bug();
-                    buffer->tail = (buffer->tail + 2) % buffer->capacity;
-                }
+//             if (available <= 2) {
+//                 if (available > 0 && available <= 2) {
+//                     kernel_bug();
+//                     buffer->tail = (buffer->tail + 2) % buffer->capacity;
+//                 }
 
-                // Check next endpoint
-                service->clientLinkedList_last = service->clientLinkedList;
-                service->clientLinkedList = service->clientLinkedList->nextEndpoint;
+//                 // Check next endpoint
+//                 service->clientLinkedList_last = service->clientLinkedList;
+//                 service->clientLinkedList = service->clientLinkedList->nextEndpoint;
 
-                if (firstEndpoint == service->clientLinkedList) {
-                    goto exit;
-                }
-                continue;
-            }
+//                 if (firstEndpoint == service->clientLinkedList) {
+//                     goto exit;
+//                 }
+//                 continue;
+//             }
 
-            u16 payloadSize;
-            ringbuf_read(buffer, &payloadSize, sizeof(payloadSize));
-            ringbuf_read(buffer, endpoint->phys_recvBuffer, payloadSize);
+//             u16 payloadSize;
+//             ringbuf_read(buffer, &payloadSize, sizeof(payloadSize));
+//             ringbuf_read(buffer, endpoint->phys_recvBuffer, payloadSize);
 
-            *data = endpoint->phys_recvBuffer; // should be identity mapped
-            *size = payloadSize;
-            if (senderEndpoint) {
-                *senderEndpoint = (void*)((u64)endpoint | 1);
-            }
+//             *data = endpoint->phys_recvBuffer; // should be identity mapped
+//             *size = payloadSize;
+//             if (senderEndpoint) {
+//                 *senderEndpoint = (void*)((u64)endpoint | 1);
+//             }
 
-            service->clientLinkedList_last = service->clientLinkedList;
-            service->clientLinkedList = service->clientLinkedList->nextEndpoint;
+//             service->clientLinkedList_last = service->clientLinkedList;
+//             service->clientLinkedList = service->clientLinkedList->nextEndpoint;
 
-            returnValue = true;
-            break;
-        }
-    } else {
-        ServiceEndpoint* endpoint = _endpoint;
-        buffer = &endpoint->toClient;
+//             returnValue = true;
+//             break;
+//         }
+//     } else {
+//         ServiceEndpoint* endpoint = _endpoint;
+//         buffer = &endpoint->toClient;
 
-        u32 available;
-        if (buffer->head >= buffer->tail) {
-            available = buffer->head - buffer->tail;
-        } else {
-            available = buffer->tail - buffer->head + buffer->capacity;
-        }
+//         u32 available;
+//         if (buffer->head >= buffer->tail) {
+//             available = buffer->head - buffer->tail;
+//         } else {
+//             available = buffer->tail - buffer->head + buffer->capacity;
+//         }
 
-        if (available <= 0) {
-            // Nothing to read
-            goto exit;
-        }
-        if (available <= 2) {
-            kernel_bug();
-            buffer->tail = (buffer->tail + 2) % buffer->capacity;
-            goto exit;
-        }
+//         if (available <= 0) {
+//             // Nothing to read
+//             goto exit;
+//         }
+//         if (available <= 2) {
+//             kernel_bug();
+//             buffer->tail = (buffer->tail + 2) % buffer->capacity;
+//             goto exit;
+//         }
 
-        u16 payloadSize;
-        ringbuf_read(buffer, &payloadSize, sizeof(payloadSize));
-        ringbuf_read(buffer, endpoint->phys_recvBuffer, payloadSize);
+//         u16 payloadSize;
+//         ringbuf_read(buffer, &payloadSize, sizeof(payloadSize));
+//         ringbuf_read(buffer, endpoint->phys_recvBuffer, payloadSize);
 
-        *data = endpoint->phys_recvBuffer; // should be identity mapped
-        *size = payloadSize;
+//         *data = endpoint->phys_recvBuffer; // should be identity mapped
+//         *size = payloadSize;
 
-        returnValue = true;
-    }
+//         returnValue = true;
+//     }
 
-exit:
-    UNLOCK_INT(&g_service_lock);
-    return returnValue;
-}
+// exit:
+//     UNLOCK_INT(&g_service_lock);
+//     return returnValue;
+// }
 
 
 #define MAX_SHARED_MEMORY 128
@@ -379,7 +379,7 @@ exit:
 }
 
 
-bool SRV_shared_memory_grant(SharedMemory* handle, ServiceEndpoint* endpoint) {
+bool SRV_shared_memory_grant(SharedMemory* handle, ELOS_ProcessID processID) {
     // @TODO For now, anyone with the handle can access it. Very bad. Works for now.
     return true;
 }

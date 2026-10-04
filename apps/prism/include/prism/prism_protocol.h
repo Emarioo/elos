@@ -12,7 +12,12 @@
 #define PRISM_SERVICE_NAME "prism"
 
 typedef enum {
-    PRISM_CREATE_SURFACE = 1,
+    PRISM_INVALID = 0,
+
+    PRISM_PING,
+    PRISM_PING_RESPONSE,
+
+    PRISM_CREATE_SURFACE,
     PRISM_CREATE_SURFACE_RESPONSE,
     
     PRISM_DESTROY_SURFACE,
@@ -24,6 +29,7 @@ typedef enum {
 
 typedef struct {
     PrismMessageType type;
+    ELOS_ProcessID processID;
     union {
         struct {
             int width;
@@ -32,7 +38,7 @@ typedef struct {
         struct {
             int surfaceID;
             int stride;
-            ELOS_SharedMemory sharedMemoryHandle;
+            ELOS_SharedMemoryHandle sharedMemoryHandle;
         } createSurfaceResponse;
         struct {
             int surfaceID;

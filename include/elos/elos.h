@@ -2,7 +2,7 @@
     This files describes the available syscalls in ELOS.
 
     User processes call syscalls. The syscall operates based on the
-    process's capabilities.
+    process's permissions.
 
     Define ELOS_SYSCALL_IMPL to get implementions for functions.
 
@@ -22,8 +22,9 @@
 #ifndef ELOS_SYSCALL_INCLUDE
 #define ELOS_SYSCALL_INCLUDE
 
-// consider using stdint.h instead
-#include "elos/common/types.h"
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 #include "elos/keycode.h"
 
 #if defined(__x86_64__)
@@ -31,7 +32,7 @@
 #else
 #define ELOS_LINETHING(X,Y) X##Y
 #define ELOS_LINETHING2(Y) ELOS_LINETHING(_reserved, Y)
-#define ELOS_PADDING u32 ELOS_LINETHING2(__LINE__);
+#define ELOS_PADDING uint32_t ELOS_LINETHING2(__LINE__);
 #endif
 
 
@@ -42,15 +43,16 @@ typedef enum {
 
     // Reserved, it means OS accidently used 'true' instead of ELOS_OK. What a silly OS am I right?
     ELOS_ERR_RESERVED = 1,
+
     // No specific information about the error is available.
     // We should go out of our way to rid codebase from these.
     // But there is a place for them.
     ELOS_ERR_UNKNOWN,
 
-    ELOS_ERR_INVALID_PARAM,
     // Syscall number was not known by the OS. Also used in AsyncCompletion.error if operation was invalid.
+    ELOS_ERR_INVALID_PARAM,
     ELOS_ERR_INVALID_SYSCALL,
-    ELOS_ERR_CAP_DENIED,
+    ELOS_ERR_PERMISSION_DENIED,
 
     ELOS_ERR_NOT_FOUND,
     ELOS_ERR_BUSY,
@@ -70,32 +72,50 @@ typedef enum {
 } ELOS_Error;
 
 typedef enum {
-    ELOS_CAP_HEAP            = (1<<0),
-    ELOS_CAP_FILE            = (1<<1),
-    ELOS_CAP_MONITOR         = (1<<2),
-    ELOS_CAP_THREAD          = (1<<3),
-    ELOS_CAP_PROCESS         = (1<<4),
-    ELOS_CAP_NETWORK         = (1<<5),
-    ELOS_CAP_TIME            = (1<<6),
-    ELOS_CAP_SHARED_MEMORY   = (1<<7),
-    ELOS_CAP_SERVICE_SERVER  = (1<<8),
-    ELOS_CAP_SERVICE_CLIENT  = (1<<9),
-    ELOS_CAP_USER_EVENT      = (1<<10),
-    ELOS_CAP_ASYNC           = (1<<11),
-    ELOS_CAP_AUDIO           = (1<<12),
-} ELOS_GlobalCapability;
+    ELOS_PERM_INVALID,
+
+    ELOS_PERM_HEAP_LIMIT,
+    ELOS_PERM_HEAP_ALLOC_EXEC,
+    ELOS_PERM_HEAP_ALLOC_SHARED,
+
+    ELOS_PERM_THREAD_LIMIT,
+
+    // @SECURITY If a program copies itself to some path and modifies ELF slightly to get new hash
+    //   then it gets default permissions. If process spawn is default permission then it can spawn
+    //   itself infintelty and get infinite storage and memory quota.
+    //   Hence: ELOS_PERM_PROCESS_SPAWN IS NOT ALLOWED AS DEFAULT PERMISSION.
+    ELOS_PERM_PROCESS_SPAWN, 
+    ELOS_PERM_PROCESS_KILL,
+
+    ELOS_PERM_DISK,
+    ELOS_PERM_USER_EVENT,
+    ELOS_PERM_AUDIO,
+    ELOS_PERM_MONITOR,
+
+    ELOS_PERM_FILESYSTEM,
+    ELOS_PERM_FILESYSTEM_FULL_ACCESS,
+    ELOS_PERM_FILESYSTEM_STORAGE_LIMIT,
+
+    ELOS_PERM_NETWORK,
+    ELOS_PERM_NETWORK_FULL_ACCESS,
+
+} ELOS_PermissionType;
+
+
+typedef uint32_t ELOS_ProcessID;
+typedef uint32_t ELOS_ThreadID;
 
 
 typedef struct {
     // @TODO Do we need version/size for backwards and forward compatibility?
 
-    // General capability of different categories
-    u64 globalCapabilities;
+    // General permission of different categories
+    uint64_t globalPermissions;
 
-    //#### Heap capabilities ####
-    u64 heap_limit;
+    //#### Heap permissions ####
+    uint64_t heap_limit;
 
-    //#### File System capabilities ####
+    //#### File System permissions ####
 
 
     // network
@@ -104,16 +124,16 @@ typedef struct {
     // display
     // timing
     
-} ELOS_Capabilities;
+} ELOS_Permissions;
 
 
 
 typedef struct {
-    u32  width;
-    u32  height;
-    u32  size;
-    u32  pixels_per_scan_line;
-    u32* pixels;
+    uint32_t  width;
+    uint32_t  height;
+    uint32_t  size;
+    uint32_t  pixels_per_scan_line;
+    uint32_t* pixels;
     ELOS_PADDING
 } ELOS_FrameBuffer;
 
@@ -121,15 +141,15 @@ typedef struct {
 //   If endpoint is reused then If they can then how does service get an application ID that is unique so
 //   others can't d
 typedef void* ELOS_ServiceEndpoint;
-typedef void* ELOS_SharedMemory;
+typedef void* ELOS_SharedMemoryHandle;
 typedef void* ELOS_UserEventBufferHandle;
 typedef void* ELOS_File;
 
 typedef void(*FN_thread_entry)(void* arg);
 typedef void* ELOS_ThreadHandle;
-typedef u32 ELOS_ThreadID;
+typedef void* ELOS_ProcessHandle;
 
-typedef u32 ELOS_DeviceID;
+typedef uint32_t ELOS_DeviceID;
 
 typedef struct NET_Device NET_Device;
 
@@ -143,11 +163,11 @@ typedef enum {
 } ELOS_UserEventType;
 
 typedef struct {
-    u32 keycode;
-    u32 scancode;
-    u32 character;
-    u32 value; // zero = released, non-zero = how much it is pressed
-    u32 mods;
+    uint32_t keycode;
+    uint32_t scancode;
+    uint32_t character;
+    uint32_t value; // zero = released, non-zero = how much it is pressed
+    uint32_t mods;
 } ELOS_UserEvent_Key;
 
 typedef struct {
@@ -163,9 +183,9 @@ typedef struct {
 } ELOS_UserEvent;
 
 typedef struct {
-    const    u32 maxEvents;
-    volatile u32 head; // @TODO reserve, commit head/tail?
-    volatile u32 tail;
+    const    uint32_t maxEvents;
+    volatile uint32_t head; // @TODO reserve, commit head/tail?
+    volatile uint32_t tail;
     ELOS_UserEvent events[];
 } ELOS_UserEventBuffer;
 
@@ -180,30 +200,30 @@ const char* elos_error(ELOS_Error err);
 
 
 /*
-    Returns capabilities of process.
+    Returns permissions of process.
 
-    @param capabilities Filled with information.
+    @param permissions Filled with information.
 */
-void SYS_capabilities(ELOS_Capabilities* capabilities);
+void SYS_permissions(ELOS_Permissions* permissions);
 
 
 /*
-    Asks the OS for capabilities. Check the in parameter which capabilities
+    Asks the OS for permissions. Check the in parameter which permissions
     where accepted. Once they have been accepted you can safely use them.
-    Once a capability has been accepted you can never lose it.
+    Once a permission has been accepted you can never lose it.
 
-    @param capabilities Zero all but the capabilities you want to request.
-    On return the accepted capabilities remain non-zero and denied ones become zero.
+    @param permissions Zero all but the permissions you want to request.
+    On return the accepted permissions remain non-zero and denied ones become zero.
 */
-void SYS_request_capabilities(ELOS_Capabilities* capabilities);
+void SYS_request_permissions(ELOS_Permissions* permissions);
 
 
 /*
     Sends text to OS. It may print it to serial out, to frame buffer or do nothing.
 
-    @pre No capability required.
+    @pre No permission required.
 */
-void SYS_debug_log(const char* text, u32 length);
+void SYS_debug_log(const char* text, uint32_t length);
 
 
 typedef enum {
@@ -213,9 +233,9 @@ typedef enum {
 /*
     Special operations.
 
-    @pre ELOS_CAP_SYSTEM_OP capability is required.
+    @pre ELOS_PERM_SYSTEM_OP permission is required.
 */
-ELOS_Error SYS_system_operation(ELOS_System_Operation operation, uint8_t* data, u32 size);
+ELOS_Error SYS_system_operation(ELOS_System_Operation operation, uint8_t* data, uint32_t size);
 
 
 typedef enum ELOS_Heap_Protection {
@@ -228,7 +248,7 @@ typedef enum ELOS_Heap_Protection {
 /*
     Allocates memory from the heap.
 
-    @pre ELOS_CAP_HEAP capability is required.
+    @pre ELOS_PERM_HEAP permission is required.
 */
 ELOS_Error SYS_heap_allocate(void** newAddress, size_t size);
 ELOS_Error SYS_heap_free(void* oldAddress);
@@ -240,7 +260,7 @@ ELOS_Error SYS_heap_protect(void* virtAddress, size_t size, ELOS_Heap_Protection
 /*
     Retrieves a frame buffer to the default monitor.
 
-    @pre ELOS_CAP_MONITOR capability is required.
+    @pre ELOS_PERM_MONITOR permission is required.
 
     @param frameBuffer Filled with information.
 */
@@ -251,103 +271,103 @@ ELOS_Error SYS_default_monitor(ELOS_FrameBuffer* frameBuffer);
     Tick refers to Real Time Clock or Time Stamp Counter.
     Use with rdtsc to measure elapsed seconds.
 
-    @pre ELOS_CAP_TIME capability is required.
+    @pre No permission required.
 
     @param tps Filled with information.
 */
-ELOS_Error SYS_ticks_per_second(u64* tps);
+ELOS_Error SYS_ticks_per_second(uint64_t* tps);
 
 
 /*
     Sleeps for an amount of time. Can also be used
     to yield the process and reschedule another.
 
-    @pre No capability required.
+    @pre No permission required.
 
     @param nanoseconds Amount of time to sleep. Yields process if 0.
 */
-void SYS_sleep_ns(u64 nanoseconds);
+void SYS_sleep_ns(uint64_t nanoseconds);
 
 
-/*
-    Creates a service for receiving messages from applications that connect.
+// /*
+//     Creates a service for receiving messages from applications that connect.
 
-    @pre ELOS_CAP_SERVICE_SERVER capability is required.
-*/
-ELOS_Error SYS_service_create(const char* name, ELOS_ServiceEndpoint* endpoint, u32 queueSize);
-
-
-/*
-    Creates a connection to a service. It allows you to send and receive messages
-    between processes.
-
-    @pre ELOS_CAP_SERVICE_CLIENT capability is required.
-*/
-ELOS_Error SYS_service_connect(const char* name, ELOS_ServiceEndpoint* endpoint, u32 queueSize);
+//     @pre ELOS_PERM_SERVICE_SERVER permission is required.
+// */
+// ELOS_Error SYS_service_create(const char* name, ELOS_ServiceEndpoint* endpoint, uint32_t queueSize);
 
 
-/*
-    Sends messages to the service channel.
+// /*
+//     Creates a connection to a service. It allows you to send and receive messages
+//     between processes.
 
-    @pre ELOS_CAP_SERVICE_SERVER or ELOS_CAP_SERVICE_CLIENT capability is required.
-
-    @param endpoint The endpoint to send from.
-    @param senderEndpoint Only relevant if endpoint is a servie and not the connection to the service.
-    @param data Buffer to send.
-    @param size Size of buffer to send.
-    @return ELOS_IPC_FULL if service channel is full. ELOS_INVALID_PARAM if endpoint or data pointer are invalid.
-*/
-ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, const void* data, u32 size);
+//     @pre ELOS_PERM_SERVICE_CLIENT permission is required.
+// */
+// ELOS_Error SYS_service_connect(const char* name, ELOS_ServiceEndpoint* endpoint, uint32_t queueSize);
 
 
-/*
-    Receive messages from the service channel.
+// /*
+//     Sends messages to the service channel.
 
-    @pre ELOS_CAP_SERVICE capability is required.
+//     @pre ELOS_PERM_SERVICE_SERVER or ELOS_PERM_SERVICE_CLIENT permission is required.
 
-    @param endpoint Endpoint to receive to.
-    @param senderHandle Endpoint to receive from.
-    @param data Buffer to received message data. NULL if no messages were received. Kernel prepares the buffer and it is valid until next recv call on the same endpoint. 
-    @param size Size of received message. 0 if no messages received.
-    @param timeout_ns If no messages then function will block for this amount of time.
-        -1 to block until message is received.
-    @return ELOS_INVALID_PARAM if handle or data pointer are invalid.
-*/
-ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint* senderEndpoint, const void** data, u32* size, u64 timeout_ns);
+//     @param endpoint The endpoint to send from.
+//     @param senderEndpoint Only relevant if endpoint is a servie and not the connection to the service.
+//     @param data Buffer to send.
+//     @param size Size of buffer to send.
+//     @return ELOS_IPC_FULL if service channel is full. ELOS_INVALID_PARAM if endpoint or data pointer are invalid.
+// */
+// ELOS_Error SYS_service_send(ELOS_ServiceEndpoint endpoint, const void* data, uint32_t size);
+
+
+// /*
+//     Receive messages from the service channel.
+
+//     @pre ELOS_PERM_SERVICE permission is required.
+
+//     @param endpoint Endpoint to receive to.
+//     @param senderHandle Endpoint to receive from.
+//     @param data Buffer to received message data. NULL if no messages were received. Kernel prepares the buffer and it is valid until next recv call on the same endpoint. 
+//     @param size Size of received message. 0 if no messages received.
+//     @param timeout_ns If no messages then function will block for this amount of time.
+//         -1 to block until message is received.
+//     @return ELOS_INVALID_PARAM if handle or data pointer are invalid.
+// */
+// ELOS_Error SYS_service_recv(ELOS_ServiceEndpoint endpoint, ELOS_ServiceEndpoint* senderEndpoint, const void** data, uint32_t* size, uint64_t timeout_ns);
 
 
 /*
     Allocate memory that can be shared with other processes.
 
-    @pre ELOS_CAP_SHARED_MEMORY capability is required.
+    @pre ELOS_PERM_SHARED_MEMORY permission is required.
 */
-ELOS_Error SYS_shared_memory_create(size_t size, ELOS_SharedMemory* handle);
+ELOS_Error SYS_shared_memory_create(size_t size, ELOS_SharedMemoryHandle* handle);
 
 
 /*
     Share memory with another process. Use service functions to acquire the endpoint.
 
-    @pre ELOS_CAP_SHARED_MEMORY capability is required.
+    @pre ELOS_PERM_SHARED_MEMORY permission is required.
 */
-ELOS_Error SYS_shared_memory_grant(ELOS_SharedMemory handle, ELOS_ServiceEndpoint endpoint);
+ELOS_Error SYS_shared_memory_grant(ELOS_SharedMemoryHandle handle, ELOS_ProcessID processID);
 
 
 /*
     Information about the shared memory.
     Address is aligned by 4096 bytes (a page).
 
-    @pre ELOS_CAP_SHARED_MEMORY capability is required.
+    @pre ELOS_PERM_SHARED_MEMORY permission is required.
 */
-ELOS_Error SYS_shared_memory_info(ELOS_SharedMemory handle, void** buffer, size_t* size);
+ELOS_Error SYS_shared_memory_info(ELOS_SharedMemoryHandle handle, void** buffer, size_t* size);
 
 
 /*
     Requests a ring buffer for user events. The OS fills this buffer and
     old events are overridden.
 
-    @pre ELOS_CAP_USER_EVENT capability is required.
+    @pre ELOS_PERM_USER_EVENT permission is required.
 */
-ELOS_Error SYS_request_user_event_buffer(u32 minimumEvents, ELOS_UserEventBuffer** buffer);
+ELOS_Error SYS_request_user_event_buffer(uint32_t minimumEvents, ELOS_UserEventBuffer** buffer);
 
 /*
     Terminate the process.
@@ -359,7 +379,7 @@ void SYS_exit(int exitCode);
 /*
     Terminate the thread. If no more threads then process is also terminated.
 */
-// void SYS_thread_exit();
+void SYS_exit_thread();
 
 /*
     Spawn a thread.
@@ -367,34 +387,45 @@ void SYS_exit(int exitCode);
     @param entry  Entry point of the thread.
     @param handle Handle to the thread
 */
-// ELOS_Error SYS_spawn_thread(FN_thread_entry entry, ELOS_ThreadHandle* handle);
+ELOS_Error SYS_spawn_thread(FN_thread_entry entry, ELOS_ThreadHandle* handle);
 
 /*
-    Join a thread into the thread that spawned it. 
+    Wait for a thread to finish. Cannot join itself.
 
     @param handle Handle to the thread
 */
-// ELOS_Error SYS_join(ELOS_ThreadHandle handle);
+ELOS_Error SYS_join_thread(ELOS_ThreadHandle handle);
 
 /*
-    @return ID of current thread.
+    Retrieve ID of thread. Pass NULL for current thread.
+
+    @return ID of thread.
 */
-// ELOS_ThreadID SYS_self();
+ELOS_ThreadID SYS_thread_id(ELOS_ThreadHandle handle);
 
 /*
     Spawn a process.
 
     @TODO Should we get handle to it so we can wait for it to finish.
-          We want to explore unconvential ways to do capabilities/threads/processes.
+          We want to explore unconvential ways to do permissions/threads/processes.
           Domain execution is the term I use to differentiate from normal processes.
 
     @param path     Path to the executable.
     @param data     Data to pass to the executable. Process should parse flags from it. ()
     @param data_len Size of the data.
 */
-// ELOS_Error SYS_spawn_process(const char* path, const char* data, u32 data_len);
+ELOS_Error SYS_spawn_process(const char* path, const char* data, uint32_t data_len);
 
-// @TODO Spawn a process.
+ELOS_Error SYS_kill_process(ELOS_ProcessHandle handle);
+ELOS_Error SYS_kill_process_by_name(const char* name);
+
+
+/*
+    Retrieve ID of process.
+
+    @return ID of process.
+*/
+ELOS_ProcessID SYS_process_id();
 
 
 
@@ -413,8 +444,8 @@ typedef enum {
 #define ELOS_BYTES_PER_AUDIO_SAMPLE(X) ( (X) == ELOS_AUDIO_32BIT_FLOAT ? 4 : (1 << (X)) )
 
 typedef struct {
-    u32 sampleRate;
-    u8  channels;
+    uint32_t sampleRate;
+    uint8_t  channels;
     ELOS_AudioSampleFormat sampleFormat;
 } ELOS_AudioFormat;
 
@@ -423,10 +454,10 @@ typedef struct {
 } ELOS_AudioDeviceInfo;
 
 typedef struct {
-    u32 head;
-    u32 tail;
-    u32 size;
-    u8  data[];
+    uint32_t head;
+    uint32_t tail;
+    uint32_t size;
+    uint8_t  data[];
 } ELOS_AudioBuffer;
 
 /*
@@ -434,7 +465,7 @@ typedef struct {
 
     @param device The returned default device.
 
-    @pre ELOS_CAP_AUDIO is required.
+    @pre ELOS_PERM_AUDIO is required.
 
     @exception ELOS_NO_AUDIO_DEVICE No audio device.
 */
@@ -448,7 +479,7 @@ ELOS_Error SYS_default_audio(ELOS_AudioDevice* device);
     @param device The device to get information from.
     @param info The information of the device.
 
-    @pre ELOS_CAP_AUDIO is required.
+    @pre ELOS_PERM_AUDIO is required.
 
     @exception ELOS_ERR_UNKNOWN No audio device.
 */
@@ -463,12 +494,12 @@ ELOS_Error SYS_audio_info(ELOS_AudioDevice device, ELOS_AudioDeviceInfo* info);
     @param bufferSize Size in bytes of the buffer.
     @param buffer The buffer to write audio samples to. The kernel will transfer them to the audio device.
 
-    @pre ELOS_CAP_AUDIO is required.
+    @pre ELOS_PERM_AUDIO is required.
 
     @exception ELOS_UNSUPPORTED_AUDIO_FORMAT ELOS_BUSY
     
 */
-ELOS_Error SYS_create_audio_buffer(ELOS_AudioDevice device, ELOS_AudioFormat* format, u32 bufferSize, ELOS_AudioBuffer** buffer);
+ELOS_Error SYS_create_audio_buffer(ELOS_AudioDevice device, ELOS_AudioFormat* format, uint32_t bufferSize, ELOS_AudioBuffer** buffer);
 
 /*
     Destroys and frees audio buffer.
@@ -476,7 +507,7 @@ ELOS_Error SYS_create_audio_buffer(ELOS_AudioDevice device, ELOS_AudioFormat* fo
     @param device The device the buffer is from.
     @param buffer The buffer to destroy.
 
-    @pre ELOS_CAP_AUDIO is required.
+    @pre ELOS_PERM_AUDIO is required.
 
     @exception ELOS_UNSUPPORTED_AUDIO_FORMAT
     
@@ -502,9 +533,9 @@ ELOS_Error SYS_destroy_audio_buffer(ELOS_AudioDevice device, ELOS_AudioBuffer* b
 // We may provide syscalls for convenience?
 // ELOS_Error SYS_file_open(const char* path, ELOS_File* file);
 // ELOS_Error SYS_file_close(ELOS_File file);
-// ELOS_Error SYS_file_read(ELOS_File file, u64 offset, void* data, u64* size);
-// ELOS_Error SYS_file_write(ELOS_File file, u64 offset, const void* data, u64* size);
-// ELOS_Error SYS_file_info(ELOS_File file, u64* size);
+// ELOS_Error SYS_file_read(ELOS_File file, uint64_t offset, void* data, uint64_t* size);
+// ELOS_Error SYS_file_write(ELOS_File file, uint64_t offset, const void* data, uint64_t* size);
+// ELOS_Error SYS_file_info(ELOS_File file, uint64_t* size);
 
 // ELOS_Error SYS_file_remove(const char* path);
 // ELOS_Error SYS_file_rename(const char* old_path, const char* new_path);
@@ -554,7 +585,7 @@ enum _ELOS_AsyncOperation {
     ELOS_ASYNC_DISK_ENUMERATE,
 
 };
-typedef u16 ELOS_AsyncOperation;
+typedef uint16_t ELOS_AsyncOperation;
 
 
 typedef void* ELOS_Net_Handle;
@@ -566,7 +597,7 @@ typedef enum {
     ELOS_NET_PROTO_UDP_IPV6,
     ELOS_NET_PROTO_TCP_IPV6,
 } _ELOS_Net_Protocol;
-typedef u8 ELOS_Net_Protocol;
+typedef uint8_t ELOS_Net_Protocol;
 
 typedef struct {
     // 0.0.0.0
@@ -582,12 +613,12 @@ typedef struct {
                     NET_Device* device;
                 } raw;
                 struct {
-                    u32 address;
-                    u16 port;
+                    uint32_t address;
+                    uint16_t port;
                 } udp_tcp4;
                 struct {
-                    u16 address[8];
-                    u16 port;
+                    uint16_t address[8];
+                    uint16_t port;
                 } udp_tcp6;
             };
         };
@@ -600,18 +631,18 @@ typedef enum {
 } ELOS_FileOpenFlag;
 
 typedef struct {
-    u64  fileSize;
-    u64  lastWriteTime_us;
-    u32  sectorSize;
+    uint64_t  fileSize;
+    uint64_t  lastWriteTime_us;
+    uint32_t  sectorSize;
     bool isDirectory;
     bool readOnly;
 } ELOS_FileInfo;
 
 typedef struct {
     char name[63];
-    u8   name_len;
-    u64  fileSize;
-    u64  lastWriteTime_us;
+    uint8_t   name_len;
+    uint64_t  fileSize;
+    uint64_t  lastWriteTime_us;
     bool isDirectory;
     bool isReadOnly;
 } ELOS_DirectoryEntry;
@@ -627,25 +658,25 @@ typedef enum {
 
 typedef struct {
     char name[63];
-    u8   name_len;
-    u64  diskSize;
-    u32  sectorSize;
+    uint8_t   name_len;
+    uint64_t  diskSize;
+    uint32_t  sectorSize;
 } ELOS_DiskInfo;
 
 typedef struct {
     ELOS_DiskID diskID;
     char   name[63];
-    u8     name_len;
-    u64    diskSize;
-    u32    sectorSize;
+    uint8_t     name_len;
+    uint64_t    diskSize;
+    uint32_t    sectorSize;
 } ELOS_DiskEntry;
 
 
 typedef struct {
-    u16 operation;
-    u16 flags;
-    u32 _reserved;
-    u64 userData;
+    uint16_t operation;
+    uint16_t flags;
+    uint32_t _reserved;
+    uint64_t userData;
 
     union {
         struct {
@@ -660,16 +691,16 @@ typedef struct {
         struct {
             ELOS_File file;
             ELOS_PADDING
-            u64       offset;
-            u64       size;
+            uint64_t       offset;
+            uint64_t       size;
             void*     buffer;
             ELOS_PADDING
         } read;
         struct {
             ELOS_File file;
             ELOS_PADDING
-            u64       offset;
-            u64       size;
+            uint64_t       offset;
+            uint64_t       size;
             const void*     buffer;
             ELOS_PADDING
         } write;
@@ -702,9 +733,9 @@ typedef struct {
         struct {
             const char*          path;
             ELOS_PADDING
-            u64                  cookie;
-            u32                  maxEntries;
-            u32                  _reserved;
+            uint64_t                  cookie;
+            uint32_t                  maxEntries;
+            uint32_t                  _reserved;
             ELOS_DirectoryEntry* buffer;
             ELOS_PADDING
         } readdir;
@@ -724,7 +755,7 @@ typedef struct {
             ELOS_PADDING
             const void*             data;
             ELOS_PADDING
-            u32                     size;
+            uint32_t                     size;
         } net_write;
         struct {
             ELOS_Net_Handle     handle;
@@ -733,9 +764,9 @@ typedef struct {
             ELOS_PADDING
             void*               buffer;
             ELOS_PADDING
-            u32                 bufferSize;
-            u32                 _reserved;
-            u64                 timeout_ns;
+            uint32_t                 bufferSize;
+            uint32_t                 _reserved;
+            uint64_t                 timeout_ns;
         } net_read;
 
         struct {
@@ -748,30 +779,30 @@ typedef struct {
         } disk_close;
         struct {
             ELOS_DiskID         id;
-            u32                 _reserved;
+            uint32_t                 _reserved;
             ELOS_DiskInfo*      info;
             ELOS_PADDING
         } disk_info;
         struct {
             ELOS_DiskHandle     handle;
             ELOS_PADDING
-            u64                 offset;
-            u64                 size;
+            uint64_t                 offset;
+            uint64_t                 size;
             void*               buffer;
             ELOS_PADDING
         } disk_read;
         struct {
             ELOS_DiskHandle     handle;
             ELOS_PADDING
-            u64                 offset;
-            u64                 size;
+            uint64_t                 offset;
+            uint64_t                 size;
             const void*         buffer;
             ELOS_PADDING
         } disk_write;
         struct {
-            u64                 cookie;
-            u32                 maxEntries;
-            u32                 _reserved;
+            uint64_t                 cookie;
+            uint32_t                 maxEntries;
+            uint32_t                 _reserved;
             ELOS_DiskEntry*     buffer;
             ELOS_PADDING
         } disk_enumerate;
@@ -779,24 +810,24 @@ typedef struct {
 } ELOS_AsyncRequest;
 
 typedef struct {
-    u16        operation;
-    u16        flags;
+    uint16_t        operation;
+    uint16_t        flags;
     ELOS_Error error;
-    u64        userData;
+    uint64_t        userData;
     union {
         struct {
             ELOS_File file;
             ELOS_PADDING
         } open;
         struct {
-            u64 readBytes;
+            uint64_t readBytes;
         } read;
         struct {
-            u64 writtenBytes;
+            uint64_t writtenBytes;
         } write;
         struct {
-            u64 cookie;
-            u64 entryCount;
+            uint64_t cookie;
+            uint64_t entryCount;
         } readdir;
 
         struct {
@@ -804,7 +835,7 @@ typedef struct {
             ELOS_PADDING
         } net_open;
         struct {
-            u32  readBytes;
+            uint32_t  readBytes;
         } net_read;
 
 
@@ -813,31 +844,31 @@ typedef struct {
             ELOS_PADDING
         } disk_open;
         struct {
-            u64 readBytes;
+            uint64_t readBytes;
         } disk_read;
         struct {
-            u64 writtenBytes;
+            uint64_t writtenBytes;
         } disk_write;
         struct {
-            u64 cookie;
-            u64 entryCount;
+            uint64_t cookie;
+            uint64_t entryCount;
         } disk_enumerate;
     };
 } ELOS_AsyncCompletion;
 
 typedef struct {
-    volatile u32 head;
-    volatile u32 tail;
-    const    u32 ringMask;
-             u32 reserved;
+    volatile uint32_t head;
+    volatile uint32_t tail;
+    const    uint32_t ringMask;
+             uint32_t reserved;
     volatile ELOS_AsyncRequest entries[];
 } ELOS_AsyncRequestRing;
 
 typedef struct {
-    volatile u32 head;
-    volatile u32 tail;
-    const    u32 ringMask;
-             u32 reserved;
+    volatile uint32_t head;
+    volatile uint32_t tail;
+    const    uint32_t ringMask;
+             uint32_t reserved;
     volatile ELOS_AsyncCompletion entries[];
 } ELOS_AsyncCompletionRing;
 
@@ -845,15 +876,15 @@ typedef struct {
 /*
     Creates two rings for asynronous operations.
 
-    @pre ELOS_CAP_ASYNC capability is required.
+    @pre ELOS_PERM_ASYNC permission is required.
 */
-ELOS_Error SYS_create_async_rings(u32 maxEntries, ELOS_AsyncCreateFlag flags, ELOS_AsyncRequestRing** requestRing, ELOS_AsyncCompletionRing** completionRing);
+ELOS_Error SYS_create_async_rings(uint32_t maxEntries, ELOS_AsyncCreateFlag flags, ELOS_AsyncRequestRing** requestRing, ELOS_AsyncCompletionRing** completionRing);
 
 
 /*
     Destroys two rings. Operations in progress are aborted.
 
-    @pre ELOS_CAP_ASYNC capability is required.
+    @pre ELOS_PERM_ASYNC permission is required.
 */
 ELOS_Error SYS_destroy_async_rings(ELOS_AsyncRequestRing* requestRing, ELOS_AsyncCompletionRing* completionRing);
 
@@ -862,7 +893,7 @@ ELOS_Error SYS_destroy_async_rings(ELOS_AsyncRequestRing* requestRing, ELOS_Asyn
     Submits entries in the ring for processing by the kernel. Not necessary if
     ring was created with ELOS_ASYNC_KERNEL_POLLING.
 
-    @pre ELOS_CAP_ASYNC capability is required.
+    @pre ELOS_PERM_ASYNC permission is required.
 */
 ELOS_Error SYS_submit_async_ring(ELOS_AsyncRequestRing* requestRing);
 
@@ -870,13 +901,13 @@ ELOS_Error SYS_submit_async_ring(ELOS_AsyncRequestRing* requestRing);
 /*
     Waits for kernel to complete an operation.
 
-    @pre ELOS_CAP_ASYNC capability is required.
+    @pre ELOS_PERM_ASYNC permission is required.
 */
-ELOS_Error SYS_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, u64 timeout_ns);
+ELOS_Error SYS_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, uint64_t timeout_ns);
 
 
 
-// @TODO SYS_utc_epoch_time(u64* nanoseconds)
+// @TODO SYS_utc_epoch_time(uint64_t* nanoseconds)
 //   Network Time Protocol and DNS to sync the time.
 
 

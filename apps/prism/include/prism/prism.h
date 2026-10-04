@@ -13,6 +13,9 @@
 #include <stdbool.h>
 
 
+#define PRISM_PROTOCOL_PORT 9070
+
+
 typedef struct PrismInstance PrismInstance;
 typedef struct PrismSurface PrismSurface;
 typedef struct PrismSurfaceInfo PrismSurfaceInfo;
@@ -50,4 +53,4 @@ void prism_moveSurface(PrismSurface* surface, int x, int y);
 /*
     Tell Prism server to render the updated surface.
 */
-bool prism_presentSurface(PrismSurface* surface);
+void prism_presentSurface(PrismSurface* surface);

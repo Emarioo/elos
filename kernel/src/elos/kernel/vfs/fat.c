@@ -1595,7 +1595,7 @@ int fat__set_fat(FATContext* context, int cluster, uint32_t value) {
             context->sector_size,
             tempBuffer);
 
-        return err != ELOS_OK;
+        return err == ELOS_OK;
     }
     else
     {
@@ -1644,7 +1644,7 @@ int fat__set_fat(FATContext* context, int cluster, uint32_t value) {
             2 * context->sector_size,
             tempBuffer);
 
-        return err != ELOS_OK;
+        return err == ELOS_OK;
     }
 }
 
