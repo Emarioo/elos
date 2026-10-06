@@ -77,6 +77,63 @@
 #define IDT_ATTRIBUTE_DEFAULT_KERNEL (IDT_ATTRIBUTE_PRESENT|IDT_ATTRIBUTE_RING0|IDT_ATTRIBUTE_64_INTERRUPT)
 
 
+
+#pragma pack(push, 1)
+typedef struct GDT_Register {
+    u16 limit;
+    u64 base;
+} GDT_Register;
+#pragma pack(pop)
+
+
+#pragma pack(push, 1)
+typedef struct IDT_Register {
+    u16 limit;
+    u64 base;
+} IDT_Register;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct IDT_Entry {
+    u16 isr_low;
+    u16 kernel_cs;
+    u8  ist;
+    u8  attributes;
+    u16 isr_mid;
+    u32 isr_high;
+    u32 _reserved;
+} IDT_Entry;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct {
+	uint32_t _reserved0;
+	uint64_t rsp0;
+	uint64_t rsp1;
+	uint64_t rsp2;
+	uint64_t _reserved1;
+	uint64_t ist1;
+	uint64_t ist2;
+	uint64_t ist3;
+	uint64_t ist4;
+	uint64_t ist5;
+	uint64_t ist6;
+	uint64_t ist7;
+	uint64_t _reserved2;
+	uint16_t _reserved3;
+	uint16_t iomap_base;
+} TSS_Entry;
+#pragma pack(pop)
+
+
+_align(16) GDT_Register _gdt_register[CORE_LIMIT];
+_align(16) IDT_Register _idt_register[CORE_LIMIT]; // Same for every core
+_align(16) TSS_Entry   _tss_entry[CORE_LIMIT];
+
+_align(16) static u64 _gdt[CORE_LIMIT][(LAST_SEGMENT+16)/8]; // +16 for NULL and the width of the last segment
+_align(16) static IDT_Entry g_idt[CORE_LIMIT][256];
+
+
 void ap_trampoline(); // defined in assembly
 
 void hpet_isr(u32 isr_number, InterruptFrame* frame);
@@ -166,6 +223,15 @@ void CPU_init(BootAPI* boot_api) {
         return;
     }
     memcpy(TRAMPOLINE_ADDRESS, ap_trampoline, PAGE_SIZE);
+    
+    u32* rootPage_phys_address = (void*)((size_t)TRAMPOLINE_ADDRESS + 0x8200);
+    u32* gdt_phys_address      = (void*)((size_t)TRAMPOLINE_ADDRESS + 0x8204);
+    u32* idt_phys_address      = (void*)((size_t)TRAMPOLINE_ADDRESS + 0x8208);
+    
+    *rootPage_phys_address = (u32)(size_t)PMEM_kernel_to_phys(&g_kernelPageTable);
+    *gdt_phys_address      = (u32)(size_t)PMEM_kernel_to_phys(&_gdt_register);
+    *idt_phys_address      = (u32)(size_t)PMEM_kernel_to_phys(&_idt_register);
+
 
     int lapic_id = g_lapic_base[APIC_APICID] >> 24;
 
@@ -181,62 +247,6 @@ void CPU_init(BootAPI* boot_api) {
         start_core(apic_id);
     }
 }
-
-
-#pragma pack(push, 1)
-typedef struct GDT_Register {
-    u16 limit;
-    u64 base;
-} GDT_Register;
-#pragma pack(pop)
-
-
-#pragma pack(push, 1)
-typedef struct IDT_Register {
-    u16 limit;
-    u64 base;
-} IDT_Register;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct IDT_Entry {
-    u16 isr_low;
-    u16 kernel_cs;
-    u8  ist;
-    u8  attributes;
-    u16 isr_mid;
-    u32 isr_high;
-    u32 _reserved;
-} IDT_Entry;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct {
-	uint32_t _reserved0;
-	uint64_t rsp0;
-	uint64_t rsp1;
-	uint64_t rsp2;
-	uint64_t _reserved1;
-	uint64_t ist1;
-	uint64_t ist2;
-	uint64_t ist3;
-	uint64_t ist4;
-	uint64_t ist5;
-	uint64_t ist6;
-	uint64_t ist7;
-	uint64_t _reserved2;
-	uint16_t _reserved3;
-	uint16_t iomap_base;
-} TSS_Entry;
-#pragma pack(pop)
-
-
-_align(16) GDT_Register _gdt_register[CORE_LIMIT];
-_align(16) IDT_Register _idt_register[CORE_LIMIT]; // Same for every core
-_align(16) TSS_Entry   _tss_entry[CORE_LIMIT];
-
-_align(16) static u64 _gdt[CORE_LIMIT][(LAST_SEGMENT+16)/8]; // +16 for NULL and the width of the last segment
-_align(16) static IDT_Entry g_idt[CORE_LIMIT][256];
 
 
 typedef struct {

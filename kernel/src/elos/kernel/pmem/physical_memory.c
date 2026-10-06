@@ -43,6 +43,8 @@ PhysicalMemoryRegion g_used_regions[MAX_REGIONS];
 
 PageTable* g_kernelPageTable;
 
+size_t kernel_vaddr_offset;
+
 void PMEM_init(BootAPI* boot_api) {
     typedef struct Range {
         u64 address;

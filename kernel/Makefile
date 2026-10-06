@@ -33,7 +33,7 @@ CFLAGS += -mno-red-zone
 CFLAGS += -Wno-builtin-declaration-mismatch -Wno-format-truncation
 # CFLAGS += -mno-sse -mno-sse2 -mno-mmx # For debugging disabling SSE can be useful
 
-ASFLAGS := -g
+ASFLAGS := -g -no-pie
 
 KERNEL_LD_SCRIPT := $(ROOT)/kernel/sections.ld
 

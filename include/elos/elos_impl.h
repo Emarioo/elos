@@ -601,29 +601,31 @@ register size_t _arg0 asm ("ebx") = (size_t)handle;
     return retv;
 }
 
-ELOS_Error SYS_spawn_process(const char* path, const char* data, uint32_t data_len)
+ELOS_Error SYS_spawn_process(const char* path, const char* data, uint32_t data_len, ELOS_ProcessHandle* handle)
 {
     ELOS_Error retv;
 #if defined(__x86_64__)
 register size_t _arg0 asm ("rdi") = (size_t)path;
 register size_t _arg1 asm ("rsi") = (size_t)data;
 register size_t _arg2 asm ("rdx") = (size_t)data_len;
+register size_t _arg3 asm ("r10") = (size_t)handle;
 
             asm volatile (
                 "syscall"
                 : "=a" (retv)
-                : "a" (_SYS_SPAWN_PROCESS), "r" (_arg0), "r" (_arg1), "r" (_arg2)
+                : "a" (_SYS_SPAWN_PROCESS), "r" (_arg0), "r" (_arg1), "r" (_arg2), "r" (_arg3)
                 : "rcx", "r11", "memory"
             );
         #else
 register size_t _arg0 asm ("ebx") = (size_t)path;
 register size_t _arg1 asm ("ecx") = (size_t)data;
 register size_t _arg2 asm ("edx") = (size_t)data_len;
+register size_t _arg3 asm ("esi") = (size_t)handle;
 
             asm volatile (
                 "int $0x80"
                 : "=a" (retv)
-                : "a" (_SYS_SPAWN_PROCESS), "r" (_arg0), "r" (_arg1), "r" (_arg2)
+                : "a" (_SYS_SPAWN_PROCESS), "r" (_arg0), "r" (_arg1), "r" (_arg2), "r" (_arg3)
                 : "memory"
             );
         #endif

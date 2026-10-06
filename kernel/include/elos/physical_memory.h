@@ -65,3 +65,15 @@ bool PMEM_map_memory(PageTable* table, void* virtual_address, void* physical_add
 bool PMEM_unmap_memory(PageTable* table, void* virtual_address, size_t size);
 
 void* PMEM_virt_to_phys(PageTable* table, void* virtual_address);
+
+
+extern size_t kernel_vaddr_offset;
+
+static inline void* PMEM_phys_to_kernel(void* paddr) {
+    return (void*)((size_t)paddr + kernel_vaddr_offset);
+}
+
+static inline void* PMEM_kernel_to_phys(void* vaddr) {
+    return (void*)((size_t)vaddr - kernel_vaddr_offset);
+}
+

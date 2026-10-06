@@ -1,10 +1,16 @@
 
 ENTRY(_start)
 
-KERNEL_BASE = 0x200000;
+PHYSICAL_KERNEL_BASE = 0x200000;
+VIRTUAL_KERNEL_BASE = 0xFFFFFFFF80200000;
+KERNEL_OFFSET = VIRTUAL_KERNEL_BASE - PHYSICAL_KERNEL_BASE;
 
-MEMORY {
-    RAM (rwx) : ORIGIN = KERNEL_BASE, LENGTH = 0x2000000
+PHDRS
+{
+    low_boot PT_LOAD FLAGS(5); /* R-X */
+    text     PT_LOAD FLAGS(5); /* R-X */
+    rodata   PT_LOAD FLAGS(4); /* R-- */
+    data     PT_LOAD FLAGS(6); /* RW- */
 }
 
 SECTIONS {
@@ -12,58 +18,57 @@ SECTIONS {
     # @IMPORTANT The text and data addresses are also hardcoded in physical_memory.c.
     #   Where we mark addresses as in use.
 
-    . = KERNEL_BASE;
-    __kernel_start = .;
+    .low_boot PHYSICAL_KERNEL_BASE :
+        AT(PHYSICAL_KERNEL_BASE)
+    {
+        __low_boot_start = .;
+        *(.low_boot)
+        __low_boot_end = .;
+    } :low_boot
 
-    .text ALIGN(4K) : {
+    .text VIRTUAL_KERNEL_BASE + 0x4000 :
+        AT(ADDR(.text) - KERNEL_OFFSET)
+    {
+        __kernel_start = .;
         __text_start = .;
         *start.o(.text)
         *(.text*)
         __text_end = .;
-    } > RAM
+    } :text
 
-    .rodata ALIGN(4K) : {
+    .rodata ALIGN(4K)  :
+        AT(ADDR(.rodata) - KERNEL_OFFSET)
+    {
         __rodata_start = .;
         *(.rodata*)
         __rodata_end = .;
-    } > RAM
+    } :rodata
 
-    .data ALIGN(4K) : {
+    .data ALIGN(4K) :
+        AT(ADDR(.data) - KERNEL_OFFSET)
+    {
         __data_start = .;
         *(.data*)
         __data_end = .;
-    } > RAM
-    
-    .got : ALIGN(8) {
-        *(.got)
-        *(.got.*)
-    } > RAM
+    } :data
 
-    .got.plt : ALIGN(8) {
-        *(.got.plt)
-    } > RAM
-    
-    .iplt : { KEEP(*(.iplt)) } > RAM
-    .igot.plt : { KEEP(*(.igot.plt)) } > RAM
-
-    .rela : ALIGN(8) {
-        *(.rela*)
-    } > RAM
-
-    .bss ALIGN(4K) : {
+    .bss ALIGN(4K) :
+        AT(ADDR(.bss) - KERNEL_OFFSET)
+    {
         __bss_start = .;
         *(.bss*)
+
+        . = ALIGN(4K);
+
         __bss_end = .;
-    } > RAM
 
-    . = ALIGN(4K);
+        __stack_start = .;
+        . = . + 0x8000;
+        __stack_end   = .;
+        
+        __kernel_end = .;
+    } :data
 
-    __kernel_end = .;
-
-
-    /* These addresses seems to work, lower ones i've tried behave strangelu */
-    __stack_start = 0x1800000;
-    __stack_end   = 0x1A00000;
 
     .debug_frame    0 : { *(.debug_frame) }
     .debug_line     0 : { *(.debug_line) }
@@ -75,10 +80,14 @@ SECTIONS {
     .debug_line_str 0 : { *(.debug_line_str) }
     .debug_loclists 0 : { *(.debug_loclists) }
 
-
     /DISCARD/ : {
         *(.comment*)
         *(.note*)
+        *(.got*)
+        *(.got.plt*)
+        *(.iplt*)
+        *(.rela*)
+        *(.igot.plt*)
     }
 
 }

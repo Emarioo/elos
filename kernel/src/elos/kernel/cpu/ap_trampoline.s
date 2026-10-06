@@ -57,7 +57,8 @@ _8060:
 
     # Load root page table
     # (same as the Bootstrap Processor for now)
-    mov eax, [g_kernelPageTable]
+    mov eax, [0x8200]
+    mov eax, [eax]
     mov cr3, eax
 
     # Enable long mode in EFER
@@ -79,8 +80,10 @@ _8060:
 
     imul ebx, 10
 
-    lgdt [_gdt_register + ebx] # Prepared by BSP in Kernel C code
-    lidt [_idt_register]
+    mov eax, [0x8204]
+    lgdt [eax + ebx] # Prepared by BSP in Kernel C code
+    mov eax, [0x8208]
+    lidt [eax]
 
     // Jump to long mode
     ljmp 0x08:0x8100 # KERNEL_CODE_SEGMENT
@@ -100,10 +103,22 @@ _8100:
 
     # Get small temporary stack for this processor
     mov ebx, edi # ebx = apic id
-    lea rsp, [initial_ap_stack_top]
+    movabs rax, initial_ap_stack_top
+    mov rsp, rax
     shl ebx, 12
     sub rsp, rbx
     
-    lea rbx, [ap_entry]
+    movabs rax, ap_entry
+    mov rbx, rax
     call rbx
     #  Should not return.
+trampoline_spin:
+    jmp trampoline_spin
+
+    .align 256
+    .code32
+_8200:
+
+rootPage_phys_address: .long 0
+gdt_phys_address: .long 0
+idt_phys_address: .long 0

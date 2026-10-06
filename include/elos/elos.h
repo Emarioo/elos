@@ -99,6 +99,8 @@ typedef enum {
     ELOS_PERM_NETWORK,
     ELOS_PERM_NETWORK_FULL_ACCESS,
 
+    ELOS_PERM_DEBUG,
+
 } ELOS_PermissionType;
 
 
@@ -414,7 +416,7 @@ ELOS_ThreadID SYS_thread_id(ELOS_ThreadHandle handle);
     @param data     Data to pass to the executable. Process should parse flags from it. ()
     @param data_len Size of the data.
 */
-ELOS_Error SYS_spawn_process(const char* path, const char* data, uint32_t data_len);
+ELOS_Error SYS_spawn_process(const char* path, const char* data, uint32_t data_len, ELOS_ProcessHandle* handle);
 
 ELOS_Error SYS_kill_process(ELOS_ProcessHandle handle);
 ELOS_Error SYS_kill_process_by_name(const char* name);
@@ -904,6 +906,106 @@ ELOS_Error SYS_submit_async_ring(ELOS_AsyncRequestRing* requestRing);
     @pre ELOS_PERM_ASYNC permission is required.
 */
 ELOS_Error SYS_wait_async_ring(ELOS_AsyncCompletionRing* completionRing, uint64_t timeout_ns);
+
+
+typedef enum {
+    ELOS_DEBUG_X86_64_RAX,
+} ELOS_Debug_Register_x86_64;
+
+
+// /*
+//     Retrieve a handle to perform debug operations on an existing process.
+
+//     By the time you do debug operations it may have been terminated. Therefore properly
+//     check return errors.
+
+//     @TODO A process with DEBUG permission should not be able to debug all processes on the system.
+//        What determines which you can debug?
+//        This goes for spawn_process with debug flag as well.
+
+//     @param processID The process to debug.
+//     @param handle Handle to the process you can debug. Only process handles which was acquired with
+//       this function or SYS_spawn_process with the DEBUG flag can be debugged.
+
+//     @pre ELOS_PERM_DEBUG
+// */
+// ELOS_Error SYS_debug_initiate(ELOS_ProcessID processID, ELOS_ProcessHandle* handle);
+
+// /*
+//     Continue execution of a stopped thread. A running thread is unaffected.
+
+//     @pre ELOS_PERM_DEBUG
+// */
+// ELOS_Error SYS_debug_continue(ELOS_ProcessHandle handle, ELOS_ThreadID threadID);
+
+// /*
+//     Pause execution of a running thread.
+//     A paused thread is unaffected.
+
+//     @pre ELOS_PERM_DEBUG
+// */
+// ELOS_Error SYS_debug_pause(ELOS_ProcessHandle handle);
+
+// /*
+//     Retrieve a list of threads which belong to the process.
+//     A returned thread id may have been terminated by the time you use it.
+//     Therefore check return error on functions that use thread id.
+    
+//     @param threads A buffer where thread ids will be placed.
+//     @param count Input: max number of ids to place. Output: number of ids placed.
+
+//     @pre ELOS_PERM_DEBUG
+// */
+// ELOS_Error SYS_debug_threads(ELOS_ProcessHandle handle, ELOS_ThreadID* threads, uint32_t* count);
+
+// /*
+//     Retrieve a list of registers for a thread. Mostly nonsense if the thread is running but is
+//     possible to give user a sense of registers updating in real time, even if the actual values are
+//     old cached ones or the previous ones since the last context switch.
+//     Register values are correct when the thread is paused.
+
+//     The registers are indexed based on the enum ELOS_Debug_Registers_<ARCH>.
+//     By convention the first ones are general registers while last ones are special registers less
+//     important to normal user programs.
+
+//     @param registers A buffer where thread ids will be placed.
+//     @param count Input: max number of registers to place. Output: number of registers placed.
+
+//     @pre ELOS_PERM_DEBUG
+// */
+// ELOS_Error SYS_debug_registers(ELOS_ProcessHandle handle, ELOS_ThreadID threadID, u64* registers, uint32_t* count);
+
+// /*
+//     Read memory from the debugged process. Most importantly reading data at the instruction pointer
+//     so you can decode and display the next instructions.
+
+//     @param addess A virtual address in the debugged process's memory space.
+//     @param size The number of bytes to read.
+//     @param buffer Where to place the data.
+
+//     @pre ELOS_PERM_DEBUG
+// */
+// ELOS_Error SYS_debug_read(ELOS_ProcessHandle, size_t address, size_t size, void* buffer);
+
+// /*
+//     Write memory to the debugged process.
+
+//     @param addess A virtual address in the debugged process's memory space.
+//     @param size The number of bytes to write.
+//     @param buffer Where to fetch the data.
+
+//     @pre ELOS_PERM_DEBUG
+// */
+// ELOS_Error SYS_debug_write(ELOS_ProcessHandle, size_t address, size_t size, const void* buffer);
+
+/*
+    Reserved for future use. Like getting the text,data,rodata sections and top of stack.
+    Getting the ELF file for debug info etc.
+
+    You may want to read the text section to decode instructions into your own optimal structures.
+    As well as decoding debug information.
+*/
+// ELOS_Error SYS_debug_context(ELOS_ProcessHandle, ELOS_Debug_Context);
 
 
 

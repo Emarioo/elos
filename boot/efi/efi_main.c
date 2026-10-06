@@ -510,8 +510,6 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     *image_base_ptr = (uint64_t)loaded_image->ImageBase;  // Store ImageBase
     *marker_ptr = 0xDEADCE11;   // Set marker
 
-    // printf("Hello World\n"); // EFI Applications use Unicode and CRLF, a la Windows
-
 
     efi_entry();
 
@@ -582,19 +580,6 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE * SystemTable) {
     load_initrd();
 
     boot_init_frame_buffer();
-
-    EFI_PHYSICAL_ADDRESS stack = (u64)__STACK_START;
-    int stack_size = (u64)__STACK_END - (u64)__STACK_START;
-    // int stack_size = 10000;
-
-    Status = ST->BootServices->AllocatePages(AllocateAddress, EfiLoaderData, stack_size / EFI_PAGE_SIZE, &stack);
-    if (EFI_ERROR(Status)) {
-        // Message printed in function
-        printf("Could not allocate stack at 0x%x (size %d KB), %d", stack, stack_size / 1024, Status);
-        catch_bad_status();
-        FREEZE();
-        return Status;
-    }
 
     // FREEZE();
 
