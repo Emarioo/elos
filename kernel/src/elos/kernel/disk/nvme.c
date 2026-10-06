@@ -50,13 +50,8 @@ bool nvme_pci_scan(Disk_ScanInfo* scanInfo, PCI_ConfigSpace* config) {
     // @TODO check config->progIF == 0x2 ? i left this comment, is it important?
 
 
-    void* memory_bar = (void*)((u64)(config->header0.bar0 & ~0xF) | ((u64)config->header0.bar1 << 32));
-
-    bool mapped = PMEM_map_memory(g_kernelPageTable, memory_bar, memory_bar, 4 * PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
-    if (!mapped) {
-        printf("Could not map NVMe PCI memory\n");
-        return false;
-    }
+    void* phys_memory_bar = (void*)((u64)(config->header0.bar0 & ~0xF) | ((u64)config->header0.bar1 << 32));
+    void* memory_bar = PMEM_phys_to_uncached_kernel(phys_memory_bar);
 
     volatile NVME_Registers* regs = memory_bar;
 

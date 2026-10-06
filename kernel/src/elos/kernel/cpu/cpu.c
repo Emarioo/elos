@@ -216,12 +216,7 @@ void CPU_init(BootAPI* boot_api) {
 
     CPU_schedule_timer_interrupt(TIMER_FREQUENCY_NS);
 
-
-    bool mapped = PMEM_map_memory(g_kernelPageTable, TRAMPOLINE_ADDRESS, TRAMPOLINE_ADDRESS, PAGE_SIZE, PMEM_FLAG_EXECUTABLE);
-    if (!mapped) {
-        printf("Could not map AP trampoline\n");
-        return;
-    }
+    void* trampoline_address = PMEM_phys_to_kernel(TRAMPOLINE_ADDRESS);
     memcpy(TRAMPOLINE_ADDRESS, ap_trampoline, PAGE_SIZE);
     
     u32* rootPage_phys_address = (void*)((size_t)TRAMPOLINE_ADDRESS + 0x8200);
@@ -552,7 +547,8 @@ void init_apic() {
     int coreIndex = CPU_get_core_index();
     EXEC_Core* core = &cores[coreIndex];
     core->syscall_stack_size = 0x4000;
-    void* syscall_stack = PMEM_alloc_phys(core->syscall_stack_size, PMEM_FLAG_IDENTITY_MAPPED);
+    void* syscall_stack = PMEM_alloc_phys(core->syscall_stack_size);
+    syscall_stack = PMEM_phys_to_kernel(syscall_stack);
     core->syscall_stack = (char*)syscall_stack + core->syscall_stack_size;
     
     wrmsr(MSR_KERNEL_GS_BASE, (u64)core);

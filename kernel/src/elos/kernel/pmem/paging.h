@@ -4,18 +4,18 @@
 
 #include "elos/boot_api.h"
 
-#define PAGE_BIT_PRESENT   ((u64)1 << 0)
-#define PAGE_BIT_WRITE     ((u64)1 << 1)
-#define PAGE_BIT_USER      ((u64)1 << 2)
-#define PAGE_BIT_PWT       ((u64)1 << 3)
-#define PAGE_BIT_PCD       ((u64)1 << 4)
-#define PAGE_BIT_ACCESSED  ((u64)1 << 5)
-#define PAGE_BIT_DIRTY     ((u64)1 << 6)
-#define PAGE_BIT_ENTRY_PAT ((u64)1 << 7)
-#define PAGE_BIT_DIR_PAT   ((u64)1 << 12)
-#define PAGE_BIT_HUGE_PAGE ((u64)1 << 7)
-#define PAGE_BIT_GLOBAL    ((u64)1 << 8)
-#define PAGE_BIT_XD        ((u64)1 << 63)
+#define PAGE_BIT_PRESENT   ((size_t)1 << 0)
+#define PAGE_BIT_WRITE     ((size_t)1 << 1)
+#define PAGE_BIT_USER      ((size_t)1 << 2)
+#define PAGE_BIT_PWT       ((size_t)1 << 3)
+#define PAGE_BIT_PCD       ((size_t)1 << 4)
+#define PAGE_BIT_ACCESSED  ((size_t)1 << 5)
+#define PAGE_BIT_DIRTY     ((size_t)1 << 6)
+#define PAGE_BIT_ENTRY_PAT ((size_t)1 << 7)
+#define PAGE_BIT_DIR_PAT   ((size_t)1 << 12)
+#define PAGE_BIT_HUGE_PAGE ((size_t)1 << 7)
+#define PAGE_BIT_GLOBAL    ((size_t)1 << 8)
+#define PAGE_BIT_XD        ((size_t)1 << 63)
 
 
 

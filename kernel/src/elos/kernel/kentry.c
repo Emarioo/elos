@@ -448,24 +448,3 @@ void kernel_bug() {
 
 #include "elos/elos.h"
 
-
-/*
-
-Code to test paging
-
-    KCON_printf("Before crash\n");
-    void* phys_ptr = PMEM_alloc_phys(PAGE_SIZE, PMEM_FLAG_NONE);
-    int* v1_ptr = (void*)0xa000000;
-    int* v2_ptr = (void*)0xc001000;
-    bool yes = PMEM_map_memory(v1_ptr, phys_ptr, PAGE_SIZE);
-    if (!yes) {
-        KCON_printf("BAD\n");
-    }
-    yes = PMEM_map_memory(v2_ptr, phys_ptr, PAGE_SIZE);
-    if (!yes) {
-        KCON_printf("BAD2\n");
-    }
-    v1_ptr[0] = 99;
-    int value = v2_ptr[0];
-    KCON_printf("After crash %d\n", value);
-*/

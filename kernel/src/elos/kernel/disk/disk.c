@@ -22,7 +22,7 @@ static Disk_RAM_Context g_initrd;
 
 
 void DISK_init(BootAPI* boot_api) {
-    g_initrd.data = boot_api->initrd_data;
+    g_initrd.data = PMEM_phys_to_kernel(boot_api->initrd_data);
     g_initrd.size = boot_api->initrd_size;
 }
 

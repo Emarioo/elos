@@ -31,7 +31,8 @@ bool ReadWholeFile(const char* path, uint8_t** data, uint32_t* data_len) {
     VFS_HandleInfo info;
     VFS_info(file, &info);
 
-    void* buffer = PMEM_alloc_phys(info.fileSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+    void* buffer = PMEM_alloc_phys(info.fileSize);
+    buffer = PMEM_phys_to_kernel(buffer);
 
     VFS_read(file, 0, info.fileSize, buffer);
     VFS_close(file);

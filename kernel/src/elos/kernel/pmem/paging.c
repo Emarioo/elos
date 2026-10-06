@@ -59,8 +59,6 @@ Page* get_dynamic_table() {
 void init_paging(BootAPI* boot_api) {
     // Physical memory regions must have been made so that PMEM_alloc_phys is functional.
 
-    // Map frame buffer
-
     // We assume EFI identically mapped physical and virtual address of the kernel.
 
     // @TODO Implement PCID (process context ID) and global pages for kernel.
@@ -70,33 +68,52 @@ void init_paging(BootAPI* boot_api) {
     //   Marking kernel pages global means they don't get flushed when PCID differs since we
     //   want them to be the same for every page table in every process. (no need to flush)
 
-    // @TODO Implement higher-half kernel.
-    //    All physical pages are mapped at 0xFFFF00000000 (or wherver is reasonable).
-    //    Kernel can access user and core kernel physical pages at the same time without swithing page tables
-    //    and temporarily mapping in user pages in a dedicated kernel page table.
 
-    g_kernelPageTable = get_fixed_table();
-    Page* rootTable = g_kernelPageTable;
+    Page* rootTable = get_fixed_table();
+    g_kernelPageTable = rootTable;
 
-    dynamicTable_base = (u64)PMEM_alloc_phys(dynamicTable_size, PMEM_FLAG_NONE);
+    // Map high kernel addresses
+    Page* pdpt_high = get_fixed_table();
+    rootTable->entries[511] = (size_t)PMEM_kernel_to_phys(pdpt_high);
+    // indices based on VIRTUAL_KERNEL_OFFSET
+    pdpt_high->entries[508] = (size_t)0x80000000 | PAGE_BIT_HUGE_PAGE | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
+    pdpt_high->entries[509] = (size_t)0xC0000000 | PAGE_BIT_HUGE_PAGE | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
+    pdpt_high->entries[510] = (size_t)0x00000000 | PAGE_BIT_HUGE_PAGE | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
+    pdpt_high->entries[511] = (size_t)0x40000000 | PAGE_BIT_HUGE_PAGE | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
 
-    PMEM_map_memory(rootTable, (void*)dynamicTable_base, (void*)dynamicTable_base, dynamicTable_size, PMEM_FLAG_BOOT_RESERVE);
-    PMEM_map_memory(rootTable, __kernel_start, __kernel_start, (u64)__kernel_end - (u64)__kernel_start, PMEM_FLAG_BOOT_RESERVE | PMEM_FLAG_EXECUTABLE);
-    PMEM_map_memory(rootTable, __stack_start, __stack_start, (u64)__stack_end - (u64)__stack_start, PMEM_FLAG_BOOT_RESERVE);
+    // indices based on VIRTUAL_UNCACHED_KERNEL_OFFSET
+    pdpt_high->entries[0] = (size_t)0x00000000 | PAGE_BIT_HUGE_PAGE | PAGE_BIT_PCD | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
+    pdpt_high->entries[1] = (size_t)0x40000000 | PAGE_BIT_HUGE_PAGE | PAGE_BIT_PCD | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
+    pdpt_high->entries[2] = (size_t)0x80000000 | PAGE_BIT_HUGE_PAGE | PAGE_BIT_PCD | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
+    pdpt_high->entries[3] = (size_t)0xC0000000 | PAGE_BIT_HUGE_PAGE | PAGE_BIT_PCD | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
+
+    // We don't want low addresses.
+    // Page* pdpt_low = get_fixed_table();
+    // rootTable->entries[0] = (size_t)PMEM_kernel_to_phys(pdpt_low);
+    // pdpt_high->entries[0] = (size_t)0x00000000 | PAGE_BIT_HUGE_PAGE | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
+    // pdpt_high->entries[1] = (size_t)0x40000000 | PAGE_BIT_HUGE_PAGE | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
+    // pdpt_high->entries[2] = (size_t)0x80000000 | PAGE_BIT_HUGE_PAGE | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
+    // pdpt_high->entries[3] = (size_t)0xC0000000 | PAGE_BIT_HUGE_PAGE | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
+
+
+    dynamicTable_base = (size_t)PMEM_alloc_phys(dynamicTable_size, PMEM_FLAG_NONE);
+
+    // PMEM_map_memory(rootTable, (void*)dynamicTable_base, (void*)dynamicTable_base, dynamicTable_size, PMEM_FLAG_BOOT_RESERVE);
+    // PMEM_map_memory(rootTable, __kernel_start, PMEM_kernel_to_phys(__kernel_start), (size_t)__kernel_end - (size_t)__kernel_start, PMEM_FLAG_BOOT_RESERVE | PMEM_FLAG_EXECUTABLE);
 
     // May be huge but we still use reserved so print debugging keeps working.
-    if (boot_api->frame_buffer_base) {
-        PMEM_map_memory(rootTable, boot_api->frame_buffer_base, boot_api->frame_buffer_base, boot_api->frame_buffer_size, PMEM_FLAG_NOT_CACHED|PMEM_FLAG_BOOT_RESERVE);
-    }
+    // if (boot_api->frame_buffer_base) {
+    //     PMEM_map_memory(rootTable, boot_api->frame_buffer_base, boot_api->frame_buffer_base, boot_api->frame_buffer_size, PMEM_FLAG_NOT_CACHED|PMEM_FLAG_BOOT_RESERVE);
+    // }
 
-    write_cr3((u64)rootTable); // Will fully flush TLB
+    write_cr3((size_t)PMEM_kernel_to_phys(g_kernelPageTable)); // Will fully flush TLB
 
     memset((void*)dynamicTable_base, 0, dynamicTable_size);
 
     // May be huge so we don't use reserved page tables.
-    if (boot_api->initrd_data) {
-        PMEM_map_memory(rootTable, boot_api->initrd_data, boot_api->initrd_data, boot_api->initrd_size, 0);
-    }
+    // if (boot_api->initrd_data) {
+    //     PMEM_map_memory(rootTable, boot_api->initrd_data, boot_api->initrd_data, boot_api->initrd_size, 0);
+    // }
 }
 
 
@@ -150,13 +167,13 @@ bool PMEM_map_memory(PageTable* root, void* virtual_address, void* physical_addr
             if (!page) {
                 return false;
             }
-            entry4 = PAGE_BIT_PRESENT | write_bit | user_bit | ((u64)page & MASK_48_4KB_ADDRESS);
+            entry4 = PAGE_BIT_PRESENT | write_bit | user_bit | ((size_t)PMEM_kernel_to_phys(page) & MASK_48_4KB_ADDRESS);
             root->entries[lvl4] = entry4;
         } else {
             root->entries[lvl4] = entry4 | write_bit | user_bit;
         }
 
-        Page* page_table_3 = (Page*)(entry4 & MASK_48_4KB_ADDRESS);
+        Page* page_table_3 = PMEM_phys_to_kernel((Page*)(entry4 & MASK_48_4KB_ADDRESS));
         u64 entry3 = page_table_3->entries[lvl3];
 
         #define GB (0x40000000)
@@ -185,13 +202,13 @@ bool PMEM_map_memory(PageTable* root, void* virtual_address, void* physical_addr
             if (!page) {
                 return false;
             }
-            entry3 = PAGE_BIT_PRESENT | PAGE_BIT_WRITE | user_bit | ((u64)page & MASK_48_4KB_ADDRESS);
+            entry3 = PAGE_BIT_PRESENT | PAGE_BIT_WRITE | user_bit | ((size_t)PMEM_kernel_to_phys(page) & MASK_48_4KB_ADDRESS);
             page_table_3->entries[lvl3] = entry3;
         } else {
             page_table_3->entries[lvl3] = entry3 | write_bit | user_bit;
         }
         
-        Page* page_table_2 = (Page*)(entry3 & MASK_48_4KB_ADDRESS);
+        Page* page_table_2 = PMEM_phys_to_kernel((Page*)(entry3 & MASK_48_4KB_ADDRESS));
         u64 entry2 = page_table_2->entries[lvl2];
 
         if (bytes_left >= 2*MB && (virt & (2*MB-1)) == 0 && (phys & (2*MB-1)) == 0) {
@@ -218,13 +235,13 @@ bool PMEM_map_memory(PageTable* root, void* virtual_address, void* physical_addr
             if (!page) {
                 return false;
             }
-            entry2 = PAGE_BIT_PRESENT | PAGE_BIT_WRITE | user_bit | ((u64)page & MASK_48_4KB_ADDRESS);
+            entry2 = PAGE_BIT_PRESENT | PAGE_BIT_WRITE | user_bit | ((size_t)PMEM_kernel_to_phys(page) & MASK_48_4KB_ADDRESS);
             page_table_2->entries[lvl2] = entry2;
         } else {
             page_table_2->entries[lvl2] = entry2 | write_bit | user_bit;
         }
 
-        Page* page_table_1 = (Page*)(entry2 & MASK_48_4KB_ADDRESS);
+        Page* page_table_1 = PMEM_phys_to_kernel((Page*)(entry2 & MASK_48_4KB_ADDRESS));
         u64 entry1 = page_table_1->entries[lvl1];
 
         entry1 = PAGE_BIT_PRESENT | cache_bit | exec_bit | write_bit | user_bit | (phys & MASK_48_4KB_ADDRESS);
@@ -258,7 +275,7 @@ void* PMEM_virt_to_phys(PageTable* root, void* virtual_address) {
         return NULL;
     }
 
-    Page* page_table_3 = (Page*)(entry4 & MASK_48_4KB_ADDRESS);
+    Page* page_table_3 = PMEM_phys_to_kernel((Page*)(entry4 & MASK_48_4KB_ADDRESS));
     u64 entry3 = page_table_3->entries[lvl3];
     if ((entry3 & PAGE_BIT_PRESENT) == 0) {
         return NULL;
@@ -267,7 +284,7 @@ void* PMEM_virt_to_phys(PageTable* root, void* virtual_address) {
         return (void*)((entry3 & MASK_48_1GB_ADDRESS) | (virt & 0x3FFFFFFF));
     }
     
-    Page* page_table_2 = (Page*)(entry3 & MASK_48_4KB_ADDRESS);
+    Page* page_table_2 = PMEM_phys_to_kernel((Page*)(entry3 & MASK_48_4KB_ADDRESS));
     u64 entry2 = page_table_2->entries[lvl2];
     if ((entry2 & PAGE_BIT_PRESENT) == 0) {
         return NULL;
@@ -276,7 +293,7 @@ void* PMEM_virt_to_phys(PageTable* root, void* virtual_address) {
         return (void*)((entry2 & MASK_48_2MB_ADDRESS) | (virt & 0x1FFFFF));
     }
     
-    Page* page_table_1 = (Page*)(entry2 & MASK_48_4KB_ADDRESS);
+    Page* page_table_1 = PMEM_phys_to_kernel((Page*)(entry2 & MASK_48_4KB_ADDRESS));
     u64 entry1 = page_table_1->entries[lvl1];
     if ((entry1 & PAGE_BIT_PRESENT) == 0) {
         return NULL;

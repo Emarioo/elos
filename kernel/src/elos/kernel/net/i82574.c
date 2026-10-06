@@ -128,17 +128,17 @@ bool i82574_init(NET_Device* device) {
     u64 barSize = 0;
     decode_bar_size(config, 0, &barSize);
 
-    void* memory_bar = (void*)((size_t)config->header0.bar0 & ~(size_t)0xF);
-    g_memory_bar = memory_bar;
+    void* phys_memory_bar = (void*)((size_t)config->header0.bar0 & ~(size_t)0xF);
+    g_memory_bar = PMEM_phys_to_uncached_kernel(phys_memory_bar);
     
-    void* flash_bar = (void*)((size_t)config->header0.bar1 & ~(size_t)0xF);
-    g_flash_bar = flash_bar;
+    void* phys_flash_bar = (void*)((size_t)config->header0.bar1 & ~(size_t)0xF);
+    g_flash_bar = PMEM_phys_to_uncached_kernel(phys_flash_bar);
 
-    bool mapped = PMEM_map_memory(g_kernelPageTable, memory_bar, memory_bar, barSize, PMEM_FLAG_NOT_CACHED);
-    KERNEL_PANIC(mapped, "Could not map memory for i82574 (network)");
+    // bool mapped = PMEM_map_memory(g_kernelPageTable, memory_bar, memory_bar, barSize, PMEM_FLAG_NOT_CACHED);
+    // KERNEL_PANIC(mapped, "Could not map memory for i82574 (network)");
 
-    mapped = PMEM_map_memory(g_kernelPageTable, flash_bar, flash_bar, 0x40, PMEM_FLAG_NOT_CACHED);
-    KERNEL_PANIC(mapped, "Could not map memory for i82574 (network)");
+    // mapped = PMEM_map_memory(g_kernelPageTable, flash_bar, flash_bar, 0x40, PMEM_FLAG_NOT_CACHED);
+    // KERNEL_PANIC(mapped, "Could not map memory for i82574 (network)");
 
     /*
         Reset the Network Controller

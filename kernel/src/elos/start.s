@@ -21,9 +21,6 @@ _start: # void _start(BootAPI*)
 
     lea rsp, [__stack_end]
 
-    movabs rax, VIRTUAL_KERNEL_BASE
-    mov [kernel_vaddr_offset], rax
-
     # Save BootAPI to non-volatile register
     # EFI app called this function which uses windows calling convention so we use rcx not rdi
     mov rbx, rcx
@@ -73,7 +70,9 @@ pdpt_low:
     
 .align 4096
 pdpt_high:
-    .fill 510, 8, 0
+    .fill 508, 8, 0
+    .quad 0x80000000 + 0x083
+    .quad 0xC0000000 + 0x083
     .quad 0x00000000 + 0x083
     .quad 0x40000000 + 0x083
 

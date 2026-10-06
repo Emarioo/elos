@@ -42,7 +42,8 @@ void* PMEM_allocate(size_t bytes, void* ptr);
     Does no memory mapping by default (flags can change this)
     Memory is uninitialized
 */
-void* PMEM_alloc_phys(size_t size, PMEM_Flags flags);
+void* PMEM_alloc_phys(size_t size);
+void PMEM_free_phys(void* paddr);
 
 PageTable* PMEM_allocPageTable();
 
@@ -67,13 +68,26 @@ bool PMEM_unmap_memory(PageTable* table, void* virtual_address, size_t size);
 void* PMEM_virt_to_phys(PageTable* table, void* virtual_address);
 
 
-extern size_t kernel_vaddr_offset;
+#define VIRTUAL_KERNEL_OFFSET 0xFFFFFFFF80000000
+#define VIRTUAL_UNCACHED_KERNEL_OFFSET 0xFFFFFF8000000000
+
 
 static inline void* PMEM_phys_to_kernel(void* paddr) {
-    return (void*)((size_t)paddr + kernel_vaddr_offset);
+    if ((size_t)paddr >= 0x80000000) {
+        return (void*)((size_t)paddr + VIRTUAL_KERNEL_OFFSET - 0x100000000);
+    } else {
+        return (void*)((size_t)paddr + VIRTUAL_KERNEL_OFFSET);
+    }
+}
+
+static inline void* PMEM_phys_to_uncached_kernel(void* paddr) {
+    return (void*)((size_t)paddr + VIRTUAL_UNCACHED_KERNEL_OFFSET);
 }
 
 static inline void* PMEM_kernel_to_phys(void* vaddr) {
-    return (void*)((size_t)vaddr - kernel_vaddr_offset);
+    if ((size_t)vaddr >= 0xFFFFFFFF80000000) {
+        return (void*)((size_t)paddr - VIRTUAL_KERNEL_OFFSET + 0x100000000);
+    } else {
+        return (void*)((size_t)paddr - VIRTUAL_KERNEL_OFFSET);
+    }
 }
-

@@ -43,30 +43,23 @@ PhysicalMemoryRegion g_used_regions[MAX_REGIONS];
 
 PageTable* g_kernelPageTable;
 
-size_t kernel_vaddr_offset;
 
 void PMEM_init(BootAPI* boot_api) {
     typedef struct Range {
-        u64 address;
-        u64 size;
+        size_t address;
+        size_t size;
     } Range;
 
-    // @TODO We should have a python script that reads sections.ld
-    //   and creates config.c with the occupied address ranges
-    //   instead of hardcoding this.
+    // does this include framebuffer range?
     Range ranges[] = {
         { 0x0, 0x100000 }, // Skip regions below 1 MB.
-                           // We may want it for something special.
-                           // I've found that kernel crashing when
-                           // mapping page tables here. Not sure why,
-                           // i'm sure I have done something strange
-                           // but don't know what.
+                           // I have noticed some sketchy stuff when messing with this memory.
+                           // We do copy trampoline for other cores at 0x8000 which seems fine.
 
         // These are allocated and mapped by EFI application
         // when loading kernel.
-        { (u64)__kernel_start, (u64)__kernel_end }, // Kernel .text, .rodata, .data, .bss
-        { (u64)__stack_start,  (u64)__stack_end }, // Kernel stack
-        { (u64)boot_api->initrd_data,  (u64)boot_api->initrd_data + boot_api->initrd_size },
+        { (size_t)PMEM_kernel_to_phys(__kernel_start), (size_t)__kernel_end - (size_t)__kernel_end }, // Kernel .text, .rodata, .data, .bss, stack
+        { (size_t)boot_api->initrd_data, boot_api->initrd_size },
     };
 
     // Ensure ranges are page aligned
@@ -74,7 +67,7 @@ void PMEM_init(BootAPI* boot_api) {
     //   doesn't align sections correctly.
     for (int ri = 0; ri < ARRAY_LENGTH(ranges); ri++) {
         Range* range = &ranges[ri];
-        range->address = ((range->address)/PAGE_SIZE)*PAGE_SIZE;;
+        range->address = ((range->address)/PAGE_SIZE)*PAGE_SIZE;
         range->size    = ((range->size + PAGE_SIZE-1)/PAGE_SIZE)*PAGE_SIZE;
     }
 
@@ -288,12 +281,12 @@ void* PMEM_allocate(u64 size, void* ptr) {
             g_num_free_regions = found_free_index + 1;
         }
 
-        bool yes = PMEM_unmap_memory(g_kernelPageTable, (void*)old_virtual_address, used_alloc->pageCount * PAGE_SIZE);
-        if (!yes) {
-            kernel_bug();
-            // Bug in kernel if this doesn't work
-            goto cleanup;
-        }
+        // bool yes = PMEM_unmap_memory(g_kernelPageTable, (void*)old_virtual_address, used_alloc->pageCount * PAGE_SIZE);
+        // if (!yes) {
+        //     kernel_bug();
+        //     // Bug in kernel if this doesn't work
+        //     goto cleanup;
+        // }
 
         // we return NULL on success when freeing
         goto cleanup;
@@ -340,7 +333,7 @@ void* PMEM_allocate(u64 size, void* ptr) {
         PhysicalMemoryRegion* used_alloc = &g_used_regions[found_used_index];
 
         used_alloc->physicalStart = free_alloc->physicalStart;
-        used_alloc->virtualStart  = free_alloc->physicalStart;
+        used_alloc->virtualStart  = PMEM_phys_to_kernel(free_alloc->physicalStart);
         used_alloc->pageCount     = requested_pages;
         used_alloc->flags         = FLAG_USED | FLAG_VIRTUALLY_MAPPED;
 
@@ -357,11 +350,11 @@ void* PMEM_allocate(u64 size, void* ptr) {
         void* const new_ptr    = (void*)(used_alloc->virtualStart);
         const u64 aligned_size = ((size + PAGE_SIZE-1) / PAGE_SIZE) * PAGE_SIZE;
 
-        bool yes = PMEM_map_memory(g_kernelPageTable, new_ptr, new_ptr, requested_pages * PAGE_SIZE, PMEM_FLAG_NONE);
-        if (!yes) {
-            kernel_bug();
-            goto cleanup;
-        }
+        // bool yes = PMEM_map_memory(g_kernelPageTable, new_ptr, new_ptr, requested_pages * PAGE_SIZE, PMEM_FLAG_NONE);
+        // if (!yes) {
+        //     kernel_bug();
+        //     goto cleanup;
+        // }
 
         // Initialize to non-zero. Easier to debug when i see 9D and now it's uninitialized and came from PMEM_allocate.
         memset(new_ptr, 0x9D, aligned_size);
@@ -474,8 +467,72 @@ PageTable* PMEM_allocPageTable() {
 
 
 
+void PMEM_free_phys(void* paddr) {
+    void* returnValue;
+    
+    const u64 old_physical_address = (u64)paddr;
 
-void* PMEM_alloc_phys(u64 size, PMEM_Flags flags) {
+    if (size <= 0)
+        return NULL;
+
+    LOCK_INT(&allocate_spinlock);
+
+    // TODO: If the ptr you passed is valid then this function should always succeed.
+    //   If g_free_regions is full then we will fail however. Memory is too scattered.
+    //   Also, we can't indicate whether we succeded or not. return (void*)1 to indicate
+    //   free succeded seems like a bad idea. But as I said, as long as ptr is valid free
+    //   always succeeds. We'll revise and improve this implementation in the future.
+    
+    int found_used_index = -1;
+    for (int i = 0; i < g_num_used_regions; i++) {
+        PhysicalMemoryRegion* alloc = &g_used_regions[i];
+        if ((alloc->flags & FLAG_USED) == 0)
+            continue;
+        if (alloc->physicalStart != old_physical_address)
+            continue;
+
+        found_used_index = i;
+        break;
+    }
+
+    if (found_used_index == -1) {
+        goto cleanup;
+    }
+
+    int found_free_index = -1;
+    for (int i = 0; i < g_num_free_regions + 1; i++) {
+        PhysicalMemoryRegion* alloc = &g_free_regions[i];
+        if ((alloc->flags & FLAG_FREE) != 0)
+            continue;
+
+        found_free_index = i;
+        break;
+    }
+
+    if (found_free_index == -1) {
+        goto cleanup;
+    }
+
+    PhysicalMemoryRegion* free_alloc = &g_free_regions[found_free_index];
+    PhysicalMemoryRegion* used_alloc = &g_used_regions[found_used_index];
+
+    free_alloc->physicalStart = used_alloc->physicalStart;
+    free_alloc->virtualStart  = used_alloc->virtualStart;
+    free_alloc->pageCount     = used_alloc->pageCount;
+    free_alloc->flags         = FLAG_FREE;
+
+    used_alloc->flags = 0; // clear region
+
+    if (found_free_index >= g_num_free_regions) {
+        g_num_free_regions = found_free_index + 1;
+    }
+
+cleanup:
+    UNLOCK_INT(&allocate_spinlock);
+}
+
+
+void* PMEM_alloc_phys(size_t size) {
     void* returnValue;
     
     if (size <= 0)
@@ -538,15 +595,6 @@ void* PMEM_alloc_phys(u64 size, PMEM_Flags flags) {
     }
     
     void* new_ptr = (void*)(used_alloc->physicalStart);
-
-    if (flags & PMEM_FLAG_IDENTITY_MAPPED) {
-        bool yes = PMEM_map_memory(g_kernelPageTable, new_ptr, new_ptr, requested_pages * PAGE_SIZE, flags & ~PMEM_FLAG_IDENTITY_MAPPED);
-        if (!yes) {
-            printf("pmem: Could not identity physical pages at %x.\n", new_ptr);
-            returnValue = NULL;
-            goto cleanup;
-        }
-    }
 
     returnValue = new_ptr;
 

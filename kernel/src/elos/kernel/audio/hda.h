@@ -183,7 +183,9 @@ typedef struct {
 
     void* barAddress;
 
+    u32* phys_corbAddress;
     u32* corbAddress;
+    u32* phys_rirbAddress;
     u32* rirbAddress;
 
     u32  corbWritePointerMask;

@@ -160,7 +160,7 @@ void* PMEM_allocate(size_t size, void* old_ptr) {
     }
 }
 
-void* PMEM_alloc_phys(size_t size, int flags) {
+void* PMEM_alloc_phys(size_t size) {
     EFI_STATUS Status;
     EFI_PHYSICAL_ADDRESS addr = 0;
     Status = ST->BootServices->AllocatePages(AllocateAnyPages, EfiLoaderData, (size+EFI_PAGE_SIZE-1)/EFI_PAGE_SIZE, &addr);

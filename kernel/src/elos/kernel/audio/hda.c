@@ -132,14 +132,8 @@ bool hda_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
 
 
     u64 barSize = 0;
-    void* barAddress = (void*)(u64)(config->header0.bar0 & ~0xf);
     decode_bar_size(config, 0, &barSize);
-
-    bool mapped = PMEM_map_memory(g_kernelPageTable, barAddress, barAddress, barSize, PMEM_FLAG_NOT_CACHED);
-    if (!mapped) {
-        printf("hda_scan: Could not map 0x%p\n", barAddress);
-        goto exit;
-    }
+    void* barAddress = PMEM_phys_to_uncached_kernel((void*)(size_t)(config->header0.bar0 & ~0xf));
 
     // Maybe do some simple hda querying to make sure it responds before creating controller object.
 
@@ -154,16 +148,19 @@ bool hda_scan(ScanInfo* scanInfo, PCI_ConfigSpace* config) {
 
     volatile HDA_Regs* regs = (HDA_Regs*)barAddress;
 
-    controller->corbAddress = PMEM_alloc_phys(PAGE_SIZE, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
-    if (!controller->corbAddress) {
+    controller->phys_corbAddress = PMEM_alloc_phys(PAGE_SIZE);
+    if (!controller->phys_corbAddress) {
         printf("hda_scan: Could not allocate CORB memory\n");
         goto exit;
     }
-    controller->rirbAddress = PMEM_alloc_phys(PAGE_SIZE, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
-    if (!controller->rirbAddress) {
+    controller->phys_rirbAddress = PMEM_alloc_phys(PAGE_SIZE);
+    if (!controller->phys_rirbAddress) {
         printf("hda_scan: Could not allocate RIRB memory\n");
         goto exit;
     }
+    controller->corbAddress = PMEM_phys_to_uncached_kernel(controller->phys_corbAddress);
+    controller->rirbAddress = PMEM_phys_to_uncached_kernel(controller->phys_rirbAddress);
+
     memset(controller->corbAddress, 0x9A, PAGE_SIZE);
     memset(controller->rirbAddress, 0x9A, PAGE_SIZE);
 
@@ -211,9 +208,9 @@ void hda_cmd_buffers_init(HDA_Controller* dev) {
     hda_corb_dma_stop(dev);
     hda_rirb_dma_stop(dev);
 
-    KERNEL_PANIC(((u64)dev->corbAddress & 0x3FF) == 0, "CORB address not 1K aligned");
-    KERNEL_PANIC(((u64)dev->corbAddress >> 32) == 0, "CORB address has high 32 bits set");
-    regs->CORBLBASE = (u64)dev->corbAddress;
+    KERNEL_PANIC(((u64)dev->phys_corbAddress & 0x3FF) == 0, "CORB address not 1K aligned");
+    KERNEL_PANIC(((u64)dev->phys_corbAddress >> 32) == 0, "CORB address has high 32 bits set");
+    regs->CORBLBASE = (u64)dev->phys_corbAddress;
     regs->CORBUBASE = 0;
     regs->CORBWP = regs->CORBWP & ~0xFF;
 
@@ -247,9 +244,9 @@ void hda_cmd_buffers_init(HDA_Controller* dev) {
     dev->corbWritePointerMask = corbSizeMasks[chosenCorbSize];
 
 
-    KERNEL_PANIC(((u64)dev->rirbAddress & 0x7FF) == 0, "RIRB address not 2K aligned");
-    KERNEL_PANIC(((u64)dev->rirbAddress >> 32) == 0, "RIRB address has high 32 bits set");
-    regs->RIRBLBASE = (u64)dev->rirbAddress;
+    KERNEL_PANIC(((u64)dev->phys_rirbAddress & 0x7FF) == 0, "RIRB address not 2K aligned");
+    KERNEL_PANIC(((u64)dev->phys_rirbAddress >> 32) == 0, "RIRB address has high 32 bits set");
+    regs->RIRBLBASE = (u64)dev->phys_rirbAddress;
     regs->RIRBUBASE = 0;
     regs->RIRBWP = regs->RIRBWP | (1 << 15);
 
@@ -579,8 +576,10 @@ ELOS_Error hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 
     u32 totalBufferSize = bufferSize + headerSize;
 
 
-    void* audioMemory = PMEM_alloc_phys(totalBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
-    void* rawAudioBuffer = audioMemory + headerSize;
+    void* phys_audioMemory = PMEM_alloc_phys(totalBufferSize);
+    void* audioMemory = PMEM_phys_to_uncached_kernel(phys_audioMemory);
+    void* phys_rawAudioBuffer = (char*)phys_audioMemory + headerSize;
+    void* rawAudioBuffer = (char*)audioMemory + headerSize;
     ELOS_AudioBuffer* audioBufferHeader = (ELOS_AudioBuffer*)((char*)rawAudioBuffer - sizeof(ELOS_AudioBuffer));
     memset(audioMemory, 0, totalBufferSize);
 
@@ -610,21 +609,22 @@ ELOS_Error hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 
 
     u32   streamBufferSize0 = halfNumPages * alignedSize;
     u32   streamBufferSize1 = bufferSize - streamBufferSize0;
-    void* buffer0 = rawAudioBuffer;
-    void* buffer1 = (char*)rawAudioBuffer + streamBufferSize0;
+    void* phys_buffer0 = phys_rawAudioBuffer;
+    void* phys_buffer1 = (char*)phys_rawAudioBuffer + streamBufferSize0;
     
     int bufferDescriptors_max = PAGE_SIZE/sizeof(HDA_BufferDescriptor);
     int bufferDescriptors_len = 0;
-    volatile HDA_BufferDescriptor* bufferDescriptors = PMEM_alloc_phys(PAGE_SIZE, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+    void* phys_bufferDescriptors = PMEM_alloc_phys(PAGE_SIZE);
+    volatile HDA_BufferDescriptor* bufferDescriptors = PMEM_phys_to_uncached_kernel(phys_bufferDescriptors);
     memset((HDA_BufferDescriptor*)bufferDescriptors, 0, bufferDescriptors_max * sizeof(*bufferDescriptors));
 
-    bufferDescriptors[bufferDescriptors_len].addressLow = (u64)buffer0 & 0xFFFFFFFF;
-    bufferDescriptors[bufferDescriptors_len].addressHigh = (u64)buffer0>>32;
+    bufferDescriptors[bufferDescriptors_len].addressLow = (u64)phys_buffer0 & 0xFFFFFFFF;
+    bufferDescriptors[bufferDescriptors_len].addressHigh = (u64)phys_buffer0>>32;
     bufferDescriptors[bufferDescriptors_len].size = streamBufferSize0;
     bufferDescriptors[bufferDescriptors_len].flags = HDA_BUFFER_DESCRIPTOR_IOC;
     bufferDescriptors_len++;
-    bufferDescriptors[bufferDescriptors_len].addressLow = (u64)buffer1 & 0xFFFFFFFF;
-    bufferDescriptors[bufferDescriptors_len].addressHigh = (u64)buffer1 >> 32;
+    bufferDescriptors[bufferDescriptors_len].addressLow = (u64)phys_buffer1 & 0xFFFFFFFF;
+    bufferDescriptors[bufferDescriptors_len].addressHigh = (u64)phys_buffer1 >> 32;
     bufferDescriptors[bufferDescriptors_len].size = streamBufferSize1;
     bufferDescriptors[bufferDescriptors_len].flags = HDA_BUFFER_DESCRIPTOR_IOC;
     bufferDescriptors_len++;
@@ -659,8 +659,8 @@ ELOS_Error hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 
     stream->FMT = (stream->FMT & ~0x80) | fmt;
 
 
-    KERNEL_PANIC(((u64)bufferDescriptors >> 32) == 0, "High 32 bits of bufferDescriptors are set");
-    stream->BDPL = (u64)bufferDescriptors;
+    KERNEL_PANIC(((u64)phys_bufferDescriptors >> 32) == 0, "High 32 bits of bufferDescriptors are set");
+    stream->BDPL = (u64)phys_bufferDescriptors;
     stream->BDPU = 0;
     stream->CBL = streamBufferSize0 + streamBufferSize1;
     // @TODO Spec says "CBL must represent an integer number samples."

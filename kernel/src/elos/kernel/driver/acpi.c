@@ -34,7 +34,7 @@ u64 acpi_hpet_address;
 
 void acpi_init(BootAPI* boot_api) {
 
-    ACPI_SDTHeader* rsdt = boot_api->rsdt;
+    ACPI_SDTHeader* rsdt = PMEM_phys_to_kernel(boot_api->rsdt);
 
 
     // char sig[10] = {};
@@ -50,8 +50,7 @@ void acpi_init(BootAPI* boot_api) {
     //     return;
     // }
 
-    // rsdt is the physical address. We have to map it to access it's fields.
-    PMEM_map_memory(g_kernelPageTable, rsdt, rsdt, sizeof(ACPI_SDTHeader), PMEM_FLAG_NONE);
+    // PMEM_map_memory(g_kernelPageTable, rsdt, rsdt, sizeof(ACPI_SDTHeader), PMEM_FLAG_NONE);
 
     if (memcmp(rsdt->Signature, "XSDT", 4)) {
         printf("Only XSDT is supported, RSDT is ignored\n");
@@ -60,7 +59,7 @@ void acpi_init(BootAPI* boot_api) {
     
     // Now we can read the length of the header and map the pointers
     // to SDT headers following the RSDT.
-    PMEM_map_memory(g_kernelPageTable, rsdt, rsdt, rsdt->Length, PMEM_FLAG_NONE);
+    // PMEM_map_memory(g_kernelPageTable, rsdt, rsdt, rsdt->Length, PMEM_FLAG_NONE);
     
     int array_of_sdt_len = (rsdt->Length - sizeof(*rsdt)) / sizeof(u64);
     u64* array_of_sdt = (u64*)((char*)rsdt + sizeof(*rsdt));
@@ -74,9 +73,9 @@ void acpi_init(BootAPI* boot_api) {
         ACPI_SDTHeader* header = (ACPI_SDTHeader*)array_of_sdt[i];
         
         // First map the header itself
-        PMEM_map_memory(g_kernelPageTable, header, header, sizeof(ACPI_SDTHeader), PMEM_FLAG_NONE);
+        // PMEM_map_memory(g_kernelPageTable, header, header, sizeof(ACPI_SDTHeader), PMEM_FLAG_NONE);
         // Then read length of the SDT and map it's content.
-        PMEM_map_memory(g_kernelPageTable, header, header, header->Length, PMEM_FLAG_NONE);
+        // PMEM_map_memory(g_kernelPageTable, header, header, header->Length, PMEM_FLAG_NONE);
 
         char name[5];
         memcpy(name, header->Signature, 4);
@@ -98,7 +97,7 @@ void acpi_init(BootAPI* boot_api) {
         debug("MADT flags: %x\n", madt->flags);
 
         acpi_lapic_address = madt->lapic_address;
-        PMEM_map_memory(g_kernelPageTable, (void*)acpi_lapic_address, (void*)acpi_lapic_address, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
+        // PMEM_map_memory(g_kernelPageTable, (void*)acpi_lapic_address, (void*)acpi_lapic_address, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
 
         u8* entries = (u8*)madt + sizeof(MADT_header);
         int entries_size = madt_header->Length - sizeof(ACPI_SDTHeader) - sizeof(MADT_header);
@@ -130,7 +129,7 @@ void acpi_init(BootAPI* boot_api) {
                     acpi_ioapic_array[acpi_ioapic_array_len].interruptBaseNumber = entry->globalSystemInterruptBase;
                     acpi_ioapic_array_len++;
 
-                    PMEM_map_memory(g_kernelPageTable, (void*)(u64)entry->ioapicAddress, (void*)(u64)entry->ioapicAddress, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
+                    // PMEM_map_memory(g_kernelPageTable, (void*)(u64)entry->ioapicAddress, (void*)(u64)entry->ioapicAddress, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
                 } break;
                 case MADT_ENTRY_IOAPIC_INTERRUPT_SRC_OVERRIDE: {
                     MADT_ioapic_interrupt_source_override* entry = (MADT_ioapic_interrupt_source_override*)entry_base;
@@ -161,7 +160,7 @@ void acpi_init(BootAPI* boot_api) {
                     
                     if (entry->address64 != acpi_lapic_address) {
                         acpi_lapic_address = entry->address64;
-                        PMEM_map_memory(g_kernelPageTable, (void*)acpi_lapic_address, (void*)acpi_lapic_address, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
+                        // PMEM_map_memory(g_kernelPageTable, (void*)acpi_lapic_address, (void*)acpi_lapic_address, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
                     }
                 } break;
                 case MADT_ENTRY_LOCAL_X2APIC: {
@@ -191,12 +190,12 @@ void acpi_init(BootAPI* boot_api) {
             #define ADDRESS_SPACE_SYSTEM_MEMORY 0
             #define ADDRESS_SPACE_SYSTEM_IO 0
             if (fadt->ResetReg.AddressSpace == ADDRESS_SPACE_SYSTEM_MEMORY) { 
-                bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)fadt->ResetReg.Address, (void*)fadt->ResetReg.Address, 1, PMEM_FLAG_NOT_CACHED);
-                if (mapped) {
-                    reset_addressSpace = ADDRESS_SPACE_SYSTEM_MEMORY;
-                    reset_address = fadt->ResetReg.Address;
-                    reset_value = fadt->ResetValue;
-                }
+                // bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)fadt->ResetReg.Address, (void*)fadt->ResetReg.Address, 1, PMEM_FLAG_NOT_CACHED);
+                // if (mapped) {
+                reset_addressSpace = ADDRESS_SPACE_SYSTEM_MEMORY;
+                reset_address = PMEM_phys_to_uncached_kernel(fadt->ResetReg.Address);
+                reset_value = fadt->ResetValue;
+                // }
             } else if (fadt->ResetReg.AddressSpace == ADDRESS_SPACE_SYSTEM_IO) { 
                 reset_addressSpace = ADDRESS_SPACE_SYSTEM_IO;
                 reset_address = fadt->ResetReg.Address;
@@ -213,7 +212,7 @@ void acpi_init(BootAPI* boot_api) {
         } else {
             acpi_hpet_address = hpet->address.Address;
 
-            PMEM_map_memory(g_kernelPageTable, (void*)acpi_hpet_address, (void*)acpi_hpet_address, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
+            // PMEM_map_memory(g_kernelPageTable, (void*)acpi_hpet_address, (void*)acpi_hpet_address, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
 
         }
     }

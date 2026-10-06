@@ -275,8 +275,9 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex) {
         goto exit;
     }
     void* virt_stack = (void*)(u64)0xF0000000;
-    PMEM_map_memory(g_kernelPageTable, virt_stack, phys_stack, stack_size, PMEM_FLAG_USER_SPACE);
-    memset(virt_stack, 0x9A, stack_size);
+    void* kernel_virt_stack = PMEM_phys_to_kernel(phys_stack);
+    // PMEM_map_memory(g_kernelPageTable, virt_stack, phys_stack, stack_size, PMEM_FLAG_USER_SPACE);
+    memset(kernel_virt_stack, 0x9A, stack_size);
     PMEM_map_memory(object.pageTable, virt_stack, phys_stack, stack_size, PMEM_FLAG_USER_SPACE);
 
     found_thread->stack_size = stack_size;

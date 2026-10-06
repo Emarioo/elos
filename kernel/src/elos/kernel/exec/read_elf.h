@@ -10,7 +10,7 @@ struct ElfObject {
     void* virt_image_base;
     void* phys_image_base;
     u64   image_size;
-    void* entry_point;
+    void* virt_entry_point;
 
     bool compatibilityMode;
 

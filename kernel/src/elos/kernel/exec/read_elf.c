@@ -165,6 +165,7 @@ bool parse_elf(ParseContext* ctx) {
     // which ELF a page fault address belongs too.
     void* virt_image_base = (void*)(u64)0xC0000000 + elf_count * VADDR_STRIDE;
     void* phys_image_base = PMEM_alloc_phys(image_size, PMEM_FLAG_NONE);
+    void* kern_image_base = PMEM_phys_to_kernel(phys_image_base);
     elf_count++;
     
 
@@ -173,24 +174,24 @@ bool parse_elf(ParseContext* ctx) {
     // Map kernel into user page table (needed when we do syscall)
 
     // @TODO parse_elf should not be mapping in kernel to user page table...
-    PMEM_map_memory(pageTable, __kernel_start, __kernel_start, __kernel_end - __kernel_start, PMEM_FLAG_EXECUTABLE);
-    PMEM_map_memory(pageTable, __stack_start, __stack_start, __stack_end - __stack_start, PMEM_FLAG_NONE);
-    PMEM_map_memory(pageTable, g_frame_buffer.base, g_frame_buffer.base, g_frame_buffer.size, PMEM_FLAG_NOT_CACHED);
-    for (int ci=0;ci<ARRAY_LENGTH(cores);ci++) {
-        EXEC_Core* core = &cores[ci];
-        u8* stack_start = (u8*)core->syscall_stack - core->syscall_stack_size;
-        if (stack_start) {
-            // Only map if core has been initialized with a stack?
-            PMEM_map_memory(pageTable, stack_start, stack_start, core->syscall_stack_size, PMEM_FLAG_NONE);
-        }
-    }
+    // PMEM_map_memory(pageTable, __kernel_start, __kernel_start, __kernel_end - __kernel_start, PMEM_FLAG_EXECUTABLE);
+    // PMEM_map_memory(pageTable, __stack_start, __stack_start, __stack_end - __stack_start, PMEM_FLAG_NONE);
+    // PMEM_map_memory(pageTable, g_frame_buffer.base, g_frame_buffer.base, g_frame_buffer.size, PMEM_FLAG_NOT_CACHED);
+    // for (int ci=0;ci<ARRAY_LENGTH(cores);ci++) {
+    //     EXEC_Core* core = &cores[ci];
+    //     u8* stack_start = (u8*)core->syscall_stack - core->syscall_stack_size;
+    //     if (stack_start) {
+    //         // Only map if core has been initialized with a stack?
+    //         PMEM_map_memory(pageTable, stack_start, stack_start, core->syscall_stack_size, PMEM_FLAG_NONE);
+    //     }
+    // }
 
     
-    PMEM_map_memory(pageTable, (void*)acpi_lapic_address, (void*)acpi_lapic_address, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
+    // PMEM_map_memory(pageTable, (void*)acpi_lapic_address, (void*)acpi_lapic_address, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
 
     
     // Map whole image into kernel page tables so we can copy memory from ELF there.
-    PMEM_map_memory(g_kernelPageTable, virt_image_base, phys_image_base, image_size, PMEM_FLAG_NONE);
+    // PMEM_map_memory(g_kernelPageTable, virt_image_base, phys_image_base, image_size, PMEM_FLAG_NONE);
 
     Elf64_Shdr* relSection = NULL;
 
@@ -208,6 +209,7 @@ bool parse_elf(ParseContext* ctx) {
 
         u8* vaddr = (u8*)virt_image_base + SHDR_FIELD(section, sh_addr);
         u8* paddr = (u8*)phys_image_base + SHDR_FIELD(section, sh_addr);
+        u8* kaddr = PMEM_phys_to_kernel(paddr);
         u8* src = ctx->fileData + SHDR_FIELD(section, sh_offset);
 
         if (strstr(name, ".rela")) {
@@ -236,10 +238,10 @@ bool parse_elf(ParseContext* ctx) {
         if (sectionType == SHT_NOBITS) {
             MAPPED
             PMEM_map_memory(pageTable, vaddr, paddr, sectionSize, memFlags);
-            memset(vaddr, 0, sectionSize);
+            memset(kaddr, 0, sectionSize);
         } else {
             PMEM_map_memory(pageTable, vaddr, paddr, sectionSize, memFlags);
-            memcpy(vaddr, src, sectionSize);
+            memcpy(kaddr, src, sectionSize);
         }
     }
 
@@ -261,7 +263,7 @@ bool parse_elf(ParseContext* ctx) {
             
 
             if (type == R_X86_64_RELATIVE) {
-                u64* pos = (u64*)((u8*)virt_image_base + RELA_FIELD(rela, r_offset));
+                u64* pos = (u64*)((u8*)kern_image_base + RELA_FIELD(rela, r_offset));
                 u64 value = (u64)((u8*)virt_image_base + RELA_FIELD(rela, r_addend));
                 *pos = value;
                 // printf("Relocated %p = %p\n", pos, (void*)value);

@@ -288,6 +288,8 @@ void hda_stream_buffers(HDA_Controller* dev) {
 
 
     u32   streamBufferSize;
+    void* phys_buffer0;
+    void* phys_buffer1;
     void* buffer0;
     void* buffer1;
 
@@ -299,8 +301,10 @@ void hda_stream_buffers(HDA_Controller* dev) {
         // These values are choosen to divide cleanly and
         // provide smooth looping.
         streamBufferSize = 10 * 4 * (48000/400);
-        buffer0 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
-        buffer1 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+        phys_buffer0 = PMEM_alloc_phys(streamBufferSize);
+        phys_buffer1 = PMEM_alloc_phys(streamBufferSize);
+        buffer0 = PMEM_phys_to_uncached_kernel(phys_buffer0);
+        buffer1 = PMEM_phys_to_uncached_kernel(phys_buffer1);
 
         u64 frameOffset = 0;
         generate_sine(buffer0, streamBufferSize, &frameOffset);
@@ -312,8 +316,11 @@ void hda_stream_buffers(HDA_Controller* dev) {
         // We don't want to split a sample.
         streamBufferSize = (wav->data_len / 4) * 2;
 
-        buffer0 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
-        buffer1 = PMEM_alloc_phys(streamBufferSize, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+        phys_buffer0 = PMEM_alloc_phys(streamBufferSize);
+        phys_buffer1 = PMEM_alloc_phys(streamBufferSize);
+        
+        buffer0 = PMEM_phys_to_uncached_kernel(phys_buffer0);
+        buffer1 = PMEM_phys_to_uncached_kernel(phys_buffer1);
 
         memcpy(buffer0, wav->data, streamBufferSize);
         memcpy(buffer1, wav->data + streamBufferSize, streamBufferSize);
@@ -324,14 +331,15 @@ void hda_stream_buffers(HDA_Controller* dev) {
 
     int bufferDescriptors_max = PAGE_SIZE/sizeof(HDA_BufferDescriptor);
     int bufferDescriptors_len = 0;
-    volatile HDA_BufferDescriptor* bufferDescriptors = PMEM_alloc_phys(PAGE_SIZE, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+    void* phys_bufferDescriptors = PMEM_alloc_phys(PAGE_SIZE);
+    volatile HDA_BufferDescriptor* bufferDescriptors = PMEM_phys_to_uncached_kernel(phys_bufferDescriptors);
     memset((HDA_BufferDescriptor*)bufferDescriptors, 0, bufferDescriptors_max * sizeof(*bufferDescriptors));
 
-    bufferDescriptors[bufferDescriptors_len].addressLow = (u64)buffer0;
+    bufferDescriptors[bufferDescriptors_len].addressLow = (u64)phys_buffer0;
     bufferDescriptors[bufferDescriptors_len].addressHigh = (u64)0;
     bufferDescriptors[bufferDescriptors_len].size = streamBufferSize;
     bufferDescriptors_len++;
-    bufferDescriptors[bufferDescriptors_len].addressLow = (u64)buffer1;
+    bufferDescriptors[bufferDescriptors_len].addressLow = (u64)phys_buffer1;
     bufferDescriptors[bufferDescriptors_len].addressHigh = (u64)0;
     bufferDescriptors[bufferDescriptors_len].size = streamBufferSize;
     bufferDescriptors_len++;
@@ -380,8 +388,8 @@ void hda_stream_buffers(HDA_Controller* dev) {
     stream->FMT = (stream->FMT & ~0x80) | fmt;
 
 
-    KERNEL_PANIC(((u64)bufferDescriptors >> 32) == 0, "High 32 bits of bufferDescriptors are set");
-    stream->BDPL = (u64)bufferDescriptors;
+    KERNEL_PANIC(((u64)phys_bufferDescriptors >> 32) == 0, "High 32 bits of bufferDescriptors are set");
+    stream->BDPL = (u64)phys_bufferDescriptors;
     stream->BDPU = 0;
     stream->CBL = streamBufferSize * bufferDescriptors_len;
     // @NOCHECKIN This should be bytes right? spec says "CBL must represent an integer number samples."

@@ -103,28 +103,31 @@ bool rtl8169_init(NET_Device* device) {
         printf("rtl8169: BARS does not have IO bar, might have memory bar\n");
         return false;
     }
+
+    void* phys_memory_bar = NULL;
     
     if ((config->header0.bar1 & 1) == 0) {
         if (config->header0.bar1 != 0) {
             // 32-bit
-            g_memory_bar = (void*)(size_t)(config->header0.bar1 & ~0x3);
+            phys_memory_bar = (void*)(size_t)(config->header0.bar1 & ~0x3);
         } else if ((config->header0.bar2 & 7) == 4) {
             // 64-bit
-            g_memory_bar = (void*)(((u64)config->header0.bar2 & ~0xfLLU) | ((u64)config->header0.bar3 << 32));
+            phys_memory_bar = (void*)(((u64)config->header0.bar2 & ~0xfLLU) | ((u64)config->header0.bar3 << 32));
         }
     }
     // no memory bar is fine i guess? fall back to io bar?
     // printf("iobar  0x%x\n", g_io_bar);
     // printf("membar 0x%zx\n", g_memory_bar);
+    g_memory_bar = PMEM_phys_to_uncached_kernel(phys_memory_bar);
 
-    if (g_memory_bar) {
-        bool mapped = PMEM_map_memory(g_kernelPageTable, g_memory_bar, g_memory_bar, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
-        if (!mapped) {
-            // fall back to iobar
-            printf("rtl8169: could not page map membar. using iobar instead\n");
-            g_memory_bar = NULL;
-        }
-    }
+    // if (g_memory_bar) {
+    //     bool mapped = PMEM_map_memory(g_kernelPageTable, g_memory_bar, g_memory_bar, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
+    //     if (!mapped) {
+    //         // fall back to iobar
+    //         printf("rtl8169: could not page map membar. using iobar instead\n");
+    //         g_memory_bar = NULL;
+    //     }
+    // }
 
     
     // decode_bar(&controller.config, &controller.ioaddr, &controller.ioaddr_size, &controller.maddr, &controller.maddr_size);

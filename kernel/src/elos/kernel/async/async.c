@@ -21,6 +21,8 @@
 typedef struct {
     // @TODO tail and head in request and completion must be stored separately and copied into
     //   the rings. Otherwise user space can modify them and mess things up.
+    ELOS_AsyncRequestRing*    user_requestRing;
+    ELOS_AsyncCompletionRing* user_completionRing;
     ELOS_AsyncRequestRing*    requestRing;
     ELOS_AsyncCompletionRing* completionRing;
     u32 ringMask;
@@ -78,12 +80,13 @@ AsyncRing* makeAsyncRing(u32 ringMask) {
     u64 requestRingSize = sizeof(ELOS_AsyncRequestRing) + maxEntries * sizeof(ELOS_AsyncRequest);
     u64 completetionRingSize = sizeof(ELOS_AsyncCompletionRing) + maxEntries * sizeof(ELOS_AsyncCompletion);
 
-    void* requestAddress = PMEM_alloc_phys(requestRingSize, PMEM_FLAG_IDENTITY_MAPPED);
+    void* requestAddress = PMEM_alloc_phys(requestRingSize);
     if (!requestAddress) {
         return NULL;
     }
-    void* completeAddress = PMEM_alloc_phys(completetionRingSize, PMEM_FLAG_IDENTITY_MAPPED);
+    void* completeAddress = PMEM_alloc_phys(completetionRingSize);
     if (!completeAddress) {
+        PMEM_free(requestAddress);
         // @TODO @MEMORY_LEAK Free requestAddress!
         return NULL;
     }
@@ -93,21 +96,23 @@ AsyncRing* makeAsyncRing(u32 ringMask) {
 
     newRing->ringMask = ringMask;
 
-    newRing->requestRing = requestAddress;
+    newRing->requestRing = PMEM_phys_to_kernel(requestAddress);
+    newRing->user_requestRing = requestAddress;
     *(u32*)&newRing->requestRing->ringMask = ringMask;
 
-    newRing->completionRing = completeAddress;
+    newRing->completionRing = PMEM_phys_to_kernel(completeAddress);
+    newRing->user_completionRing = completeAddress;
     *(u32*)&newRing->completionRing->ringMask = ringMask;
 
     newRing->used = true;
     return newRing;
 }
 
-AsyncRing* getAsyncRing(ELOS_AsyncRequestRing* requestRing, ELOS_AsyncCompletionRing* completionRing) {
+AsyncRing* getAsyncRing(ELOS_AsyncRequestRing* user_requestRing, ELOS_AsyncCompletionRing* user_completionRing) {
     AsyncRing* foundRing = NULL;
     for (int i=0;i<ARRAY_LENGTH(asyncRings);i++) {
         AsyncRing* ring = &asyncRings[i];
-        if (ring->used && (ring->requestRing == requestRing || ring->completionRing == completionRing)) {
+        if (ring->used && (ring->user_requestRing == user_requestRing || ring->user_completionRing == user_completionRing)) {
             foundRing = ring;
             break;
         }
@@ -148,8 +153,8 @@ int ASYNC_create_async_rings(u32 maxEntries, ELOS_AsyncCreateFlag flags, ELOS_As
     EXEC_Thread* activeThread = &core->threads[core->active_thread];
     ring->thread = activeThread;
 
-    *requestRing = ring->requestRing;
-    *completionRing = ring->completionRing;
+    *requestRing = ring->user_requestRing;
+    *completionRing = ring->user_completionRing;
 
     returnValue = ASYNC_OK;
 exit:
@@ -338,6 +343,9 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
     size_t      safeBufferSize;
     VFS_Handle  safeVFSHandle;
     NET_Handle*  safeNetHandle;
+
+    /* @NOCHECKIN We switched to high kernel mapping, what do we need to consider in async handler?
+    */
 
     #define GET_SANITIZED_PATH(out_PATH, PATH) \
         *out_PATH = PATH; \

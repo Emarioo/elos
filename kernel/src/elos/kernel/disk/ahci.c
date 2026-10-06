@@ -35,7 +35,7 @@ volatile u32      sataContexts_len;
 
 
 void dump_port(HBA_PORT* port) {
-    HBA_FIS* fis = (void*)(u64)port->fb;
+    HBA_FIS* fis = PMEM_phys_to_uncached_kernel((void*)(u64)port->fb);
 
     printf("IS=0x%x\n", port->is);
     printf("SERR=0x%x\n", port->serr);
@@ -90,9 +90,7 @@ bool ahci_pci_scan(Disk_ScanInfo* scanInfo, PCI_ConfigSpace* config) {
         return stopSearching;
     }
 
-    PMEM_map_memory(g_kernelPageTable, (void*)(u64)ahci_base, (void*)(u64)ahci_base, PAGE_SIZE, PMEM_FLAG_NOT_CACHED);
-
-    HBA_MEM* abar = (void*)(u64)ahci_base;
+    HBA_MEM* abar = PMEM_phys_to_uncached_kernel((void*)(u64)ahci_base);
 
     // printf("Host cap: 0x%x (extended 0x%x)\n", abar->cap, abar->cap2);
 
@@ -192,8 +190,7 @@ bool ahci_pci_scan(Disk_ScanInfo* scanInfo, PCI_ConfigSpace* config) {
         Mainly name and disk size.
     */
 
-    u16 buffer[512/2];
-    void* phys_buffer = PMEM_virt_to_phys(g_kernelPageTable, buffer);  // In case buffer isn't identity mapped to physical page.
+    volatile u16 buffer[512/2]; // @TODO I think this might need to be uncached memory since AHCI writes data into it? Does CPU recognize writes from other devices and invalidate the cache or does it only do that when other CPUs write?
 
     for (int i = 0; i < diskDevices_len; i++) {
         DiskDevice* dev = diskDevices[i];
@@ -204,7 +201,7 @@ bool ahci_pci_scan(Disk_ScanInfo* scanInfo, PCI_ConfigSpace* config) {
         // If we do at the very least we should notice strange stuff
         // when calling this function. A static variable of PMEM_alloc_phys
         // may overwrite some other memory which will be much harder to detect.
-        bool res = ahci_identify(sata->port, phys_buffer);
+        bool res = ahci_identify(sata->port, buffer);
         if (!res) {
             // Device is in wierd state or we can't talk to it with our implementation.
             dev->type = DISK_TYPE_NONE;
@@ -213,7 +210,7 @@ bool ahci_pci_scan(Disk_ScanInfo* scanInfo, PCI_ConfigSpace* config) {
             continue;
         }
 
-        u16* my_buffer = phys_buffer;
+        u16* my_buffer = buffer;
 
         #define IS_SIGNIFICANT(C) ((C) != ' ' && (C) != '\t' && (C) != '\n' && (C) != '\r' && (C) != '\f')
 
@@ -362,27 +359,28 @@ bool port_rebase(HBA_PORT *port) {
     _Static_assert(256 == sizeof(HBA_FIS), "Struct bad size");
     _Static_assert(256 == sizeof(HBA_CMD_TBL), "Struct bad size");
 
-    u8* ahci_data = PMEM_alloc_phys(total_size, PMEM_FLAG_IDENTITY_MAPPED|PMEM_FLAG_NOT_CACHED);
-    if (!ahci_data) {
+    u8* phys_ahci_data = PMEM_alloc_phys(total_size);
+    if (!phys_ahci_data) {
         return false;
     }
+    u8* ahci_data = PMEM_phys_to_kernel(phys_ahci_data);
     memset(ahci_data, 0, total_size);
 
     // Command list
-    port->clb = (u64)(ahci_data);
+    port->clb = (u64)(phys_ahci_data);
     port->clbu = 0;
 
     // FIS
-    port->fb = (u64)ahci_data + (32 * sizeof(HBA_CMD_HEADER));
+    port->fb = (u64)phys_ahci_data + (32 * sizeof(HBA_CMD_HEADER));
     port->fbu = 0;
 
     // Command tables
-    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER*)(u64)(port->clb);
+    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER*)(u64)(ahci_data);
     for (int i = 0; i < 32; i++) {
         cmdheader[i].prdtl = 8;	// 8 prdt entries per command table
                     // 256 bytes per command table, 64+16+48+16*8
         // Command table offset: 40K + 8K*portno + cmdheader_index*256
-        cmdheader[i].ctba = (u64)ahci_data + (32 * sizeof(HBA_CMD_HEADER) + sizeof(HBA_FIS)) + i * sizeof(HBA_CMD_TBL);
+        cmdheader[i].ctba = (u64)phys_ahci_data + (32 * sizeof(HBA_CMD_HEADER) + sizeof(HBA_FIS)) + i * sizeof(HBA_CMD_TBL);
         cmdheader[i].ctbau = 0;
     }
 
@@ -440,17 +438,19 @@ bool ahci_identify(HBA_PORT *port, void* buffer) {
     if (slot == -1)
         return false;
 
-    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER*)(u64)port->clb;
+    void* phys_buffer = PMEM_kernel_to_phys(buffer);
+
+    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER*)PMEM_phys_to_kernel((void*)(size_t)port->clb);
     cmdheader += slot;
     // cmdheader->cfl = sizeof(FIS_REG_H2D)/sizeof(uint32_t);	// Command FIS size
     cmdheader->w = 0;		// Read from device
     cmdheader->prdtl = 1;	// PRDT entries count
 
-    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL*)(u64)(cmdheader->ctba);
+    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL*)PMEM_phys_to_kernel((void*)(size_t)cmdheader->ctba);
     memset(cmdtbl, 0, sizeof(HBA_CMD_TBL));
 
     memset(&cmdtbl->prdt_entry[0], 0, sizeof(cmdtbl->prdt_entry[0]));
-    cmdtbl->prdt_entry[0].dba = (u64) buffer;
+    cmdtbl->prdt_entry[0].dba = (u64) phys_buffer;
     cmdtbl->prdt_entry[0].dbc = 512-1;
     cmdtbl->prdt_entry[0].i = 1;
 
@@ -514,19 +514,20 @@ ELOS_Error ahci_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buf
         return ELOS_ERR_UNKNOWN;
     }
 
+
     u64 offset = byteOffset/sectorSize;
     u64 size = byteSize/sectorSize;
 
     // HBA_FIS* fis = (void*)(u64)port->fb;
 
-    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER*)(u64)port->clb;
+    volatile HBA_CMD_HEADER *cmdheader = PMEM_phys_to_kernel((void*)(u64)port->clb);
     cmdheader += slot;
     cmdheader->cfl = sizeof(FIS_REG_H2D)/sizeof(uint32_t);	// Command FIS size
     cmdheader->w = 0;		// Read from device
     // cmdheader->prdtl = (uint16_t)((count-1)>>4) + 1;	// PRDT entries count
     cmdheader->prdtl = 1;	// PRDT entries count
 
-    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL*)(u64)(cmdheader->ctba);
+    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL*)PMEM_phys_to_kernel((void*)(u64)cmdheader->ctba);
     memset(cmdtbl, 0, sizeof(HBA_CMD_TBL));
     memset(&cmdtbl->prdt_entry[0], 0, sizeof(cmdtbl->prdt_entry[0]));
 
@@ -535,8 +536,10 @@ ELOS_Error ahci_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buf
         return ELOS_ERR_UNKNOWN;
     }
 
-    cmdtbl->prdt_entry[0].dba = (u64)buffer & 0xFFFFFFFF;
-    cmdtbl->prdt_entry[0].dbau = (u64)buffer >> 32;
+    void* phys_buffer = PMEM_kernel_to_phys(buffer);
+
+    cmdtbl->prdt_entry[0].dba = (u64)phys_buffer & 0xFFFFFFFF;
+    cmdtbl->prdt_entry[0].dbau = (u64)phys_buffer >> 32;
     cmdtbl->prdt_entry[0].dbc = byteSize;
     // cmdtbl->prdt_entry[0].i = 1;
 
@@ -622,14 +625,14 @@ ELOS_Error ahci_write(DiskDevice* device, u64 byteOffset, u64 byteSize, void* bu
 
     // HBA_FIS* fis = (void*)(u64)port->fb;
 
-    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER*)(u64)port->clb;
+    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER*)PMEM_phys_to_kernel((void*)(u64)port->clb);
     cmdheader += slot;
     cmdheader->cfl = sizeof(FIS_REG_H2D)/sizeof(uint32_t);	// Command FIS size
     cmdheader->w = 0;		// Read from device
     // cmdheader->prdtl = (uint16_t)((count-1)>>4) + 1;	// PRDT entries count
     cmdheader->prdtl = 1;	// PRDT entries count
 
-    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL*)(u64)(cmdheader->ctba);
+    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL*)PMEM_phys_to_kernel((void*)u64)cmdheader->ctba);
     memset(cmdtbl, 0, sizeof(HBA_CMD_TBL));
     memset(&cmdtbl->prdt_entry[0], 0, sizeof(cmdtbl->prdt_entry[0]));
 
@@ -637,9 +640,11 @@ ELOS_Error ahci_write(DiskDevice* device, u64 byteOffset, u64 byteSize, void* bu
         printf("ahci_read: Cannot read so many bytes, %d\n", byteSize);
         return ELOS_ERR_UNKNOWN;
     }
+    
+    void* phys_buffer = PMEM_kernel_to_phys(buffer);
 
-    cmdtbl->prdt_entry[0].dba = (u64)buffer & 0xFFFFFFFF;
-    cmdtbl->prdt_entry[0].dbau = (u64)buffer >> 32;
+    cmdtbl->prdt_entry[0].dba = (u64)phys_buffer & 0xFFFFFFFF;
+    cmdtbl->prdt_entry[0].dbau = (u64)phys_buffer >> 32;
     cmdtbl->prdt_entry[0].dbc = byteSize;
     // cmdtbl->prdt_entry[0].i = 1;
 
