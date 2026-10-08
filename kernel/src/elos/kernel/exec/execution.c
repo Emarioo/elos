@@ -270,7 +270,7 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex) {
     // if (!found_thread->stack) { }
 
     int stack_size = 0x10000; // @TODO Increase
-    void* phys_stack = PMEM_alloc_phys(stack_size, PMEM_FLAG_NONE);
+    void* phys_stack = PMEM_alloc_phys(stack_size);
     if (!phys_stack) {
         goto exit;
     }
@@ -285,7 +285,7 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex) {
 
     found_thread->used = true;
     found_thread->userSpace = true;
-    found_thread->entry = object.entry_point;
+    found_thread->entry = object.virt_entry_point;
     found_thread->compatMode = object.compatibilityMode;
 
     u64 rsp = (u64)found_thread->stack + found_thread->stack_size;
@@ -302,11 +302,12 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex) {
     }
     frame->rsp = rsp;
     frame->rflags = 0x202; // interrupt flag, disable IOPL
-    frame->rip = (u64)object.entry_point;
+    frame->rip = (u64)object.virt_entry_point;
     frame->cr3 = (u64)object.pageTable;
 
     // This is so dumb. a page for a tiny little string
-    char* name = PMEM_alloc_phys(4096, PMEM_FLAG_IDENTITY_MAPPED);
+    char* name = PMEM_alloc_phys(4096);
+    name = PMEM_phys_to_kernel(name);
     char* slashPos = strrchr(path, '/');
     if (slashPos) {
         strncpy(name, slashPos + 1, 4096);

@@ -135,6 +135,8 @@ _align(16) static IDT_Entry g_idt[CORE_LIMIT][256];
 
 
 void ap_trampoline(); // defined in assembly
+void ap_entry(int id);
+extern u32 initial_ap_stack_top;
 
 void hpet_isr(u32 isr_number, InterruptFrame* frame);
 
@@ -200,9 +202,11 @@ void CPU_init(BootAPI* boot_api) {
 
     acpi_init(boot_api);
 
-    g_lapic_base = (void*)acpi_lapic_address;
+    g_lapic_base = PMEM_phys_to_uncached_kernel((void*)acpi_lapic_address);
 
     init_apic();
+
+    // *(volatile int*)0x400 = 123;
     
 
     init_syscall();
@@ -217,30 +221,35 @@ void CPU_init(BootAPI* boot_api) {
     CPU_schedule_timer_interrupt(TIMER_FREQUENCY_NS);
 
     void* trampoline_address = PMEM_phys_to_kernel(TRAMPOLINE_ADDRESS);
-    memcpy(TRAMPOLINE_ADDRESS, ap_trampoline, PAGE_SIZE);
-    
-    u32* rootPage_phys_address = (void*)((size_t)TRAMPOLINE_ADDRESS + 0x8200);
-    u32* gdt_phys_address      = (void*)((size_t)TRAMPOLINE_ADDRESS + 0x8204);
-    u32* idt_phys_address      = (void*)((size_t)TRAMPOLINE_ADDRESS + 0x8208);
-    
-    *rootPage_phys_address = (u32)(size_t)PMEM_kernel_to_phys(&g_kernelPageTable);
-    *gdt_phys_address      = (u32)(size_t)PMEM_kernel_to_phys(&_gdt_register);
-    *idt_phys_address      = (u32)(size_t)PMEM_kernel_to_phys(&_idt_register);
 
+    memcpy(trampoline_address, ap_trampoline, PAGE_SIZE);
+
+    u32* rootPage_address     = (void*)((size_t)trampoline_address + 0x200);
+    u64* ap_entry_address     = (void*)((size_t)trampoline_address + 0x210);
+    u64* ap_stack_top_address = (void*)((size_t)trampoline_address + 0x218);
+    
+    *rootPage_address = 0x201000; // address of pml4 defined in start.s @TODO DON'T HARDCODE ADDRESS
+    
+    *ap_entry_address     = (u64)(size_t)&ap_entry;
+    *ap_stack_top_address = (u64)(size_t)&initial_ap_stack_top;
+    
 
     int lapic_id = g_lapic_base[APIC_APICID] >> 24;
 
     // Starting cores requires some sleep and precise timings.
     // We must calibrate TSC first.
 
-    for (int i=0;i<acpi_lapic_ids_len;i++) {
-        u32 apic_id = acpi_lapic_ids[i];
-        if (apic_id == lapic_id)
-            continue; // don't start yourself
+    // @NOCHECKIN Bring back
+    // for (int i=0;i<acpi_lapic_ids_len;i++) {
+    //     u32 apic_id = acpi_lapic_ids[i];
+    //     if (apic_id == lapic_id)
+    //         continue; // don't start yourself
 
-        // printf("APIC id: %d\n", apic_id);
-        start_core(apic_id);
-    }
+    //     // printf("APIC id: %d\n", apic_id);
+    //     start_core(apic_id);
+    // }
+
+    // while (1) pause();
 }
 
 
@@ -269,7 +278,7 @@ typedef struct {
 
 
 void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
-    write_cr3((u64)g_kernelPageTable);
+    // PMEM_set_page_table(g_kernelPageTable);
 
     u32 coreIndex = CPU_get_core_index(); // a little dangerous if APIC address caused fault
     EXEC_Core* core = &cores[coreIndex];
@@ -293,7 +302,7 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     if (isr_number == 14) {
         fault_address = read_cr2();
     }
-    printf("EXCEPTION #%d (rip=0x%x err=0x%x core=%d rsp=0x%x addr=0x%x)\n", isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp, fault_address);
+    printf("EXCEPTION #%d (rip=0x%zx err=0x%x core=%d rsp=0x%zx addr=0x%zx)\n", isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp, fault_address);
 
     if (isr_number == 13) {
         IretFrame* iretFrame = (void*)((char*)frame + 8 + sizeof(PageFaultFrame));
@@ -330,7 +339,7 @@ void idt_set_descriptor(u32 coreIndex, uint8_t vector, void* isr, uint8_t flags)
     
     IDT_Entry* descriptor = &g_idt[coreIndex][vector];
 
-    descriptor->isr_low        = (uint64_t)isr & 0xFFFF;
+    descriptor->isr_low        = (uint64_t)PMEM_kernel_to_phys(isr) & 0xFFFF;
     descriptor->kernel_cs      = KERNEL_CODE_SEGMENT;
     descriptor->ist            = 0;
     descriptor->attributes     = flags;
@@ -349,7 +358,8 @@ void init_gdt() {
     asm volatile ( "cli\n" );
 
     for (int coreIndex=0;coreIndex<CORE_LIMIT;coreIndex++) {
-        _tss_entry[coreIndex].rsp0 = (u64)&tss_stack_space[coreIndex] + sizeof(tss_stack_space[coreIndex]);
+        u64 virt_stack = (u64)&tss_stack_space[coreIndex] + sizeof(tss_stack_space[coreIndex]);
+        _tss_entry[coreIndex].rsp0 = (size_t)PMEM_kernel_to_phys((void*)virt_stack);
 
         // Null descriptor.
         _gdt[coreIndex][0] = 0;
@@ -489,7 +499,7 @@ uint32_t cpuReadIoApic(void *ioapicaddr, uint32_t reg)
 
 void cpuWriteIoApic(void *ioapicaddr, uint32_t reg, uint32_t value)
 {
-   uint32_t volatile *ioapic = (uint32_t volatile *)ioapicaddr;
+   uint32_t volatile *ioapic = (uint32_t volatile *)PMEM_phys_to_kernel(ioapicaddr);
    ioapic[0] = (reg & 0xff);
    ioapic[4] = value;
 }
@@ -514,7 +524,7 @@ void init_syscall() {
     //   32-bit compatiblity CS = USER_CODE_COMPATIBILITY_SEGMENT
     u64 star = ((u64)(KERNEL_CODE_SEGMENT) << 32)
         | ((u64)(USER_CODE_COMPATIBILITY_SEGMENT) << 48);
-    u64 lstar = (u64)syscall_handler;
+    u64 lstar = (u64)PMEM_kernel_to_phys(syscall_handler);
     u64 sfmask = 0x200LU; // Clears interrupt enable flag.
     wrmsr(MSR_STAR,   star);
     wrmsr(MSR_LSTAR,  lstar);
@@ -996,9 +1006,41 @@ _align(4096) u32 initial_ap_stack_top;
 
 // ap = Application Processor, BSP = Bootstrap processor?
 void ap_entry(int id) {
+    PMEM_set_page_table(g_kernelPageTable);
+
+    init_idt();
+    
+    int currentCoreIndex = CPU_get_core_index();
+
+    asm volatile ( "lgdt %0\n" : : "m" (_gdt_register[currentCoreIndex]) );
+
+    // Load new descriptors.
+    // We hardcode these in the inline assembly:
+    //   0x8  = KERNEL_CODE_SEGMENT
+    //   0x10 = KERNEL_DATA_SEGMENT
+    asm volatile (
+        "mov $0x10, %%ax\n"
+        "mov %%ax, %%ds\n"
+        "mov %%ax, %%es\n"
+        "mov %%ax, %%ss\n"
+        "pushq $0x08\n"
+        "leaq 1f(%%rip), %%rax\n"
+        "pushq %%rax\n"
+        "lretq\n"
+        "1:\n"
+        :::"rax"
+    );
+    
+    // Hardcoded values:
+    //   0x38 = TASK_STATE_SEGMENT
+    asm volatile (
+        "mov $0x38, %%ax\n"
+        "ltr %%ax\n"
+        :::"rax"
+    );
+
     enable_extensions();
     
-    int lapic_id = g_lapic_base[APIC_APICID] >> 24;
     
     init_apic();
     init_syscall();
@@ -1007,6 +1049,7 @@ void ap_entry(int id) {
 
     EXEC_init();
 
+    int lapic_id = g_lapic_base[APIC_APICID] >> 24;
     printf("Started CORE %d (edi=%d)\n", lapic_id, id);
 
     // We don't want to do anymore work here.
@@ -1115,7 +1158,7 @@ void CPU_set_msi_irq(u32 coreId, u32 local_irq, FN_interrupt_handler handler, u6
     u32 lapic_id = coreId;
     u32 vector = IDT_START_OF_IRQS + local_irq;
 
-    irq_table[coreId][local_irq] = handler;
+    irq_table[coreId][local_irq] = PMEM_kernel_to_phys(handler);
 
     // @TODO Not sure 0xFEE should be hardcoded. Check intel manual, maybe we should use lapic_address from MADT.
 

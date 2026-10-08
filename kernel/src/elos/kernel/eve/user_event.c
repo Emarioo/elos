@@ -12,7 +12,8 @@
 #define printf(...) KCON_printf(__VA_ARGS__)
 
 typedef struct {
-    ELOS_UserEventBuffer* userEventBuffer;    
+    ELOS_UserEventBuffer* user_eventBuffer;    
+    ELOS_UserEventBuffer* eventBuffer;    
     u32 maxEvents;
     volatile u32 head;
 } KernelEventBuffer;
@@ -27,7 +28,7 @@ volatile u32 g_userEventLock;
 
 KernelEventBuffer g_eventBuffers[MAX_EVENT_BUFFERS];
 
-#define EVENT_BUFFER_PRESENT(BUF) ((BUF)->userEventBuffer)
+#define EVENT_BUFFER_PRESENT(BUF) ((BUF)->eventBuffer)
 
 bool EVE_request_user_event_buffer(u32 maxEvents, ELOS_UserEventBuffer** buffer, u32* wholeBufferSize) {
     bool returnValue = false;
@@ -57,17 +58,19 @@ bool EVE_request_user_event_buffer(u32 maxEvents, ELOS_UserEventBuffer** buffer,
     eventBuffer->maxEvents = (bufferSize - sizeof(ELOS_UserEventBuffer)) / sizeof(ELOS_UserEvent);
     eventBuffer->head = 0;
 
-    ELOS_UserEventBuffer* newBuffer = PMEM_alloc_phys(bufferSize, PMEM_FLAG_IDENTITY_MAPPED);
-    if (!newBuffer) {
+    ELOS_UserEventBuffer* phys_newBuffer = PMEM_alloc_phys(bufferSize);
+    if (!phys_newBuffer) {
         goto exit;
     }
 
+    ELOS_UserEventBuffer* newBuffer = PMEM_phys_to_kernel(phys_newBuffer);
     memset(newBuffer, 0, bufferSize);
     newBuffer->head = 0;
     newBuffer->tail = 0;
     *(u32*)&newBuffer->maxEvents = eventBuffer->maxEvents;
 
-    eventBuffer->userEventBuffer = newBuffer;
+    eventBuffer->eventBuffer = newBuffer;
+    eventBuffer->user_eventBuffer = phys_newBuffer;
 
     *wholeBufferSize = bufferSize;
     *buffer = newBuffer;
@@ -96,10 +99,10 @@ void EVE_push_event(ELOS_UserEvent* newEvent) {
         // @TODO We can't trust maxEvents. user may have put a wierd value there.
 
         u64 index = buffer->head % buffer->maxEvents;
-        ELOS_UserEvent* event = &buffer->userEventBuffer->events[index];
+        ELOS_UserEvent* event = &buffer->eventBuffer->events[index];
         *event = *newEvent;
         buffer->head++;
-        buffer->userEventBuffer->head = buffer->head;
+        buffer->eventBuffer->head = buffer->head;
 
         // @TODO The idea behind this is to increment tail so it "drags" behind the head
         //   But I am pretty sure this doesn't work in practise with multiple threads because user
@@ -107,8 +110,8 @@ void EVE_push_event(ELOS_UserEvent* newEvent) {
         //   sure tail is never behind head? User must then read head first and then tail?
         //   Any other good way to handle event overflow? Requiring user to process them and not overflow
         //   doesn't seem nice.
-        if (buffer->head % buffer->maxEvents == buffer->userEventBuffer->tail % buffer->maxEvents) {
-            buffer->userEventBuffer->tail++;
+        if (buffer->head % buffer->maxEvents == buffer->eventBuffer->tail % buffer->maxEvents) {
+            buffer->eventBuffer->tail++;
         }
     }
 

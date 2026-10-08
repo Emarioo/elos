@@ -88,7 +88,7 @@ struct NVME_Context {
 
     volatile u32 buffer_lock;
 
-    void* tempSector;
+    void* phys_tempSector;
     void* tempMemoryPage;
 
     u32 submission_tail;
@@ -113,5 +113,5 @@ struct NVME_Context_Namespace {
 
 bool nvme_pci_scan(Disk_ScanInfo* scanInfo, PCI_ConfigSpace* config);
 
-ELOS_Error nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer);
-ELOS_Error nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* buffer);
+ELOS_Error nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* phys_buffer);
+ELOS_Error nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* phys_buffer);

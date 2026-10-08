@@ -520,7 +520,7 @@ bool vfs_copy(const char* _old_path, const char* _new_path) {
         goto exit;
     }
 
-    buffer = PMEM_alloc_phys(bufferSize, PMEM_FLAG_IDENTITY_MAPPED);
+    buffer = PMEM_alloc(bufferSize);
     if (!buffer) {
         goto exit;
     }

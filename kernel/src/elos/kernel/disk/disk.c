@@ -4,6 +4,7 @@
 #include "elos/common/intrinsics.h"
 
 #include "elos/kernel_console.h"
+#include "elos/physical_memory.h"
 
 #include "elos/kernel/driver/pci.h"
 #include "elos/kernel/driver/pci_list.h"
@@ -133,6 +134,7 @@ void DISK_get_info(DiskDevice* device, ELOS_DiskInfo* info) {
 
 ELOS_Error DISK_write(DiskDevice* device, u64 offset, u64 size, void* buffer) {
     ELOS_Error returnValue = ELOS_ERR_UNKNOWN;
+    void* phys_buffer = PMEM_kernel_to_phys(buffer);
 
     switch (device->type) {
         case DISK_TYPE_RAM: {
@@ -145,18 +147,19 @@ ELOS_Error DISK_write(DiskDevice* device, u64 offset, u64 size, void* buffer) {
                 returnValue = ELOS_ERR_OUT_OF_BOUNDS;
                 printf("DISK_write: out of bounds read on (0x%zx:0x%zx, 0x%zx) from %s\n", offset, size, ram->size, device->diskInfo.name);
             } else {
-                memcpy(ram->data + offset, buffer, size);
+                void* vaddr = PMEM_phys_to_kernel(phys_buffer);
+                memcpy(ram->data + offset, vaddr, size);
                 returnValue = ELOS_OK;
             }
         } break;
         case DISK_TYPE_SATA: {
-            returnValue = ahci_write(device, offset, size, buffer);
+            returnValue = ahci_write(device, offset, size, phys_buffer);
             if (returnValue != ELOS_OK) {
                 printf("DISK_write: Could not write (0x%zx, %d) from %s\n", offset, size, device->diskInfo.name);
             }
         } break;
         case DISK_TYPE_NVME: {
-            returnValue = nvme_write(device, offset, size, buffer);
+            returnValue = nvme_write(device, offset, size, phys_buffer);
             if (returnValue != ELOS_OK) {
                 printf("DISK_write: Could not write (0x%zx, %d) from %s\n", offset, size, device->diskInfo.name);
             }
@@ -171,6 +174,7 @@ ELOS_Error DISK_write(DiskDevice* device, u64 offset, u64 size, void* buffer) {
 
 ELOS_Error DISK_read(DiskDevice* device, u64 offset, u64 size, void* buffer) {
     ELOS_Error returnValue = ELOS_ERR_UNKNOWN;
+    void* phys_buffer = PMEM_kernel_to_phys(buffer);
 
     switch (device->type) {
         case DISK_TYPE_RAM: {
@@ -183,18 +187,19 @@ ELOS_Error DISK_read(DiskDevice* device, u64 offset, u64 size, void* buffer) {
                 returnValue = ELOS_ERR_OUT_OF_BOUNDS;
                 printf("DISK_read: out of bounds read on (off=0x%zx sz=0x%zx diskSize=0x%zx) from %s\n", offset, size, ram->size, device->diskInfo.name);
             } else {
-                memcpy(buffer, (char*)ram->data + offset, size);
+                void* vaddr = PMEM_phys_to_kernel(phys_buffer);
+                memcpy(vaddr, (char*)ram->data + offset, size);
                 returnValue = ELOS_OK;
             }
         } break;
         case DISK_TYPE_SATA: {
-            returnValue = ahci_read(device, offset, size, buffer);
+            returnValue = ahci_read(device, offset, size, phys_buffer);
             if (returnValue != ELOS_OK) {
                 printf("DISK_read: Could not read (0x%zx, %d) from %s\n", offset, size, device->diskInfo.name);
             }
         } break;
         case DISK_TYPE_NVME: {
-            returnValue = nvme_read(device, offset, size, buffer);
+            returnValue = nvme_read(device, offset, size, phys_buffer);
             if (returnValue != ELOS_OK) {
                 printf("DISK_read: Could not read (0x%zx, %d) from %s\n", offset, size, device->diskInfo.name);
             }

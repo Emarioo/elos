@@ -5,6 +5,7 @@
 #include "elos/kernel/pmem/paging.h"
 
 #include "elos/common/string.h"
+#include "elos/common/intrinsics.h"
 
 #include "elos/kernel_console.h"
 
@@ -43,6 +44,44 @@ PhysicalMemoryRegion g_used_regions[MAX_REGIONS];
 
 PageTable* g_kernelPageTable;
 
+size_t VIRTUAL_KERNEL_OFFSET;
+size_t VIRTUAL_UNCACHED_KERNEL_OFFSET;
+
+
+void* PMEM_phys_to_kernel(void* paddr) {
+    if ((size_t)paddr >= 0x80000000) {
+        return (void*)((size_t)paddr + VIRTUAL_KERNEL_OFFSET - 0x100000000);
+    } else {
+        return (void*)((size_t)paddr + VIRTUAL_KERNEL_OFFSET);
+    }
+}
+
+void* PMEM_phys_to_uncached_kernel(void* paddr) {
+    return (void*)((size_t)paddr + VIRTUAL_UNCACHED_KERNEL_OFFSET);
+}
+
+void* PMEM_kernel_to_phys(void* vaddr) {
+    if ((size_t)vaddr < 0xFFFFFFFF80000000) {
+        return (void*)((size_t)vaddr - VIRTUAL_KERNEL_OFFSET + 0x100000000);
+    } else {
+        return (void*)((size_t)vaddr - VIRTUAL_KERNEL_OFFSET);
+    }
+}
+
+void* g_nextVirtualMMIOAddress = (void*)0xFFFFFF8100000000;
+
+void* PMEM_reserve_virtual_mmio(void* physical_address, size_t size) {
+    size = (size + PAGE_SIZE-1) & ~(size_t)(PAGE_SIZE-1);
+    void* mmio_address = g_nextVirtualMMIOAddress;
+
+    bool mapped = PMEM_map_memory(g_kernelPageTable, mmio_address, physical_address, size, PMEM_FLAG_NOT_CACHED);
+    if (!mapped) {
+        return NULL;
+    }
+
+    g_nextVirtualMMIOAddress += size;
+    return mmio_address;
+}
 
 void PMEM_init(BootAPI* boot_api) {
     typedef struct Range {
@@ -58,7 +97,7 @@ void PMEM_init(BootAPI* boot_api) {
 
         // These are allocated and mapped by EFI application
         // when loading kernel.
-        { (size_t)PMEM_kernel_to_phys(__kernel_start), (size_t)__kernel_end - (size_t)__kernel_end }, // Kernel .text, .rodata, .data, .bss, stack
+        { (size_t)PMEM_kernel_to_phys(__kernel_start), (size_t)__kernel_end - (size_t)__kernel_start }, // Kernel .text, .rodata, .data, .bss, stack
         { (size_t)boot_api->initrd_data, boot_api->initrd_size },
     };
 
@@ -333,7 +372,7 @@ void* PMEM_allocate(u64 size, void* ptr) {
         PhysicalMemoryRegion* used_alloc = &g_used_regions[found_used_index];
 
         used_alloc->physicalStart = free_alloc->physicalStart;
-        used_alloc->virtualStart  = PMEM_phys_to_kernel(free_alloc->physicalStart);
+        used_alloc->virtualStart  = (size_t)PMEM_phys_to_kernel((void*)free_alloc->physicalStart);
         used_alloc->pageCount     = requested_pages;
         used_alloc->flags         = FLAG_USED | FLAG_VIRTUALLY_MAPPED;
 
@@ -370,12 +409,24 @@ cleanup:
 
 
 PageTable* PMEM_allocPageTable() {
-    void* ptr = PMEM_alloc_phys(PAGE_SIZE, PMEM_FLAG_IDENTITY_MAPPED);
+    void* ptr = PMEM_alloc_phys(PAGE_SIZE);
+    ptr = PMEM_phys_to_kernel(ptr);
     memset(ptr, 0, PAGE_SIZE);
     return ptr;
 }
 
 
+Page* PMEM_get_page_table() {
+    u64 entry = read_cr3();
+    // @TODO Handle process context id
+    u64 pcid = entry & 0xFFF;
+    Page* table = PMEM_phys_to_kernel((void*)(entry & ~(size_t)0xFFF));
+    return table;
+}
+void PMEM_set_page_table(Page* page) {
+    u64 entry = (u64)PMEM_kernel_to_phys(page);
+    write_cr3(entry);
+}
 
 // static int filter_empty_regions(PhysicalMemoryRegion* regions, int count) {
 //     int begin = 0;
@@ -471,9 +522,6 @@ void PMEM_free_phys(void* paddr) {
     void* returnValue;
     
     const u64 old_physical_address = (u64)paddr;
-
-    if (size <= 0)
-        return NULL;
 
     LOCK_INT(&allocate_spinlock);
 

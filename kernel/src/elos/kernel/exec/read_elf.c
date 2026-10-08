@@ -164,7 +164,7 @@ bool parse_elf(ParseContext* ctx) {
     // We give each ELF a different offset so we have a better idea
     // which ELF a page fault address belongs too.
     void* virt_image_base = (void*)(u64)0xC0000000 + elf_count * VADDR_STRIDE;
-    void* phys_image_base = PMEM_alloc_phys(image_size, PMEM_FLAG_NONE);
+    void* phys_image_base = PMEM_alloc_phys(image_size);
     void* kern_image_base = PMEM_phys_to_kernel(phys_image_base);
     elf_count++;
     
@@ -172,6 +172,7 @@ bool parse_elf(ParseContext* ctx) {
     PageTable* pageTable = PMEM_allocPageTable();
     
     // Map kernel into user page table (needed when we do syscall)
+    pageTable->entries[511] = g_kernelPageTable->entries[511];
 
     // @TODO parse_elf should not be mapping in kernel to user page table...
     // PMEM_map_memory(pageTable, __kernel_start, __kernel_start, __kernel_end - __kernel_start, PMEM_FLAG_EXECUTABLE);
@@ -278,7 +279,7 @@ bool parse_elf(ParseContext* ctx) {
     ctx->object->virt_image_base = virt_image_base;
     ctx->object->phys_image_base = phys_image_base;
     ctx->object->image_size = image_size;
-    ctx->object->entry_point = (u8*)virt_image_base + EHDR_FIELD(elfHeader, e_entry);
+    ctx->object->virt_entry_point = (u8*)virt_image_base + EHDR_FIELD(elfHeader, e_entry);
     ctx->object->pageTable = pageTable;
     ctx->object->compatibilityMode = elfHeader->e_ident[EI_CLASS] == ELFCLASS32;
 

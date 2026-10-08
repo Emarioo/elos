@@ -126,7 +126,7 @@ volatile u32 g_service_lock;
 //         newEndpoint->recvBuffer_size = queueSize;
 //     else
 //         newEndpoint->recvBuffer_size = MAX_MESSAGE_SIZE;
-//     newEndpoint->phys_recvBuffer = PMEM_alloc_phys(newEndpoint->recvBuffer_size, PMEM_FLAG_IDENTITY_MAPPED);
+//     newEndpoint->phys_recvBuffer = PMEM_alloc_phys(newEndpoint->recvBuffer_size);
 
 //     *endpoint = newEndpoint;
 //     returnValue = true;
@@ -157,7 +157,7 @@ volatile u32 g_service_lock;
 //         newEndpoint->recvBuffer_size = queueSize;
 //     else
 //         newEndpoint->recvBuffer_size = MAX_MESSAGE_SIZE;
-//     newEndpoint->phys_recvBuffer = PMEM_alloc_phys(newEndpoint->recvBuffer_size, PMEM_FLAG_IDENTITY_MAPPED);
+//     newEndpoint->phys_recvBuffer = PMEM_alloc_phys(newEndpoint->recvBuffer_size);
 
 //     newEndpoint->toClient.capacity = queueSize;
 //     newEndpoint->toClient.buffer = PMEM_alloc(queueSize);
@@ -358,16 +358,18 @@ bool SRV_shared_memory_create(u64 size, SharedMemory** handle) {
         goto exit;
     }
 
-    void* buffer = PMEM_alloc_phys(size, PMEM_FLAG_IDENTITY_MAPPED);
-    if (!buffer) {
+    void* phys_buffer = PMEM_alloc_phys(size);
+    if (!phys_buffer) {
         goto exit;
     }
+    void* buffer = PMEM_phys_to_kernel(phys_buffer);
+
     memset(buffer, 0x9A, size);
 
     SharedMemory* sharedMemory = &g_shared_memories[g_shared_memories_len];
     g_shared_memories_len++;
 
-    sharedMemory->buffer = buffer;
+    sharedMemory->phys_buffer = phys_buffer;
     sharedMemory->buffer_size = size;
 
     *handle = sharedMemory;
@@ -384,14 +386,14 @@ bool SRV_shared_memory_grant(SharedMemory* handle, ELOS_ProcessID processID) {
     return true;
 }
 
-bool SRV_shared_memory_info(SharedMemory* handle, void** buffer, u64* size) {
+bool SRV_shared_memory_info(SharedMemory* handle, void** phys_buffer, u64* size) {
     bool returnValue = false;
     LOCK_INT(&g_service_lock);
 
     // @TODO Validate handle. Is it null, invalid memory, accessible?
 
-    if (buffer) {
-        *buffer = handle->buffer;
+    if (phys_buffer) {
+        *phys_buffer = handle->phys_buffer;
     }
     if (size) {
         *size = handle->buffer_size;

@@ -41,9 +41,8 @@ bool g_superKeyIsDown = false;
 void keyboard_handler(u32 isr_number, InterruptFrame* frame) {
     // printf("Interrupt #%d\n", isr_number);
 
-    u64 userPageTable = read_cr3();
-
-    write_cr3((uintptr_t)g_kernelPageTable);
+    // Page* prev_table = PMEM_get_page_table();
+    // PMEM_set_page_table(g_kernelPageTable);
     
     while (1) {
         int pressed;
@@ -71,7 +70,7 @@ void keyboard_handler(u32 isr_number, InterruptFrame* frame) {
         // printf("scancode %d, %c\n", scancode, chr);
     }
 
-    write_cr3(userPageTable);
+    // PMEM_set_page_table(prev_table);
     
 }
 

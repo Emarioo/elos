@@ -4,7 +4,6 @@
 
 #include "elos/common/types.h"
 
-
 //#################
 //      TYPES
 //#################
@@ -109,8 +108,6 @@ void CPU_disable_interrupt();
 void CPU_set_irq(u32 coreId, u32 local_irq, u32 global_irq, FN_interrupt_handler handler);
 
 void CPU_set_msi_irq(u32 coreId, u32 local_irq, FN_interrupt_handler handler, u64* messageAddress, u16* messageData);
-
-
 
 extern u64 g_timer_frequency_ns;
 void CPU_schedule_timer_interrupt(u64 nanoseconds);

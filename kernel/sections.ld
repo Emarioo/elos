@@ -26,10 +26,11 @@ SECTIONS {
         __low_boot_end = .;
     } :low_boot
 
+    __kernel_start = VIRTUAL_KERNEL_BASE;
+    
     .text VIRTUAL_KERNEL_BASE + 0x4000 :
         AT(ADDR(.text) - KERNEL_OFFSET)
     {
-        __kernel_start = .;
         __text_start = .;
         *start.o(.text)
         *(.text*)

@@ -5,6 +5,7 @@
 # BSP = Bootstrap Processor
 # AP  = Application Processor
 
+
 .intel_syntax noprefix
 
     .section .text
@@ -58,7 +59,6 @@ _8060:
     # Load root page table
     # (same as the Bootstrap Processor for now)
     mov eax, [0x8200]
-    mov eax, [eax]
     mov cr3, eax
 
     # Enable long mode in EFER
@@ -78,12 +78,13 @@ _8060:
     shr ebx, 24
     mov edi, ebx
 
-    imul ebx, 10
+    // Use temporary GDT
+    lgdt [0x81A0]
+    
+    // Set in ap_entry (high mapped kernel)
+    // mov eax, [0x8208]
+    // lidt [eax]
 
-    mov eax, [0x8204]
-    lgdt [eax + ebx] # Prepared by BSP in Kernel C code
-    mov eax, [0x8208]
-    lidt [eax]
 
     // Jump to long mode
     ljmp 0x08:0x8100 # KERNEL_CODE_SEGMENT
@@ -97,28 +98,46 @@ _8100:
     mov es, ax
     mov ss, ax
  
-    # Load Task State Segment
-    mov ax, 0x38 # TASK_STATE_SEGMENT
-    ltr ax
+    # Load Task State Segment, set in ap_entry
+    # mov ax, 0x38 # TASK_STATE_SEGMENT
+    # ltr ax
 
     # Get small temporary stack for this processor
     mov ebx, edi # ebx = apic id
-    movabs rax, initial_ap_stack_top
+    mov rax, [0x8218]
     mov rsp, rax
     shl ebx, 12
     sub rsp, rbx
-    
-    movabs rax, ap_entry
+
+    mov rax, [0x8210]
     mov rbx, rax
     call rbx
+
     #  Should not return.
 trampoline_spin:
     jmp trampoline_spin
 
+
+    .align 128
+_8180_GDT_table:
+    .long 0, 0
+    .long 0x00000000, 0x00209A00 # flat code
+    .long 0x00000000, 0x00209200 # flat data
+
+    .align 32
+_81A0_GDT_value:
+    .word _81A0_GDT_value - _8180_GDT_table - 1
+    .long 0x8180
+    .long 0, 0
+
     .align 256
-    .code32
 _8200:
 
 rootPage_phys_address: .long 0
-gdt_phys_address: .long 0
-idt_phys_address: .long 0
+padding:
+    .long 0, 0, 0
+
+# 8210
+ptr_ap_entry: .quad 0
+ptr_ap_stack_top: .quad 0
+

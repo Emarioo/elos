@@ -71,6 +71,7 @@ void acpi_init(BootAPI* boot_api) {
 
     for (int i=0;i<array_of_sdt_len;i++) {
         ACPI_SDTHeader* header = (ACPI_SDTHeader*)array_of_sdt[i];
+        header = PMEM_phys_to_kernel(header);
         
         // First map the header itself
         // PMEM_map_memory(g_kernelPageTable, header, header, sizeof(ACPI_SDTHeader), PMEM_FLAG_NONE);
@@ -193,7 +194,7 @@ void acpi_init(BootAPI* boot_api) {
                 // bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)fadt->ResetReg.Address, (void*)fadt->ResetReg.Address, 1, PMEM_FLAG_NOT_CACHED);
                 // if (mapped) {
                 reset_addressSpace = ADDRESS_SPACE_SYSTEM_MEMORY;
-                reset_address = PMEM_phys_to_uncached_kernel(fadt->ResetReg.Address);
+                reset_address = (u64)PMEM_phys_to_uncached_kernel((void*)fadt->ResetReg.Address);
                 reset_value = fadt->ResetValue;
                 // }
             } else if (fadt->ResetReg.AddressSpace == ADDRESS_SPACE_SYSTEM_IO) { 

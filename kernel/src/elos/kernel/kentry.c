@@ -158,6 +158,7 @@ void kernel_entry(BootAPI* in_boot_api) {
     int monCount = ARRAY_LENGTH(monDevices);
     MON_scan_devices(monDevices, &monCount);
 
+
     // Initialize GDT, IDT, interrupt tables, vectors
     // Timer interrupt, parse ACPI tables for IOAPIC, APIC, HPET
     CPU_init(boot_api);
@@ -307,7 +308,6 @@ void os_entry() {
     // VFS_close(tmp);
     // buffer[info.fileSize] = 0;
     // printf("size=%d text='%s'\n", info.fileSize, buffer);
-
 
 
     EXEC_create_kernel_thread(SCON_main, 0);

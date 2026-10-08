@@ -160,6 +160,30 @@ void* PMEM_allocate(size_t size, void* old_ptr) {
     }
 }
 
+size_t VIRTUAL_KERNEL_OFFSET;
+size_t VIRTUAL_UNCACHED_KERNEL_OFFSET;
+
+
+void* PMEM_phys_to_kernel(void* paddr) {
+    if ((size_t)paddr >= 0x80000000) {
+        return (void*)((size_t)paddr + VIRTUAL_KERNEL_OFFSET - 0x100000000);
+    } else {
+        return (void*)((size_t)paddr + VIRTUAL_KERNEL_OFFSET);
+    }
+}
+
+void* PMEM_phys_to_uncached_kernel(void* paddr) {
+    return (void*)((size_t)paddr + VIRTUAL_UNCACHED_KERNEL_OFFSET);
+}
+
+void* PMEM_kernel_to_phys(void* vaddr) {
+    if ((size_t)vaddr < 0xFFFFFFFF80000000) {
+        return (void*)((size_t)vaddr - VIRTUAL_KERNEL_OFFSET + 0x100000000);
+    } else {
+        return (void*)((size_t)vaddr - VIRTUAL_KERNEL_OFFSET);
+    }
+}
+
 void* PMEM_alloc_phys(size_t size) {
     EFI_STATUS Status;
     EFI_PHYSICAL_ADDRESS addr = 0;

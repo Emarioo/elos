@@ -941,7 +941,16 @@ typedef enum {
 // /*
 //     Pause execution of a running thread.
 //     A paused thread is unaffected.
-
+//     @TODO When we request a pause or when a breakpoint is triggered we usually want the new
+//     register values. The Debug API could provide that when breakpoint happens so we don't need
+//     to call syscalls explicitly everytime to get it. But we should provide syscalls so you can
+//     get them whenever.
+//  
+//     Here we ask for a piece of memory which is updated with thread information when the thread's execution is stopped.
+//     SYS_debug_init_debug_area(ELOS_ProcessHandle handle, ELOS_ThreadID threadID, ELOS_Debug_Thread_Context** context);
+//     
+//
+//
 //     @pre ELOS_PERM_DEBUG
 // */
 // ELOS_Error SYS_debug_pause(ELOS_ProcessHandle handle);
@@ -953,6 +962,8 @@ typedef enum {
     
 //     @param threads A buffer where thread ids will be placed.
 //     @param count Input: max number of ids to place. Output: number of ids placed.
+//
+//    @TODO We need a syscall, maybe this one, to get status of the thread (running, paused, terminated)
 
 //     @pre ELOS_PERM_DEBUG
 // */
@@ -973,7 +984,8 @@ typedef enum {
 
 //     @pre ELOS_PERM_DEBUG
 // */
-// ELOS_Error SYS_debug_registers(ELOS_ProcessHandle handle, ELOS_ThreadID threadID, u64* registers, uint32_t* count);
+// ELOS_Error SYS_debug_get_registers(ELOS_ProcessHandle handle, ELOS_ThreadID threadID, u64* registers, uint32_t* count);
+// ELOS_Error SYS_debug_set_registers(ELOS_ProcessHandle handle, ELOS_ThreadID threadID, const u64* registers, uint32_t count);
 
 // /*
 //     Read memory from the debugged process. Most importantly reading data at the instruction pointer
@@ -1007,6 +1019,33 @@ typedef enum {
 */
 // ELOS_Error SYS_debug_context(ELOS_ProcessHandle, ELOS_Debug_Context);
 
+
+//  @TODO API to set hardware breakpoints. Some architectures may have 4 instruction fetch and 4 DATA READ/WRITE slots.
+//    Some processors may have 4 which can be any of fetch,read,write.
+//    Some architectures may have read and read/write and not a dedicated write.
+//   
+//    Slot refers to an arbitrary hardware breakpoint entry which you can set. You have set four already (maybe 5-8)
+//    and try to set slot 1 and the processor only supports for breakpoints (x86_64 has DR0 - DR3) then you will get
+//    ELOS_ERR_OUT_OF_SLOTS or similar. If you DISABLE slot 7 then 1 (or 0,2,3,4...) would now be aavailable.
+//    The API could also enforce the first 4 slots as the only allowed ones, no need for 32 slots if you can only use 4 at any one time.
+//
+//    As mentioned earlier the architecture and OS may allow 8 total slots where 4 of them may be set as fetch and 4 as read or write.
+//
+//
+// typedef enum {
+//     ELOS_DEBUG_HW_POINT_DISABLED,             // clears a slot.
+
+//     ELOS_DEBUG_HW_POINT_SINGLE_STEP,          // whether to cause trap on next execution, address and slot params are ignored.
+
+//     ELOS_DEBUG_HW_POINT_INSTRUCTION_FETCH,    // breakpoint when instruction at specified address is fetched.
+//     ELOS_DEBUG_HW_POINT_DATA_READ,            // breakpoint on read
+//     ELOS_DEBUG_HW_POINT_DATA_WRITE,           // breakpoint on write
+//     ELOS_DEBUG_HW_POINT_DATA_READ_OR_WRITE,   // breakpoint on read/write
+//
+// } ELOS_Debug_Hardware_Point_Type;
+
+// ELOS_Error SYS_debug_hardware_point(ELOS_ProcessHandle handle, ELOS_ThreadID id,
+//      ELOS_Debug_Hardware_Point_Type type, uint32_t slot, void* address, u32 length);
 
 
 // @TODO SYS_utc_epoch_time(uint64_t* nanoseconds)

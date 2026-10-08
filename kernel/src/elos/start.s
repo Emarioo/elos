@@ -22,10 +22,15 @@ _start: # void _start(BootAPI*)
     lea rsp, [__stack_end]
 
     # Save BootAPI to non-volatile register
-    # EFI app called this function which uses windows calling convention so we use rcx not rdi
+    # EFI app called this function which uses windows calling conventiozn so we use rcx not rdi
     mov rbx, rcx
     
     call zero_bss
+
+    mov rax, [vko]
+    mov [VIRTUAL_KERNEL_OFFSET], rax
+    mov rax, [vuko]
+    mov [VIRTUAL_UNCACHED_KERNEL_OFFSET], rax
 
     mov rdi, rbx
     
@@ -53,6 +58,11 @@ zero_bss:
 
     ret
 
+.align 8
+vko:
+    .quad 0xFFFFFFFF80000000
+vuko:
+    .quad 0xFFFFFF8000000000
 
 .align 4096
 pml4:

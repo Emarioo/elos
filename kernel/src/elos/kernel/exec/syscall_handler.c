@@ -162,7 +162,7 @@ void disableDefaultMonitorForUsers() {
             printf("KABOOM mon get frame buffer disable default monitor\n");
             while (1) asm volatile ("hlt");
         }
-        blankFrameBuffer.phys_address = PMEM_alloc_phys(blankFrameBuffer.size, 0);
+        blankFrameBuffer.phys_address = PMEM_alloc_phys(blankFrameBuffer.size);
         if (!blankFrameBuffer.phys_address) {
             printf("KABOOM alloc phys for blank framebuffer\n");
             while (1) asm volatile ("hlt");
@@ -290,7 +290,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
     EXEC_Thread* thread = &core->threads[core->active_thread];
     EXEC_Process* process = thread->process;
 
-    PageTable* userPageTable = (void*)(read_cr3() & ~0xFFFLU);
+    PageTable* userPageTable = PMEM_get_page_table();
 
     // @TODO For the user processes we need to swap out their pages so they can't
     //   access each others ELF image or HEAP or frame buffers.
@@ -331,23 +331,25 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             // @TODO Check capability and heap limit
 
-            void* address = PMEM_alloc_phys(size, 0);
-            if (address) {
-                write_cr3((u64)g_kernelPageTable);
+            void* phys_address = PMEM_alloc_phys(size);
+            if (phys_address) {
+                PMEM_set_page_table(g_kernelPageTable);
+
+                void* kern_address = PMEM_phys_to_kernel(phys_address);
                 
-                update_heap_entry(NULL, address, address, size);
-                bool mapped = PMEM_map_memory(userPageTable, address, address, size, PMEM_FLAG_USER_SPACE);
+                update_heap_entry(NULL, phys_address, phys_address, size);
+                bool mapped = PMEM_map_memory(userPageTable, phys_address, phys_address, size, PMEM_FLAG_USER_SPACE);
                 if (!mapped) {
-                    PMEM_free(address);
-                    write_cr3((u64)userPageTable);
+                    PMEM_free(phys_address);
+                    PMEM_set_page_table(userPageTable);
                     SET_ADDRESS_SIZE_TYPE(newAddress, NULL);
                     returnValue = ELOS_ERR_UNKNOWN;
                     break;
                 }
 
-                write_cr3((u64)userPageTable);
-                memset(address, 0x9A, size);
-                SET_ADDRESS_SIZE_TYPE(newAddress, address);
+                PMEM_set_page_table(userPageTable);
+                memset(kern_address, 0x9A, size);
+                SET_ADDRESS_SIZE_TYPE(newAddress, phys_address);
                 returnValue = ELOS_OK;
             } else {
                 SET_ADDRESS_SIZE_TYPE(newAddress, NULL);
@@ -361,9 +363,9 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             
             // @TODO Check capability
             
-            write_cr3((u64)g_kernelPageTable);
+            PMEM_set_page_table(g_kernelPageTable);
             update_heap_entry(oldAddress, NULL, NULL, 0);
-            write_cr3((u64)userPageTable);
+            PMEM_set_page_table(userPageTable);
             
             PMEM_free(oldAddress);
             returnValue = ELOS_OK;
@@ -377,45 +379,48 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             
             // @TODO Check capability and heap limit
             
-            write_cr3((u64)g_kernelPageTable);
+            PMEM_set_page_table(g_kernelPageTable);
 
             HeapEntry* heapEntry = oldAddress == NULL ? NULL : get_heap_entry(oldAddress);
             if (!heapEntry) {
                 
-                void* address = PMEM_alloc_phys(size, 0);
-                if (!address) {
-                    write_cr3((u64)userPageTable);
+                void* phys_address = PMEM_alloc_phys(size);
+                if (!phys_address) {
+                    PMEM_set_page_table(userPageTable);
                     SET_ADDRESS_SIZE_TYPE(newAddress, NULL);
                     returnValue = ELOS_ERR_UNKNOWN;
                     break;
                 }
+                void* kern_address = PMEM_phys_to_kernel(phys_address);
                     
-                update_heap_entry(NULL, address, address, size);
-                PMEM_map_memory(userPageTable, address, address, size, PMEM_FLAG_USER_SPACE);
+                update_heap_entry(NULL, phys_address, phys_address, size);
+                PMEM_map_memory(userPageTable, phys_address, phys_address, size, PMEM_FLAG_USER_SPACE);
                 
-                write_cr3((u64)userPageTable);
-                memset(address, 0x9A, size);
-                SET_ADDRESS_SIZE_TYPE(newAddress, address);
+                PMEM_set_page_table(userPageTable);
+                memset(kern_address, 0x9A, size);
+                SET_ADDRESS_SIZE_TYPE(newAddress, phys_address);
                 returnValue = ELOS_OK;
                 break;
             }
             u64 oldSize = heapEntry->size;
             
-            void* address = PMEM_alloc_phys(size, 0);
+            void* phys_address = PMEM_alloc_phys(size);
             
-            if (address) {
-                update_heap_entry(oldAddress, address, address, size);
-                PMEM_map_memory(userPageTable, address, address, size, PMEM_FLAG_USER_SPACE);
-                write_cr3((u64)userPageTable);
-                memcpy(address, oldAddress, oldSize);
-                memset(address + oldSize, 0x9A, size - oldSize);
+            if (phys_address) {
+                void* kern_oldAddress = PMEM_phys_to_kernel(phys_address);
+                void* kern_address = PMEM_phys_to_kernel(phys_address);
+                update_heap_entry(oldAddress, phys_address, phys_address, size);
+                PMEM_map_memory(userPageTable, phys_address, phys_address, size, PMEM_FLAG_USER_SPACE);
+                PMEM_set_page_table(userPageTable);
+                memcpy(kern_address, kern_oldAddress, oldSize);
+                memset(kern_address + oldSize, 0x9A, size - oldSize);
                 // @TODO Unmap the old memory
                 //    Free might do it already?
-                PMEM_free(oldAddress);
-                SET_ADDRESS_SIZE_TYPE(newAddress, address);
+                PMEM_free(kern_oldAddress);
+                SET_ADDRESS_SIZE_TYPE(newAddress, phys_address);
                 returnValue = ELOS_OK;
             } else {
-                write_cr3((u64)userPageTable);
+                PMEM_set_page_table(userPageTable);
                 SET_ADDRESS_SIZE_TYPE(newAddress, NULL);
                 returnValue = ELOS_ERR_UNKNOWN;
             }
@@ -432,16 +437,18 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             // @TODO Check if virtual memory space has stuff at the memory range we want to map.
             //   Return error if so. Right now we overwrite the page tables with our new mapping
             //   which will cause a crash.
+            //
+            //   Most importantly we want error if trying to map high kernel mapping.
 
-            void* phys_address = PMEM_alloc_phys(size, 0);
+            void* phys_address = PMEM_alloc_phys(size);
             if (phys_address) {
-                write_cr3((u64)g_kernelPageTable);
+                PMEM_set_page_table(g_kernelPageTable);
                 update_heap_entry(NULL, virtAddress, phys_address, size);
 
                 PMEM_Flags flags = elos_protection_to_pmem_flags(protection);
 
                 bool mapped = PMEM_map_memory(userPageTable, virtAddress, phys_address, size, flags);
-                write_cr3((u64)userPageTable);
+                PMEM_set_page_table(userPageTable);
                 if (mapped) {
                     memset(virtAddress, 0x9A, size);
                     returnValue = ELOS_OK;
@@ -463,7 +470,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             //    It is not identity mapped. Heap free calls PMEM_free which
             //    kind of assumes kernel page table which isn't right.
 
-            write_cr3((u64)g_kernelPageTable);
+            PMEM_set_page_table(g_kernelPageTable);
 
             HeapEntry* heapEntry = get_heap_entry(virtAddress);
             if (!heapEntry) {
@@ -478,19 +485,19 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                     returnValue = ELOS_ERR_UNKNOWN;
                 }
             }
-            write_cr3((u64)userPageTable);
+            PMEM_set_page_table(userPageTable);
         } break;
         case _SYS_DEFAULT_MONITOR: {
             ELOS_FrameBuffer*  frameBuffer = (void*)arg0;
 
             // @TODO Check capability
 
-            write_cr3((u64)g_kernelPageTable);
+            PMEM_set_page_table(g_kernelPageTable);
 
             MON_FrameBuffer mon_frameBuffer;
             returnValue = getDefaultMonitor(userPageTable, &mon_frameBuffer);
 
-            write_cr3((u64)userPageTable); // @TODO Add PCID
+            PMEM_set_page_table(userPageTable); // @TODO Add PCID
             if (returnValue == ELOS_OK) {
                 frameBuffer->width = mon_frameBuffer.width;
                 frameBuffer->height = mon_frameBuffer.height;
@@ -540,7 +547,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
         //     // @TODO Check capability
 
-        //     write_cr3((u64)g_kernelPageTable);
+        //     PMEM_set_page_table(g_kernelPageTable);
 
         //     const char* phys_name = PMEM_virt_to_phys(userPageTable, (void*)name);
 
@@ -553,7 +560,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         //     ServiceEndpoint* tmp_endpoint;
         //     bool result = SRV_service_create(phys_name, &tmp_endpoint, queueSize);
             
-        //     write_cr3((u64)userPageTable);
+        //     PMEM_set_page_table(userPageTable);
             
         //     if (!result) {
         //         returnValue = ELOS_ERR_UNKNOWN;
@@ -577,7 +584,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
         //     // @TODO Check capability
 
-        //     write_cr3((u64)g_kernelPageTable);
+        //     PMEM_set_page_table(g_kernelPageTable);
 
         //     const char* phys_name = PMEM_virt_to_phys(userPageTable, (void*)name);
 
@@ -590,7 +597,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         //     ServiceEndpoint* tmp_endpoint;
         //     bool result = SRV_service_connect(phys_name, &tmp_endpoint, queueSize);
             
-        //     write_cr3((u64)userPageTable);
+        //     PMEM_set_page_table(userPageTable);
             
         //     if (!result) {
         //         returnValue = ELOS_ERR_UNKNOWN;
@@ -606,7 +613,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
         //     // @TODO Check capability
             
-        //     write_cr3((u64)g_kernelPageTable);
+        //     PMEM_set_page_table(g_kernelPageTable);
 
         //     const u8* phys_data = PMEM_virt_to_phys(userPageTable, (void*)data);
             
@@ -618,7 +625,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
         //     bool result = SRV_service_send((ServiceEndpoint*)endpoint, phys_data, size);
             
-        //     write_cr3((u64)userPageTable);
+        //     PMEM_set_page_table(userPageTable);
 
         //     if (!result) {
         //         returnValue = ELOS_ERR_UNKNOWN;
@@ -635,7 +642,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
         //     // @TODO Check capability
             
-        //     write_cr3((u64)g_kernelPageTable);
+        //     PMEM_set_page_table(g_kernelPageTable);
 
         //     ServiceEndpoint* tmp_senderEndpoint;
         //     u8* tmp_data;
@@ -647,7 +654,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         //         PMEM_map_memory(userPageTable, tmp_data, tmp_data, tmp_size, PMEM_FLAG_USER_SPACE);
         //     }
 
-        //     write_cr3((u64)userPageTable);
+        //     PMEM_set_page_table(userPageTable);
 
         //     if (senderEndpoint) {
         //         SET_ADDRESS_SIZE_TYPE(senderEndpoint, (ELOS_ServiceEndpoint)tmp_senderEndpoint);
@@ -667,13 +674,13 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             // @TODO Check capability
             
-            write_cr3((u64)g_kernelPageTable);
+            PMEM_set_page_table(g_kernelPageTable);
 
             SharedMemory* tmp_handle;
 
             bool result = SRV_shared_memory_create(size, &tmp_handle);
 
-            write_cr3((u64)userPageTable);
+            PMEM_set_page_table(userPageTable);
 
             if (!result) {
                 returnValue = ELOS_ERR_UNKNOWN;
@@ -688,11 +695,11 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             // @TODO Check capability
             
-            write_cr3((u64)g_kernelPageTable);
+            PMEM_set_page_table(g_kernelPageTable);
 
             bool result = SRV_shared_memory_grant((SharedMemory*)handle, processID);
 
-            write_cr3((u64)userPageTable);
+            PMEM_set_page_table(userPageTable);
 
             if (!result) {
                 returnValue = ELOS_ERR_UNKNOWN;
@@ -707,7 +714,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             // @TODO Check capability
             
-            write_cr3((u64)g_kernelPageTable);
+            PMEM_set_page_table(g_kernelPageTable);
 
             void* tmp_buffer;
             u64 tmp_size;
@@ -717,12 +724,12 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 bool mapped = PMEM_map_memory(userPageTable, tmp_buffer, tmp_buffer, tmp_size, PMEM_FLAG_USER_SPACE);
                 if (!mapped) {
                     returnValue = ELOS_ERR_UNKNOWN;
-                    write_cr3((u64)userPageTable);
+                    PMEM_set_page_table(userPageTable);
                     break;
                 }
             }
 
-            write_cr3((u64)userPageTable);
+            PMEM_set_page_table(userPageTable);
 
             if (!result) {
                 returnValue = ELOS_ERR_UNKNOWN;
@@ -742,7 +749,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             // @TODO Check capability
             
-            write_cr3((u64)g_kernelPageTable);
+            PMEM_set_page_table(g_kernelPageTable);
 
             u32 wholeBufferSize;
             ELOS_UserEventBuffer* tmp_buffer;
@@ -752,12 +759,12 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 bool mapped = PMEM_map_memory(userPageTable, tmp_buffer, tmp_buffer, wholeBufferSize, PMEM_FLAG_USER_SPACE);
                 if (!mapped) {
                     returnValue = ELOS_ERR_UNKNOWN;
-                    write_cr3((u64)userPageTable);
+                    PMEM_set_page_table(userPageTable);
                     break;
                 }
             }
 
-            write_cr3((u64)userPageTable);
+            PMEM_set_page_table(userPageTable);
 
             if (!result) {
                 returnValue = ELOS_ERR_UNKNOWN;
@@ -776,7 +783,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             // @TODO Check capability
             
-            write_cr3((u64)g_kernelPageTable);
+            PMEM_set_page_table(g_kernelPageTable);
 
             ELOS_AsyncRequestRing* tmp_requestRing = NULL;
             ELOS_AsyncCompletionRing* tmp_completionRing = NULL;
@@ -791,19 +798,19 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 if (!mapped) {
                     // @TODO Leaking created ring!
                     returnValue = ELOS_ERR_UNKNOWN;
-                    write_cr3((u64)userPageTable);
+                    PMEM_set_page_table(userPageTable);
                     break;
                 }
                 mapped = PMEM_map_memory(userPageTable, tmp_completionRing, tmp_completionRing, completionRingSize, PMEM_FLAG_USER_SPACE);
                 if (!mapped) {
                     // @TODO Leaking created ring!
                     returnValue = ELOS_ERR_UNKNOWN;
-                    write_cr3((u64)userPageTable);
+                    PMEM_set_page_table(userPageTable);
                     break;
                 }
             }
 
-            write_cr3((u64)userPageTable);
+            PMEM_set_page_table(userPageTable);
 
             if (result == ASYNC_OK) {
                 SET_ADDRESS_SIZE_TYPE(requestRing, tmp_requestRing);
@@ -819,7 +826,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             // @TODO Check capability
             
-            write_cr3((u64)g_kernelPageTable);
+            PMEM_set_page_table(g_kernelPageTable);
 
             u32 actualMaxEntries = 0;
             int result = ASYNC_destroy_async_rings(requestRing, completionRing, &actualMaxEntries);
@@ -834,7 +841,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             bool mapped = PMEM_unmap_memory(userPageTable, requestRing, requestRingSize);
             mapped = PMEM_unmap_memory(userPageTable, completionRing, completionRingSize);
 
-            write_cr3((u64)userPageTable);
+            PMEM_set_page_table(userPageTable);
 
             if (result == ASYNC_OK) {
                 returnValue = ELOS_OK;
@@ -848,11 +855,11 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             // @TODO Check capability
             
-            write_cr3((u64)g_kernelPageTable);
+            PMEM_set_page_table(g_kernelPageTable);
 
             int result = ASYNC_submit_async_ring(requestRing);
 
-            write_cr3((u64)userPageTable);
+            PMEM_set_page_table(userPageTable);
 
             if (result == ASYNC_OK) {
                 returnValue = ELOS_OK;
@@ -956,7 +963,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         case _SYS_SPAWN_PROCESS: {
             int exitCode = arg0;
             
-            // write_cr3((u64)g_kernelPageTable);
+            // PMEM_set_page_table(g_kernelPageTable);
 
             // check current process's permission to spawn processes
             // bool canSpawn = PERM_check(process->permissions, ELOS_PERM_PROCESS_SPAWN);
@@ -1004,11 +1011,11 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             // @TODO Check capability
 
-            write_cr3((u64)g_kernelPageTable);
+            PMEM_set_page_table(g_kernelPageTable);
 
             ELOS_AudioDevice dev = AUDIO_default_device();
 
-            write_cr3((u64)userPageTable);
+            PMEM_set_page_table(userPageTable);
             
             if (dev) {
                 SET_ADDRESS_SIZE_TYPE(device, dev);
@@ -1026,13 +1033,13 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             // @TODO Check capability
             // @TODO Validate device and info pointer
 
-            write_cr3((u64)g_kernelPageTable);
+            PMEM_set_page_table(g_kernelPageTable);
 
             ELOS_AudioDeviceInfo tmp_deviceInfo;
 
             bool yes = AUDIO_get_info(device, &tmp_deviceInfo);
 
-            write_cr3((u64)userPageTable);
+            PMEM_set_page_table(userPageTable);
 
             if (yes) {
                 *deviceInfo = tmp_deviceInfo;
@@ -1054,7 +1061,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             ELOS_AudioFormat tmp_format = *format;
             
-            write_cr3((u64)g_kernelPageTable);
+            PMEM_set_page_table(g_kernelPageTable);
 
             ELOS_AudioBuffer* tmp_buffer;
 
@@ -1073,7 +1080,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             } else {
                 returnValue = ELOS_OK;
             }
-            write_cr3((u64)userPageTable);
+            PMEM_set_page_table(userPageTable);
 
             SET_ADDRESS_SIZE_TYPE(buffer, tmp_buffer);
             
@@ -1094,7 +1101,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             uint8_t*              data      = (void*)arg1;
             u32                   size      = (u32)arg2;
 
-            write_cr3((u64)g_kernelPageTable);
+            PMEM_set_page_table(g_kernelPageTable);
 
             switch (operation) {
                 case ELOS_SYSOP_SHUTDOWN: {
@@ -1105,7 +1112,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
                 } break;
             } break;
             
-            write_cr3((u64)userPageTable);
+            PMEM_set_page_table(userPageTable);
 
         } break;
 

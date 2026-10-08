@@ -140,8 +140,8 @@ timer_isr:
 
     SAVE_CONTEXT
 
-    mov rax, g_kernelPageTable
-    mov cr3, rax
+    # mov rax, g_kernelPageTable
+    # mov cr3, rax
 
     mov rdi, rsp
 
@@ -257,8 +257,8 @@ syscall_reschedule:
 
     SAVE_CONTEXT
 
-    mov rax, g_kernelPageTable
-    mov cr3, rax
+    # mov rax, g_kernelPageTable
+    # mov cr3, rax
 
     mov rdi, rsp
 

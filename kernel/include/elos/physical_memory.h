@@ -45,6 +45,11 @@ void* PMEM_allocate(size_t bytes, void* ptr);
 void* PMEM_alloc_phys(size_t size);
 void PMEM_free_phys(void* paddr);
 
+
+PageTable* PMEM_get_page_table();
+void PMEM_set_page_table(PageTable* page);
+
+
 PageTable* PMEM_allocPageTable();
 
 // @TODO Cacheable, prefetachable, write through flags.
@@ -65,29 +70,17 @@ bool PMEM_map_memory(PageTable* table, void* virtual_address, void* physical_add
 */
 bool PMEM_unmap_memory(PageTable* table, void* virtual_address, size_t size);
 
+void* PMEM_reserve_virtual_mmio(void* physical_address, size_t size);
+
 void* PMEM_virt_to_phys(PageTable* table, void* virtual_address);
 
 
-#define VIRTUAL_KERNEL_OFFSET 0xFFFFFFFF80000000
-#define VIRTUAL_UNCACHED_KERNEL_OFFSET 0xFFFFFF8000000000
+extern size_t VIRTUAL_KERNEL_OFFSET;  // 0xFFFFFFFF80000000;
+extern size_t VIRTUAL_UNCACHED_KERNEL_OFFSET; //0xFFFFFF8000000000;
 
 
-static inline void* PMEM_phys_to_kernel(void* paddr) {
-    if ((size_t)paddr >= 0x80000000) {
-        return (void*)((size_t)paddr + VIRTUAL_KERNEL_OFFSET - 0x100000000);
-    } else {
-        return (void*)((size_t)paddr + VIRTUAL_KERNEL_OFFSET);
-    }
-}
+void* PMEM_phys_to_kernel(void* paddr);
 
-static inline void* PMEM_phys_to_uncached_kernel(void* paddr) {
-    return (void*)((size_t)paddr + VIRTUAL_UNCACHED_KERNEL_OFFSET);
-}
+void* PMEM_phys_to_uncached_kernel(void* paddr);
 
-static inline void* PMEM_kernel_to_phys(void* vaddr) {
-    if ((size_t)vaddr >= 0xFFFFFFFF80000000) {
-        return (void*)((size_t)paddr - VIRTUAL_KERNEL_OFFSET + 0x100000000);
-    } else {
-        return (void*)((size_t)paddr - VIRTUAL_KERNEL_OFFSET);
-    }
-}
+void* PMEM_kernel_to_phys(void* vaddr);

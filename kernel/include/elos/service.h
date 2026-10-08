@@ -11,7 +11,7 @@
 // } RingBuffer;
 
 typedef struct {
-    u8* buffer;
+    u8* phys_buffer;
     u64 buffer_size;
 } SharedMemory;
 
@@ -62,7 +62,7 @@ bool SRV_shared_memory_create(u64 size, SharedMemory** handle);
 
 bool SRV_shared_memory_grant(SharedMemory* handle, ELOS_ProcessID processID);
 
-bool SRV_shared_memory_info(SharedMemory* handle, void** buffer, u64* size);
+bool SRV_shared_memory_info(SharedMemory* handle, void** phys_buffer, u64* size);
 
 
 

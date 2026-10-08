@@ -702,8 +702,8 @@ ELOS_Error hda_create_buffer(AudioDevice _device, ELOS_AudioFormat* format, u32 
 
 
 void hda_interrupt(u32 vector, InterruptFrame* frame) {
-    u64 prev_cr3 = read_cr3();
-    write_cr3((u64)g_kernelPageTable);
+    // Page* prev_table = PMEM_get_page_table();
+    // PMEM_set_page_table(g_kernelPageTable);
 
     // We have one interrupt handler for all HDA controllers.
     // On interrupt we enumerate all controllers and all their devices and
@@ -750,6 +750,6 @@ void hda_interrupt(u32 vector, InterruptFrame* frame) {
         }
     }
 
-    write_cr3(prev_cr3);
+    // PMEM_set_page_table(prev_table);
 }
 

@@ -74,7 +74,8 @@ void init_paging(BootAPI* boot_api) {
 
     // Map high kernel addresses
     Page* pdpt_high = get_fixed_table();
-    rootTable->entries[511] = (size_t)PMEM_kernel_to_phys(pdpt_high);
+    size_t phys_pdpt_high = (size_t)PMEM_kernel_to_phys(pdpt_high);
+    rootTable->entries[511] = phys_pdpt_high | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
     // indices based on VIRTUAL_KERNEL_OFFSET
     pdpt_high->entries[508] = (size_t)0x80000000 | PAGE_BIT_HUGE_PAGE | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
     pdpt_high->entries[509] = (size_t)0xC0000000 | PAGE_BIT_HUGE_PAGE | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
@@ -96,7 +97,8 @@ void init_paging(BootAPI* boot_api) {
     // pdpt_high->entries[3] = (size_t)0xC0000000 | PAGE_BIT_HUGE_PAGE | PAGE_BIT_WRITE | PAGE_BIT_PRESENT;
 
 
-    dynamicTable_base = (size_t)PMEM_alloc_phys(dynamicTable_size, PMEM_FLAG_NONE);
+    dynamicTable_base = (size_t)PMEM_alloc_phys(dynamicTable_size);
+    dynamicTable_base = (u64)PMEM_phys_to_kernel((void*)dynamicTable_base);
 
     // PMEM_map_memory(rootTable, (void*)dynamicTable_base, (void*)dynamicTable_base, dynamicTable_size, PMEM_FLAG_BOOT_RESERVE);
     // PMEM_map_memory(rootTable, __kernel_start, PMEM_kernel_to_phys(__kernel_start), (size_t)__kernel_end - (size_t)__kernel_start, PMEM_FLAG_BOOT_RESERVE | PMEM_FLAG_EXECUTABLE);
@@ -106,7 +108,7 @@ void init_paging(BootAPI* boot_api) {
     //     PMEM_map_memory(rootTable, boot_api->frame_buffer_base, boot_api->frame_buffer_base, boot_api->frame_buffer_size, PMEM_FLAG_NOT_CACHED|PMEM_FLAG_BOOT_RESERVE);
     // }
 
-    write_cr3((size_t)PMEM_kernel_to_phys(g_kernelPageTable)); // Will fully flush TLB
+    PMEM_set_page_table(g_kernelPageTable); // Will fully flush TLB
 
     memset((void*)dynamicTable_base, 0, dynamicTable_size);
 

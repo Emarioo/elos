@@ -260,7 +260,7 @@ bool ASYNC_handler_specific(AsyncRing* ring) {
 
 
 bool map_user_buffer(PageTable* userTable, const void* buffer, size_t size) {
-    PageTable* kernelPageTable = (void*)read_cr3();
+    // PageTable* g_kernelPageTable = (void*)read_cr3();
 
     uintptr_t virtAddress = (uintptr_t)buffer & ~(uintptr_t)(PAGE_SIZE-1);
     uintptr_t virtAddressEnd = ((uintptr_t)buffer + size + PAGE_SIZE-1) & ~(uintptr_t)(PAGE_SIZE-1);
@@ -270,7 +270,7 @@ bool map_user_buffer(PageTable* userTable, const void* buffer, size_t size) {
             printf("map_user_buffer: Not mapped by user 0x%zx\n", virtAddress);
             return false;
         }
-        bool mapped = PMEM_map_memory(kernelPageTable, (void*)virtAddress, (void*)phys, PAGE_SIZE, PMEM_FLAG_NONE);
+        bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)virtAddress, (void*)phys, PAGE_SIZE, PMEM_FLAG_NONE);
         if (!mapped) {
             printf("map_user_buffer: Could not map 0x%zx -> 0x%zx\n", virtAddress, phys);
             return false;
@@ -281,7 +281,7 @@ bool map_user_buffer(PageTable* userTable, const void* buffer, size_t size) {
 }
 
 bool map_user_path(PageTable* userTable, const char* path) {
-    PageTable* kernelPageTable = (void*)read_cr3();
+    // PageTable* kernelPageTable = (void*)read_cr3();
 
     const char* pathPointer = path;
     while (1) {
@@ -291,7 +291,7 @@ bool map_user_path(PageTable* userTable, const char* path) {
             printf("map_user_path: Null terminator is not mapped 0x%zx\n", pathPointer);
             break;
         }
-        bool mapped = PMEM_map_memory(kernelPageTable, (void*)pathPointer, (void*)phys, PAGE_SIZE, PMEM_FLAG_NONE);
+        bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)pathPointer, (void*)phys, PAGE_SIZE, PMEM_FLAG_NONE);
         if (!mapped) {
             printf("map_user_path: Could not map 0x%zx -> 0x%zx\n", pathPointer, phys);
             break;

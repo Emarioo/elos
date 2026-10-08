@@ -280,7 +280,8 @@ volatile u32 g_ring_lock;
 static void setup_transmit_ring() {
     // @TODO Tweak the paraameters.
     int g_transmit_ring_size = NUM_OF_TX_DESCRIPTORS * 16;
-    g_transmit_ring = PMEM_alloc_phys(g_transmit_ring_size, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+    void* phys_transmit_ring = PMEM_alloc_phys(g_transmit_ring_size);
+    g_transmit_ring = PMEM_phys_to_uncached_kernel(phys_transmit_ring);
     memset(g_transmit_ring, 0, g_transmit_ring_size);
     
     if ((u64)g_transmit_ring_size & 127) {
@@ -295,11 +296,11 @@ static void setup_transmit_ring() {
 
     for (int i = 0; i < NUM_OF_TX_DESCRIPTORS; i++){
         TransmitDescriptor* descriptor = g_transmit_ring + i;
-        descriptor->buffer_address = PMEM_alloc_phys(SIZE_OF_TX_DESCRIPTOR_BUFFER, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+        descriptor->buffer_address = PMEM_alloc_phys(SIZE_OF_TX_DESCRIPTOR_BUFFER);
     }
     
-    write_register(CARD_REG_TDBAL, ((u64)g_transmit_ring) & 0xFFFFFFFF);
-    write_register(CARD_REG_TDBAH, ((u64)g_transmit_ring) >> 32);
+    write_register(CARD_REG_TDBAL, ((size_t)phys_transmit_ring) & 0xFFFFFFFF);
+    write_register(CARD_REG_TDBAH, ((size_t)phys_transmit_ring) >> 32);
     write_register(CARD_REG_TDLEN, g_transmit_ring_size);
     write_register(CARD_REG_TDH, 0);
     write_register(CARD_REG_TDT, 0);
@@ -312,7 +313,8 @@ static void setup_transmit_ring() {
 
 static void setup_receive_ring() {
     int g_receive_ring_size = NUM_OF_RX_DESCRIPTORS * 16; // you can substitute 16 with sizeof(receive_descriptor_t)
-    g_receive_ring = PMEM_alloc_phys(g_receive_ring_size, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+    void* phys_receive_ring = PMEM_alloc_phys(g_receive_ring_size);
+    g_receive_ring = PMEM_phys_to_uncached_kernel(phys_receive_ring);
     memset(g_receive_ring, 0, g_receive_ring_size);
     // Ring size must be 128-byte aligned
     if ((u64)g_receive_ring_size & 127) {
@@ -327,11 +329,11 @@ static void setup_receive_ring() {
     
     for (int i = 0; i < NUM_OF_RX_DESCRIPTORS; i++){
         ReceiveDescriptor* descriptor = g_receive_ring + i;
-        descriptor->buffer_address = PMEM_alloc_phys(SIZE_OF_RX_DESCRIPTOR_BUFFER, PMEM_FLAG_IDENTITY_MAPPED | PMEM_FLAG_NOT_CACHED);
+        descriptor->buffer_address = PMEM_alloc_phys(SIZE_OF_RX_DESCRIPTOR_BUFFER);
     }
     
-    write_register(CARD_REG_RDBAL, ((u64)g_receive_ring) & 0xFFFFFFFF); // Base Address Low
-    write_register(CARD_REG_RDBAH, ((u64)g_receive_ring) >> 32); // Base Address High
+    write_register(CARD_REG_RDBAL, ((size_t)phys_receive_ring) & 0xFFFFFFFF); // Base Address Low
+    write_register(CARD_REG_RDBAH, ((size_t)phys_receive_ring) >> 32); // Base Address High
     write_register(CARD_REG_RDLEN, g_receive_ring_size); // Ring Size
     write_register(CARD_REG_RDH, 0); // Set it to the first descriptor
     write_register(CARD_REG_RDT, NUM_OF_RX_DESCRIPTORS - 1); // Set it to the last descriptor
@@ -351,8 +353,9 @@ static void send_data(const void* data, u32 size, bool EOP){
     u32 tail = read_register(CARD_REG_TDT);
     TransmitDescriptor* tx = g_transmit_ring + tail; // Get the descriptor the tail is pointing at (next available descriptor)
 
+    void* buffer_address = PMEM_phys_to_uncached_kernel(tx->buffer_address);
 
-    memcpy(tx->buffer_address, data, size); // Copy the data to the previously allocated buffer
+    memcpy(buffer_address, data, size); // Copy the data to the previously allocated buffer
 
     tx->length = size; // Set the length of the descriptor
 
@@ -394,14 +397,15 @@ void i82574_receive_packet(void** out_buffer, u32* out_size) {
         
         bool eop = g_receive_ring[idx].status & CARD_BIT_RD_STATUS_EOP;
         u16 len = g_receive_ring[idx].length;
-        void* data = g_receive_ring[idx].buffer_address;
+        void* phys_data = g_receive_ring[idx].buffer_address;
+        void* data = PMEM_phys_to_uncached_kernel(phys_data);
         
         // Handle multiple-descriptor packets
         if (buffer == NULL){ // This is the first descriptor of the packet
             // @TODO Keep a pre-allocated list of allocations to use.
             // @TODO Can we send buffer in ring directly and swap it with a fresh one
             //    to avoid memcpy?
-            buffer = PMEM_alloc(len); // use your kernel's heap allocator
+            buffer = PMEM_alloc(len);
             buffer_len = len;
             memcpy(buffer, data, len);
         } else {
@@ -450,8 +454,8 @@ void i82574_interrupt_handler(u32 vector, InterruptFrame* frame) {
     }
     
     // @TODO THIS IS SLOW. Implement high kernel mapping.
-    u64 prev_cr3 = read_cr3();
-    write_cr3((size_t)g_kernelPageTable);
+    // u64 prev_cr3 = read_cr3();
+    // write_cr3((size_t)g_kernelPageTable);
     
 
     // @TODO Check which network controller triggered.
@@ -500,6 +504,6 @@ void i82574_interrupt_handler(u32 vector, InterruptFrame* frame) {
     }
 
 exit:
-    write_cr3(prev_cr3);
+    // write_cr3(prev_cr3);
 }
 

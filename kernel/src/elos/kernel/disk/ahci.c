@@ -190,7 +190,7 @@ bool ahci_pci_scan(Disk_ScanInfo* scanInfo, PCI_ConfigSpace* config) {
         Mainly name and disk size.
     */
 
-    volatile u16 buffer[512/2]; // @TODO I think this might need to be uncached memory since AHCI writes data into it? Does CPU recognize writes from other devices and invalidate the cache or does it only do that when other CPUs write?
+    u16 buffer[512/2]; // @TODO I think this might need to be uncached memory since AHCI writes data into it? Does CPU recognize writes from other devices and invalidate the cache or does it only do that when other CPUs write?
 
     for (int i = 0; i < diskDevices_len; i++) {
         DiskDevice* dev = diskDevices[i];
@@ -632,7 +632,7 @@ ELOS_Error ahci_write(DiskDevice* device, u64 byteOffset, u64 byteSize, void* bu
     // cmdheader->prdtl = (uint16_t)((count-1)>>4) + 1;	// PRDT entries count
     cmdheader->prdtl = 1;	// PRDT entries count
 
-    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL*)PMEM_phys_to_kernel((void*)u64)cmdheader->ctba);
+    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL*)PMEM_phys_to_kernel((void*)(u64)cmdheader->ctba);
     memset(cmdtbl, 0, sizeof(HBA_CMD_TBL));
     memset(&cmdtbl->prdt_entry[0], 0, sizeof(cmdtbl->prdt_entry[0]));
 

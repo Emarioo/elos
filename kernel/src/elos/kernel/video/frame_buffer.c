@@ -5,6 +5,7 @@
 #include "elos/common/string.h"
 
 #include "elos/cpu.h"
+#include "elos/physical_memory.h"
 
 #include "elos/kernel/video/frame.h"
 #include "elos/kernel/video/font/font.h"
@@ -26,7 +27,11 @@ static int pos_offset_x = 0;
 
 
 void FB_init(BootAPI* boot_api) {
-    g_frame_buffer.base = boot_api->frame_buffer_base;
+    // We do cached memory (not PMEM_phys_to_uncached_kernel) because
+    // page table we setup in start.s only has first 4GB and last 4GB mapped in the address space. 
+    // We could include the uncached area at 0xFFFFFF8000000000 but we don't at the moment.
+    g_frame_buffer.base = PMEM_phys_to_kernel(boot_api->frame_buffer_base);
+    // g_frame_buffer.base = PMEM_phys_to_uncached_kernel(boot_api->frame_buffer_base);
     g_frame_buffer.size = boot_api->frame_buffer_size;
     g_frame_buffer.width = boot_api->frame_buffer_width;
     g_frame_buffer.height = boot_api->frame_buffer_height;
