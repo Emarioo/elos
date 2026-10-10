@@ -85,14 +85,6 @@ void EXEC_timer_handler(ContextFrame* frame) {
         memcpy(&currentThread->frame, frame, sizeof(*frame));
         memcpy(frame, &nextThread->frame, sizeof(*frame));
 
-        if (!currentThread->userSpace) {
-            // If we are on a kernel thread (not the original one at boot) then when popping the frame
-            // we will switch page table and tripple fault because the stack isn't mapped.
-            // We will implement high half kernel which will solve this problem but for now we make sure
-            // it's mapped here (very inefficient).
-            PMEM_map_memory((PageTable*)frame->cr3, currentThread->stack, currentThread->stack, currentThread->stack_size, PMEM_FLAG_NONE);
-        }
-
         // SS privilege gets cleared on my laptop (not in QEMU).
         // May be doing something wrong but
         // this ensures we get right privilege.
@@ -113,6 +105,13 @@ void EXEC_timer_handler(ContextFrame* frame) {
         frame->compat.esp    = frame->rsp;
         frame->compat.ss     = frame->ss;
     }
+    
+    // if(nextThread->userSpace) {
+    //     PageTable* oldt = PMEM_phys_to_kernel((PageTable*)currentThread->frame.cr3);
+    //     PageTable* newt = PMEM_phys_to_kernel((PageTable*)frame->cr3);
+
+    //     printf("cr3 %zx\n", frame->cr3);
+    // }
 
 exit:
     UNLOCK(&core->thread_lock);
@@ -151,7 +150,7 @@ void EXEC_init() {
         frame->rsp = rsp;
         frame->rflags = 0x200; // interrupt flag
         frame->rip = (u64)idle_thread->entry;
-        frame->cr3 = (u64)g_kernelPageTable;
+        frame->cr3 = (u64)PMEM_kernel_to_phys(g_kernelPageTable);
     }
     
     // @TODO Is this the first core?
@@ -220,7 +219,7 @@ bool EXEC_create_kernel_thread(void* entry, int pinnedCoreIndex) {
     frame->rflags = 0x200; // interrupt flag
     frame->rdi = (u64)entry;
     frame->rip = (u64)thread_bootstrap;
-    frame->cr3 = (u64)g_kernelPageTable;
+    frame->cr3 = (u64)PMEM_kernel_to_phys(g_kernelPageTable);
 
     returnValue = true;
 
@@ -303,7 +302,7 @@ bool EXEC_create_user_thread(const char* path, int pinnedCoreIndex) {
     frame->rsp = rsp;
     frame->rflags = 0x202; // interrupt flag, disable IOPL
     frame->rip = (u64)object.virt_entry_point;
-    frame->cr3 = (u64)object.pageTable;
+    frame->cr3 = (u64)PMEM_kernel_to_phys(object.pageTable);
 
     // This is so dumb. a page for a tiny little string
     char* name = PMEM_alloc_phys(4096);

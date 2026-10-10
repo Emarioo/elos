@@ -71,6 +71,7 @@ void init_paging(BootAPI* boot_api) {
 
     Page* rootTable = get_fixed_table();
     g_kernelPageTable = rootTable;
+    g_phys_kernelPageTable = PMEM_kernel_to_phys(rootTable);
 
     // Map high kernel addresses
     Page* pdpt_high = get_fixed_table();

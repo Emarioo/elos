@@ -25,6 +25,7 @@ typedef struct Page {
 typedef Page PageTable;
 
 extern PageTable* g_kernelPageTable;
+extern void*      g_phys_kernelPageTable;
 
 void PMEM_init(BootAPI* boot_api);
 

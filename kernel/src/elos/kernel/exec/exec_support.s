@@ -362,7 +362,7 @@ syscall_reschedule32:
 
     SAVE_CONTEXT
 
-    mov rax, g_kernelPageTable
+    mov rax, g_phys_kernelPageTable
     mov cr3, rax
 
     mov rdi, rsp

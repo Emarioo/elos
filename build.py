@@ -183,6 +183,7 @@ def main():
         HAS_AUDIO = False
         # HAS_AUDIO = True
 
+        # @TODO Try 2 cores
         core_count = 2
         qemu_flags = f'''
             -enable-kvm -cpu host

@@ -239,15 +239,14 @@ void CPU_init(BootAPI* boot_api) {
     // Starting cores requires some sleep and precise timings.
     // We must calibrate TSC first.
 
-    // @NOCHECKIN Bring back
-    // for (int i=0;i<acpi_lapic_ids_len;i++) {
-    //     u32 apic_id = acpi_lapic_ids[i];
-    //     if (apic_id == lapic_id)
-    //         continue; // don't start yourself
+    for (int i=0;i<acpi_lapic_ids_len;i++) {
+        u32 apic_id = acpi_lapic_ids[i];
+        if (apic_id == lapic_id)
+            continue; // don't start yourself
 
-    //     // printf("APIC id: %d\n", apic_id);
-    //     start_core(apic_id);
-    // }
+        // printf("APIC id: %d\n", apic_id);
+        start_core(apic_id);
+    }
 
     // while (1) pause();
 }
@@ -275,7 +274,22 @@ typedef struct {
     u64 ss;
 } IretFrame;
 
+void print_backtrace(size_t* frame_pointer) {
+    u64 rip;
+    u64 next_rbp;
+    while ((size_t)frame_pointer > 0x100000) {
+        PageTable* table = PMEM_get_page_table();
+        void* phys_fp = PMEM_virt_to_phys(table, frame_pointer);
+        if (!phys_fp) {
+            break;
+        }
 
+        rip = frame_pointer[1];
+        next_rbp = frame_pointer[0];
+        printf(" trace %zx\n", rip);
+        frame_pointer = (void*) next_rbp;
+    }
+}
 
 void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     // PMEM_set_page_table(g_kernelPageTable);
@@ -302,7 +316,7 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
     if (isr_number == 14) {
         fault_address = read_cr2();
     }
-    printf("EXCEPTION #%d (rip=0x%zx err=0x%x core=%d rsp=0x%zx addr=0x%zx)\n", isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp, fault_address);
+    printf("EXCEPTION #%d (rip=%zx err=0x%x core=%d rsp=0x%zx addr=0x%zx)\n", isr_number, frame->rip, frame->error_code, coreIndex, frame->rsp, fault_address);
 
     if (isr_number == 13) {
         IretFrame* iretFrame = (void*)((char*)frame + 8 + sizeof(PageFaultFrame));
@@ -313,6 +327,15 @@ void exception_handler(int isr_number, PageFaultFrame* frame, u64 extra) {
         printf("  rsp=%x\n", iretFrame->rsp);
         printf("  ss=%x\n", iretFrame->ss);
     }
+
+    u64 rbp;
+    __asm__ volatile (
+        "mov %%rbp, %0"
+        :
+        : "m"(rbp)
+    );
+    print_backtrace((void*)rbp);
+
     while (1) asm volatile ( "cli\nhlt\n" );
 }
 
@@ -339,7 +362,7 @@ void idt_set_descriptor(u32 coreIndex, uint8_t vector, void* isr, uint8_t flags)
     
     IDT_Entry* descriptor = &g_idt[coreIndex][vector];
 
-    descriptor->isr_low        = (uint64_t)PMEM_kernel_to_phys(isr) & 0xFFFF;
+    descriptor->isr_low        = (uint64_t)isr & 0xFFFF;
     descriptor->kernel_cs      = KERNEL_CODE_SEGMENT;
     descriptor->ist            = 0;
     descriptor->attributes     = flags;
@@ -359,7 +382,7 @@ void init_gdt() {
 
     for (int coreIndex=0;coreIndex<CORE_LIMIT;coreIndex++) {
         u64 virt_stack = (u64)&tss_stack_space[coreIndex] + sizeof(tss_stack_space[coreIndex]);
-        _tss_entry[coreIndex].rsp0 = (size_t)PMEM_kernel_to_phys((void*)virt_stack);
+        _tss_entry[coreIndex].rsp0 = virt_stack;
 
         // Null descriptor.
         _gdt[coreIndex][0] = 0;
@@ -402,7 +425,7 @@ void init_gdt() {
         _gdt[coreIndex][TASK_STATE_SEGMENT/8] = MAKE_SEGMENT_DESC(&_tss_entry[coreIndex], sizeof(_tss_entry[coreIndex])-1,
             GDT_ACCESS_PRESENT|GDT_ACCESS_TSS|GDT_TYPE_TSS_AVAILABLE, 0);
 
-        _gdt[coreIndex][TASK_STATE_SEGMENT/8 + 1] = 0; // @TODO _tss_entry exists in low 32-bit addess space so the "higher" part of TSS can just be zero.
+        _gdt[coreIndex][TASK_STATE_SEGMENT/8 + 1] = ((u64)&_tss_entry[coreIndex]) >> 32;
 
         // User data and code segment are in this order because of sysret loading CS = STAR 63:48 +16 and SS = STAR 63:48 +8
 
@@ -524,7 +547,7 @@ void init_syscall() {
     //   32-bit compatiblity CS = USER_CODE_COMPATIBILITY_SEGMENT
     u64 star = ((u64)(KERNEL_CODE_SEGMENT) << 32)
         | ((u64)(USER_CODE_COMPATIBILITY_SEGMENT) << 48);
-    u64 lstar = (u64)PMEM_kernel_to_phys(syscall_handler);
+    u64 lstar = (u64)syscall_handler;
     u64 sfmask = 0x200LU; // Clears interrupt enable flag.
     wrmsr(MSR_STAR,   star);
     wrmsr(MSR_LSTAR,  lstar);
@@ -1158,7 +1181,8 @@ void CPU_set_msi_irq(u32 coreId, u32 local_irq, FN_interrupt_handler handler, u6
     u32 lapic_id = coreId;
     u32 vector = IDT_START_OF_IRQS + local_irq;
 
-    irq_table[coreId][local_irq] = PMEM_kernel_to_phys(handler);
+    // irq_table[coreId][local_irq] = PMEM_kernel_to_phys(handler);
+    irq_table[coreId][local_irq] = handler;
 
     // @TODO Not sure 0xFEE should be hardcoded. Check intel manual, maybe we should use lapic_address from MADT.
 

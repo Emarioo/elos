@@ -80,28 +80,29 @@ AsyncRing* makeAsyncRing(u32 ringMask) {
     u64 requestRingSize = sizeof(ELOS_AsyncRequestRing) + maxEntries * sizeof(ELOS_AsyncRequest);
     u64 completetionRingSize = sizeof(ELOS_AsyncCompletionRing) + maxEntries * sizeof(ELOS_AsyncCompletion);
 
-    void* requestAddress = PMEM_alloc_phys(requestRingSize);
-    if (!requestAddress) {
+    void* phys_requestAddress = PMEM_alloc_phys(requestRingSize);
+    if (!phys_requestAddress) {
         return NULL;
     }
-    void* completeAddress = PMEM_alloc_phys(completetionRingSize);
-    if (!completeAddress) {
-        PMEM_free(requestAddress);
+    void* phys_completeAddress = PMEM_alloc_phys(completetionRingSize);
+    if (!phys_completeAddress) {
+        PMEM_free_phys(phys_requestAddress);
         // @TODO @MEMORY_LEAK Free requestAddress!
         return NULL;
     }
 
-    memset(requestAddress, 0, requestRingSize);
-    memset(completeAddress, 0, completetionRingSize);
+    newRing->requestRing = PMEM_phys_to_kernel(phys_requestAddress);
+    newRing->completionRing = PMEM_phys_to_kernel(phys_completeAddress);
+
+    memset(newRing->requestRing, 0, requestRingSize);
+    memset(newRing->completionRing, 0, completetionRingSize);
 
     newRing->ringMask = ringMask;
 
-    newRing->requestRing = PMEM_phys_to_kernel(requestAddress);
-    newRing->user_requestRing = requestAddress;
+    newRing->user_requestRing = phys_requestAddress;
     *(u32*)&newRing->requestRing->ringMask = ringMask;
 
-    newRing->completionRing = PMEM_phys_to_kernel(completeAddress);
-    newRing->user_completionRing = completeAddress;
+    newRing->user_completionRing = phys_completeAddress;
     *(u32*)&newRing->completionRing->ringMask = ringMask;
 
     newRing->used = true;
@@ -260,8 +261,6 @@ bool ASYNC_handler_specific(AsyncRing* ring) {
 
 
 bool map_user_buffer(PageTable* userTable, const void* buffer, size_t size) {
-    // PageTable* g_kernelPageTable = (void*)read_cr3();
-
     uintptr_t virtAddress = (uintptr_t)buffer & ~(uintptr_t)(PAGE_SIZE-1);
     uintptr_t virtAddressEnd = ((uintptr_t)buffer + size + PAGE_SIZE-1) & ~(uintptr_t)(PAGE_SIZE-1);
     while (virtAddress < virtAddressEnd) {
@@ -281,8 +280,6 @@ bool map_user_buffer(PageTable* userTable, const void* buffer, size_t size) {
 }
 
 bool map_user_path(PageTable* userTable, const char* path) {
-    // PageTable* kernelPageTable = (void*)read_cr3();
-
     const char* pathPointer = path;
     while (1) {
         // Map first page
@@ -349,7 +346,7 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
 
     #define GET_SANITIZED_PATH(out_PATH, PATH) \
         *out_PATH = PATH; \
-        _temp_mapped = map_user_path((void*)ring->thread->frame.cr3, PATH); \
+        _temp_mapped = map_user_path(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), PATH); \
         if (!_temp_mapped)  break;
 
     #define GET_SANITIZED_FILE(out_FILE, FILE) \
@@ -361,17 +358,17 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
     #define GET_SANITIZED_BUFFER(out_BUFFER, out_SIZE, BUFFER, SIZE) \
         *out_BUFFER = BUFFER; \
         *out_SIZE = SIZE; \
-        _temp_mapped = map_user_buffer((void*)ring->thread->frame.cr3, BUFFER, SIZE); \
+        _temp_mapped = map_user_buffer(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), BUFFER, SIZE); \
         if (!_temp_mapped)  break;
 
     #define GET_SANITIZED_STRUCT(out_STRUCT_PTR, STRUCT_PTR) \
         *(void**)out_STRUCT_PTR = STRUCT_PTR; \
-        _temp_mapped = map_user_buffer((void*)ring->thread->frame.cr3, STRUCT_PTR, sizeof(*STRUCT_PTR)); \
+        _temp_mapped = map_user_buffer(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), STRUCT_PTR, sizeof(*STRUCT_PTR)); \
         if (!_temp_mapped)  break;
 
     #define GET_SANITIZED_CSTRUCT(out_STRUCT_PTR, STRUCT_PTR) \
         *(const void**)out_STRUCT_PTR = STRUCT_PTR; \
-        _temp_mapped = map_user_buffer((void*)ring->thread->frame.cr3, STRUCT_PTR, sizeof(*STRUCT_PTR)); \
+        _temp_mapped = map_user_buffer(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), STRUCT_PTR, sizeof(*STRUCT_PTR)); \
         if (!_temp_mapped)  break;
 
     // printf("Request 0x%x 0x%p 0x%x\n", request->operation, request->open.path, request->open.flags);

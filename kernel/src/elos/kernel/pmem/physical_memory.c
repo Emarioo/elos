@@ -43,6 +43,7 @@ PhysicalMemoryRegion g_used_regions[MAX_REGIONS];
 
 
 PageTable* g_kernelPageTable;
+void*      g_phys_kernelPageTable;
 
 size_t VIRTUAL_KERNEL_OFFSET;
 size_t VIRTUAL_UNCACHED_KERNEL_OFFSET;

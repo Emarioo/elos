@@ -987,7 +987,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         
         case _SYS_PROCESS_ID: {
             // @TODO Implement process id.
-            returnValue = core->active_thread;
+            returnValue = core->active_thread + 1;
         } break;
 
         case _SYS_KILL_PROCESS: {

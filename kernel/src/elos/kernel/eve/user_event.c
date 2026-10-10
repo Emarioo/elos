@@ -73,7 +73,7 @@ bool EVE_request_user_event_buffer(u32 maxEvents, ELOS_UserEventBuffer** buffer,
     eventBuffer->user_eventBuffer = phys_newBuffer;
 
     *wholeBufferSize = bufferSize;
-    *buffer = newBuffer;
+    *buffer = phys_newBuffer;
     returnValue = true;
 
 exit:

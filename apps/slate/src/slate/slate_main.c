@@ -89,13 +89,12 @@ void play_sound(const char* path);
 void dumpdir(const char* path, int depth);
 
 void _start() {
+    
 
     // @NOCHECKIN Temporary
     // dumpdir("/", 0);
 
     SYS_ticks_per_second(&ticks_per_second);
-
-
 
     g_instance = prism_init();
     if (!g_instance) {
@@ -119,8 +118,10 @@ void _start() {
         printf("slate: Could not create user event buffer\n");
         exit(1);
     }
+    // while (1) ;
 
     stdui_set_surface(&g_surfaceInfo);
+
 
     // play_sound("/pkg/wav/dream.wav");
 
@@ -197,7 +198,6 @@ void editor_loop() {
         characterWidth = tempWidth / temp.len;
     }
 
-    
     while (1) {
         
         int textContent_width = g_surfaceInfo.width - textContent_x;
@@ -214,6 +214,7 @@ void editor_loop() {
             // printf("scan=0x%x code=%d chr=%c pressed=%d\n", event.key.scancode, event.key.keycode, (char)event.key.character, event.key.value);
 
             apply_numpad(&event.key.keycode, event.key.mods);
+
 
 
             ELOS_UserEvent_Key key = event.key;
@@ -303,6 +304,7 @@ void editor_loop() {
                 }
             }
         }
+
 
         draw_rect(0, 0, g_surfaceInfo.width, g_surfaceInfo.height, session->config.color_background);
 
