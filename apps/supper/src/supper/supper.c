@@ -492,11 +492,11 @@ void init_network() {
     ELOS_Error error = net_open(&address, &g_net_handle);
     
     if (error != ELOS_OK) {
-        printf("NET_OPEN was not OK\n");
+        printf("supper: NET_OPEN was not OK\n");
         g_net_handle = NULL;
         return;
     }
-    printf("NET_OPEN success, handle=%p\n", g_net_handle);
+    // printf("supper: NET_OPEN success, handle=%p\n", g_net_handle);
 }
 
 

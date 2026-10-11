@@ -174,6 +174,7 @@ void editor_loop() {
     // Normally we want to edit /boot/TEMPLATE.CFG but it exists on USB drive which
     // we don't have disk support for so we edit this one from initrd instead.
     const char* defaultPath = "/TEMPLATE.CFG";
+    // const char* defaultPath = "/dev2p0/pkg/slate/stdfont.psf";
 
     slate_open(session, defaultPath);
 

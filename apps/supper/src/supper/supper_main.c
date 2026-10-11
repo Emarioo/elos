@@ -53,13 +53,13 @@ void _start() {
 
     g_instance = prism_init();
     if (!g_instance) {
-        printf("slate: Could not init PRISM client\n");
+        printf("supper: Could not init PRISM client\n");
         exit(1);
     }
 
     g_surface = prism_createSurface(g_instance, 800, 600);
     if (!g_surface) {
-        printf("slate: Could not create surface\n");
+        printf("supper: Could not create surface\n");
         exit(1);
     }
 
@@ -70,7 +70,7 @@ void _start() {
     ELOS_Error error;
     error = SYS_request_user_event_buffer(100, &g_userEvents);
     if (error != ELOS_OK) {
-        printf("slate: Could not create user event buffer\n");
+        printf("supper: Could not create user event buffer\n");
         exit(1);
     }
 

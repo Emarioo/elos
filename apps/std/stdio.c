@@ -350,7 +350,7 @@ static size_t cached_read(void* ptr, size_t size, FILE *restrict stream) {
 size_t fread(void* ptr, size_t size, size_t n, FILE *restrict stream) {
     ELOS_Error error;
 
-    // printf("fread pos=0x%zx bytes=0x%zx\n", stream->position, size * n);
+    // printf("fread pos=0x%lx bytes=0x%zx\n", stream->position, size * n);
 
     size_t readBytes = cached_read(ptr, size * n, stream);
     stream->position += (readBytes * size) / size;
@@ -512,6 +512,8 @@ size_t fwrite(const void* ptr, size_t size, size_t n, FILE *restrict stream) {
         SYS_debug_log(ptr, size * n);
         return n;
     }
+
+    // printf("fwrite pos=0x%lx bytes=0x%zx\n", stream->position, size * n);
 
 
     size_t writtenBytes = cached_write(ptr, size * n, stream);

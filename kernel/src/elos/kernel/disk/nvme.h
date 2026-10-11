@@ -59,7 +59,7 @@ typedef struct {
     u16 status;
 } NVME_CompletionQueueEntry;
 
-#define NVME_HAS_PHASE_BIT(STATUS) ((STATUS) & 0x1)
+#define NVME_COMPARE_PHASE_BIT(STATUS, CURRENT_PHASE) (((STATUS) & 0x1) == (CURRENT_PHASE))
 
 typedef enum {
     NVME_CMD_CREATE_IO_SUBMISSION_QUEUE = 0x1,
@@ -93,9 +93,11 @@ struct NVME_Context {
 
     u32 submission_tail;
     u32 completion_head;
+    int admin_currentPhase;
 
     u32 io_submission_tail;
     u32 io_completion_head;
+    int io_currentPhase;
 
     NVME_Queue asq;
     NVME_Queue acq;
@@ -113,5 +115,5 @@ struct NVME_Context_Namespace {
 
 bool nvme_pci_scan(Disk_ScanInfo* scanInfo, PCI_ConfigSpace* config);
 
-ELOS_Error nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* phys_buffer);
-ELOS_Error nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* phys_buffer);
+ELOS_Error nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer);
+ELOS_Error nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* buffer);

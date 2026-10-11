@@ -923,7 +923,12 @@ bool fat_remove_entry(VFS_Mount* mount, FAT_ID id) {
     while (VALID_CLUSTER(nextCluster)) {
         u32 tempCluster = nextCluster;
         nextCluster = fat__get_fat(context, nextCluster);
-        fat__set_fat(context, tempCluster, FAT_CLUSTER_UNUSED);
+        res = fat__set_fat(context, tempCluster, FAT_CLUSTER_UNUSED);
+        if (!res) {
+            // @TODO What's the right way to exit here and not leave file system in a corrupted state?
+            printf("fat_remove_entry: Disk operation failed, could not clear fat cluster allocation.\n");
+            return false;
+        }
     }
 
 

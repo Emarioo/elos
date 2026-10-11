@@ -260,47 +260,71 @@ bool ASYNC_handler_specific(AsyncRing* ring) {
 #define ELOS_FILE_TO_VFS_HANDLE(HANDLE) ((ELOS_File)(HANDLE))
 
 
-bool map_user_buffer(PageTable* userTable, const void* buffer, size_t size) {
+bool map_user_buffer(PageTable* userTable, const void** out_buffer, const void* buffer, size_t size) {
+    if ((uintptr_t)buffer > 0xFFFFFF8000000000) {
+        // The user address refers to kernel memory! Bad user!
+        return false;
+    }
+
     uintptr_t virtAddress = (uintptr_t)buffer & ~(uintptr_t)(PAGE_SIZE-1);
     uintptr_t virtAddressEnd = ((uintptr_t)buffer + size + PAGE_SIZE-1) & ~(uintptr_t)(PAGE_SIZE-1);
+    uintptr_t prev_phys = 0;
     while (virtAddress < virtAddressEnd) {
         uintptr_t phys = (uintptr_t)PMEM_virt_to_phys(userTable, (void*)virtAddress);
         if (phys == 0) {
             printf("map_user_buffer: Not mapped by user 0x%zx\n", virtAddress);
             return false;
         }
-        bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)virtAddress, (void*)phys, PAGE_SIZE, PMEM_FLAG_NONE);
-        if (!mapped) {
-            printf("map_user_buffer: Could not map 0x%zx -> 0x%zx\n", virtAddress, phys);
+        if (prev_phys != 0 && prev_phys + PAGE_SIZE != phys) {
+            printf("map_user_buffer: Buffer is not physically contiguous 0x%zx (kernel can't handle handle at the moment)\n", virtAddress);
             return false;
         }
+        if (prev_phys == 0) {
+            *out_buffer = PMEM_phys_to_kernel((void*)phys) + ((uintptr_t)buffer & (uintptr_t)(PAGE_SIZE-1));
+        }
+        prev_phys = phys;
         virtAddress += PAGE_SIZE;
     }
+
+    // printf("MAPPED %p %p\n", buffer, *out_buffer);
+
     return true;
 }
 
-bool map_user_path(PageTable* userTable, const char* path) {
-    const char* pathPointer = path;
+bool map_user_path(PageTable* userTable, const char** out_path, const char* path) {
+    if ((uintptr_t)path > 0xFFFFFF8000000000) {
+        // The user address refers to kernel memory! Bad user!
+        return false;
+    }
+
+    const char* user_pathPointer = path;
+    uintptr_t prev_phys = 0;
     while (1) {
         // Map first page
-        uintptr_t phys = (uintptr_t)PMEM_virt_to_phys(userTable, (void*)pathPointer);
+        uintptr_t phys = (uintptr_t)PMEM_virt_to_phys(userTable, (void*)user_pathPointer);
         if (phys == 0) {
-            printf("map_user_path: Null terminator is not mapped 0x%zx\n", pathPointer);
-            break;
-        }
-        bool mapped = PMEM_map_memory(g_kernelPageTable, (void*)pathPointer, (void*)phys, PAGE_SIZE, PMEM_FLAG_NONE);
-        if (!mapped) {
-            printf("map_user_path: Could not map 0x%zx -> 0x%zx\n", pathPointer, phys);
+            printf("map_user_path: Null terminator is not mapped 0x%zx\n", user_pathPointer);
             break;
         }
 
+        if (prev_phys != 0 && prev_phys + PAGE_SIZE != phys) {
+            printf("map_user_path: Path is not physically contiguous 0x%zx (kernel can't handle handle at the moment)\n", path);
+            return false;
+        }
+        if (prev_phys == 0) {
+            *out_path = PMEM_phys_to_kernel((void*)phys);
+        }
+        prev_phys = phys;
+        const char* kernel_pathPointer = PMEM_phys_to_kernel((void*)phys);
+
         // Find null terminator
-        const char* pathPointerEnd = (const char*)(((uintptr_t)pathPointer + PAGE_SIZE) & ~(uintptr_t)(PAGE_SIZE-1));
-        while (pathPointer != pathPointerEnd) {
-            if (*pathPointer == 0) {
+        const char* kernel_pathPointerEnd = (const char*)(((uintptr_t)kernel_pathPointer + PAGE_SIZE) & ~(uintptr_t)(PAGE_SIZE-1));
+        while (kernel_pathPointer != kernel_pathPointerEnd) {
+            if (*kernel_pathPointer == 0) {
                 return true;
             }
-            pathPointer++;
+            kernel_pathPointer++;
+            user_pathPointer++;
         }
 
         // Could not find terminator try next page.
@@ -345,8 +369,7 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
     */
 
     #define GET_SANITIZED_PATH(out_PATH, PATH) \
-        *out_PATH = PATH; \
-        _temp_mapped = map_user_path(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), PATH); \
+        _temp_mapped = map_user_path(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), (const char**)out_PATH, PATH); \
         if (!_temp_mapped)  break;
 
     #define GET_SANITIZED_FILE(out_FILE, FILE) \
@@ -356,19 +379,16 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
         *out_HANDLE = (void*)(HANDLE); // @TODO Check if process has this handle.
 
     #define GET_SANITIZED_BUFFER(out_BUFFER, out_SIZE, BUFFER, SIZE) \
-        *out_BUFFER = BUFFER; \
         *out_SIZE = SIZE; \
-        _temp_mapped = map_user_buffer(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), BUFFER, SIZE); \
+        _temp_mapped = map_user_buffer(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), (const void**)out_BUFFER, BUFFER, SIZE); \
         if (!_temp_mapped)  break;
 
     #define GET_SANITIZED_STRUCT(out_STRUCT_PTR, STRUCT_PTR) \
-        *(void**)out_STRUCT_PTR = STRUCT_PTR; \
-        _temp_mapped = map_user_buffer(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), STRUCT_PTR, sizeof(*STRUCT_PTR)); \
+        _temp_mapped = map_user_buffer(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), (const void**)out_STRUCT_PTR, STRUCT_PTR, sizeof(*STRUCT_PTR)); \
         if (!_temp_mapped)  break;
 
     #define GET_SANITIZED_CSTRUCT(out_STRUCT_PTR, STRUCT_PTR) \
-        *(const void**)out_STRUCT_PTR = STRUCT_PTR; \
-        _temp_mapped = map_user_buffer(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), STRUCT_PTR, sizeof(*STRUCT_PTR)); \
+        _temp_mapped = map_user_buffer(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), (const void**)out_STRUCT_PTR, STRUCT_PTR, sizeof(*STRUCT_PTR)); \
         if (!_temp_mapped)  break;
 
     // printf("Request 0x%x 0x%p 0x%x\n", request->operation, request->open.path, request->open.flags);

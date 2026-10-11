@@ -155,7 +155,10 @@ def main():
         DISK_NVME_IMG = "int/disk_nvme.img"
         # # if not os.path.exists(DISK_IMG):
 
-        HAS_NVME = True
+        # HAS_NVME = True
+        HAS_NVME = False
+
+        # shutil.copy("releases/elos-0.0.1-x86_64/fs/INITRD.IMG", DISK_NVME_IMG)
 
         log_file   = "bin/kernel.log"
         img_file   = "bin/elos.img"

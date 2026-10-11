@@ -397,6 +397,7 @@ void os_entry() {
     // }
 
     EXEC_create_user_thread("/pkg/prism/prism.elf", 0);
+    // EXEC_create_user_thread("/pkg/SLATE/SLATE.ELF", 0);
     EXEC_create_user_thread("/pkg/supper/supper.elf", 1);
 
 

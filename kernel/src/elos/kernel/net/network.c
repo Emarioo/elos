@@ -827,6 +827,8 @@ exit:
 ELOS_Error NET_read(NET_Handle* handle, ELOS_Net_Address* address, void* buffer, u32* bufferSize, u64 timeout_ns) {
     ELOS_Error returnValue = ELOS_ERR_UNKNOWN;
 
+    // printf("NET_read: %p\n", handle);
+
     u64 tickStart = CPU_ticks();
     u64 tps = CPU_ticks_per_second();
     u64 timeout_tick = tickStart + (timeout_ns/10 * tps/10) / 10000000;

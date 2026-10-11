@@ -45,7 +45,7 @@ int main() {
     ELOS_Error error = net_open(&address, &g_net_handle);
     
     if (error != ELOS_OK) {
-        printf("NET_OPEN was not OK\n");
+        printf("netchat: NET_OPEN was not OK\n");
         return 1;
     }
 

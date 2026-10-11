@@ -32,6 +32,8 @@ bool init_admin_queues(NVME_Context* context);
 bool init_io_queues(NVME_Context* context);
 bool send_identify(Disk_ScanInfo* scanInfo, NVME_Context* context);
 
+bool check_errors(NVME_Context* context);
+
 _align(4096) static char identify_data[4096];
 
 
@@ -44,6 +46,7 @@ volatile u32 nvmeContexts_len;
 NVME_Context_Namespace nvmeNamespaces[MAX_NVME_NAMESPACES];
 volatile u32 nvmeNamespaces_len;
 
+volatile u32 g_nvme_lock;
 
 
 bool nvme_pci_scan(Disk_ScanInfo* scanInfo, PCI_ConfigSpace* config) {
@@ -233,18 +236,19 @@ bool nvme_aligned_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* p
     entry->body[3] = num_blocks - 1; // zero-based so we reduce one
 
     context->io_submission_tail++;
-    write_submission_tail(context, queue_identifier, context->io_submission_tail);
-    // @NOCHECKIN Is this correct?
     if (context->io_submission_tail == context->io_sq.size + 1) {
         context->io_submission_tail = 0;
     }
+    write_submission_tail(context, queue_identifier, context->io_submission_tail);
 
     NVME_CompletionQueueEntry* completion = (void*)(context->io_cq.address + context->io_completion_head * sizeof(NVME_CompletionQueueEntry));
 
     // printf("Waiting for nvme cqe phase bit...\n");
     while (1) {
-        int phaseBit = NVME_HAS_PHASE_BIT(completion->status);
+        // printf("read: Wrote sub %d, try complet %d\n", context->io_submission_tail, context->io_completion_head);
+        int phaseBit = NVME_COMPARE_PHASE_BIT(completion->status, context->io_currentPhase);
         if (!phaseBit) {
+            check_errors(context);
             continue;
         }
 
@@ -256,10 +260,11 @@ bool nvme_aligned_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* p
         // printf("  status 0x%x\n", completion->status);
 
         context->io_completion_head++;
-        write_completion_head(context, queue_identifier, context->io_completion_head);
-        if (context->io_completion_head == context->io_sq.size + 1) {
+        if (context->io_completion_head == context->io_cq.size + 1) {
             context->io_completion_head = 0;
+            context->io_currentPhase = !context->io_currentPhase;
         }
+        write_completion_head(context, queue_identifier, context->io_completion_head);
 
         break;
     }
@@ -300,18 +305,19 @@ bool nvme_aligned_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const 
     entry->nsid = namespaceContext->nsid;
 
     context->io_submission_tail++;
-    write_submission_tail(context, queue_identifier, context->io_submission_tail);
-    // @NOCHECKIN Is this correct?
     if (context->io_submission_tail == context->io_sq.size + 1) {
         context->io_submission_tail = 0;
     }
+    write_submission_tail(context, queue_identifier, context->io_submission_tail);
 
     NVME_CompletionQueueEntry* completion = (void*)(context->io_cq.address + context->io_completion_head * sizeof(NVME_CompletionQueueEntry));
 
     // printf("Waiting for nvme cqe phase bit...\n");
     while (1) {
-        int phaseBit = NVME_HAS_PHASE_BIT(completion->status);
+        // printf("write: Wrote sub %d, try complet %d\n", context->io_submission_tail, context->io_completion_head);
+        int phaseBit = NVME_COMPARE_PHASE_BIT(completion->status, context->io_currentPhase);
         if (!phaseBit) {
+            check_errors(context);
             continue;
         }
 
@@ -323,10 +329,11 @@ bool nvme_aligned_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const 
         // printf("  status 0x%x\n", completion->status);
 
         context->io_completion_head++;
-        write_completion_head(context, queue_identifier, context->io_completion_head);
-        if (context->io_completion_head == context->io_sq.size + 1) {
+        if (context->io_completion_head == context->io_cq.size + 1) {
             context->io_completion_head = 0;
+            context->io_currentPhase = !context->io_currentPhase;
         }
+        write_completion_head(context, queue_identifier, context->io_completion_head);
 
         break;
     }
@@ -339,12 +346,16 @@ bool nvme_aligned_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const 
 }
 
 
-ELOS_Error nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* phys_buffer) {
+ELOS_Error nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* buffer) {
 
-    if (((size_t)phys_buffer & 3) != 0) {
+    if (((size_t)buffer & 3) != 0) {
         printf("nvme: Buffer is not 4-byte aligned on read.\n");
         return ELOS_ERR_UNKNOWN;
     }
+
+    void* phys_buffer = PMEM_kernel_to_phys(buffer);
+
+    // printf("nvme_read: off=%zx size=%zx\n", byteOffset, byteSize);
 
     NVME_Context_Namespace* namespaceContext = (NVME_Context_Namespace*)device->userData;
     NVME_Context* context = namespaceContext->context;
@@ -388,7 +399,7 @@ ELOS_Error nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* phy
 
         // printf("log %zx %zx %d\n", offset, size, context->sectorSize);
         anyFailed = !nvme_aligned_read(device, offset, size, curBuffer);
-        if (!anyFailed) {
+        if (anyFailed) {
             break;
         }
 
@@ -409,11 +420,15 @@ ELOS_Error nvme_read(DiskDevice* device, u64 byteOffset, u64 byteSize, void* phy
 }
 
 
-ELOS_Error nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* phys_buffer) {
-    if (((size_t)phys_buffer & 3) != 0) {
+ELOS_Error nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const void* buffer) {
+    if (((size_t)buffer & 3) != 0) {
         printf("nvme: Buffer is not 4-byte aligned on write.\n");
         return ELOS_ERR_UNKNOWN;
     }
+    
+    const void* phys_buffer = (const void*)PMEM_kernel_to_phys((void*)buffer);
+
+    // printf("nvme_write: off=%zx size=%zx\n", byteOffset, byteSize);
 
     NVME_Context_Namespace* namespaceContext = (NVME_Context_Namespace*)device->userData;
     NVME_Context* context = namespaceContext->context;
@@ -457,7 +472,7 @@ ELOS_Error nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const vo
 
         if (useTempBlock) {
             anyFailed = !nvme_aligned_read(device, offset, size, curBuffer);
-            if (!anyFailed) {
+            if (anyFailed) {
                 break;
             }
             void* vaddr = PMEM_phys_to_kernel((char*)phys_buffer + cur_bufferOffset);
@@ -466,7 +481,7 @@ ELOS_Error nvme_write(DiskDevice* device, u64 byteOffset, u64 byteSize, const vo
         }
 
         anyFailed = !nvme_aligned_write(device, offset, size, curBuffer);
-        if (!anyFailed) {
+        if (anyFailed) {
             break;
         }
 
@@ -497,6 +512,8 @@ bool init_admin_queues(NVME_Context* context) {
     context->regs->ASQ = (size_t)PMEM_kernel_to_phys((void*)context->asq.address);
 
     context->regs->AQA = (context->asq.size & 0xFFF) | ((context->acq.size & 0xFFF) << 16);
+    
+    context->admin_currentPhase = 1;
 
 	return true;
 }
@@ -512,17 +529,16 @@ bool send_identify(Disk_ScanInfo* scanInfo, NVME_Context* context) {
     entry->body[0] = 1; // the controller, 0 = namespace, 2 = namespace list
 
     context->submission_tail++;
-    write_submission_tail(context, 0, context->submission_tail);
-    // @NOCHECKIN Is this correct?
     if (context->submission_tail == context->asq.size + 1) {
         context->submission_tail = 0;
     }
+    write_submission_tail(context, 0, context->submission_tail);
 
     NVME_CompletionQueueEntry* completion = (void*)(context->acq.address + context->completion_head * sizeof(NVME_CompletionQueueEntry));
 
     // printf("Waiting for nvme cqe phase bit...\n");
     while (1) {
-        int phaseBit = NVME_HAS_PHASE_BIT(completion->status);
+        int phaseBit = NVME_COMPARE_PHASE_BIT(completion->status, context->admin_currentPhase);
         if (!phaseBit) {
             continue;
         }
@@ -535,10 +551,11 @@ bool send_identify(Disk_ScanInfo* scanInfo, NVME_Context* context) {
         // printf("  status 0x%x\n", completion->status);
 
         context->completion_head++;
-        write_completion_head(context, 0, context->completion_head);
         if (context->completion_head == context->asq.size + 1) {
             context->completion_head = 0;
+            context->admin_currentPhase = !context->admin_currentPhase;
         }
+        write_completion_head(context, 0, context->completion_head);
 
         break;
     }
@@ -571,17 +588,16 @@ bool send_identify(Disk_ScanInfo* scanInfo, NVME_Context* context) {
         entry->nsid = 0;
 
         context->submission_tail++;
-        write_submission_tail(context, 0, context->submission_tail);
-        // @NOCHECKIN Is this correct?
         if (context->submission_tail == context->asq.size + 1) {
             context->submission_tail = 0;
         }
+        write_submission_tail(context, 0, context->submission_tail);
 
         NVME_CompletionQueueEntry* completion = (void*)(context->acq.address + context->completion_head * sizeof(NVME_CompletionQueueEntry));
 
         // printf("Waiting for nvme cqe phase bit...\n");
         while (1) {
-            int phaseBit = NVME_HAS_PHASE_BIT(completion->status);
+            int phaseBit = NVME_COMPARE_PHASE_BIT(completion->status, context->admin_currentPhase);
             if (!phaseBit) {
                 continue;
             }
@@ -594,10 +610,11 @@ bool send_identify(Disk_ScanInfo* scanInfo, NVME_Context* context) {
             // printf("  status 0x%x\n", completion->status);
 
             context->completion_head++;
-            write_completion_head(context, 0, context->completion_head);
             if (context->completion_head == context->asq.size + 1) {
                 context->completion_head = 0;
+                context->admin_currentPhase = !context->admin_currentPhase;
             }
+            write_completion_head(context, 0, context->completion_head);
 
             break;
         }
@@ -635,17 +652,16 @@ bool send_identify(Disk_ScanInfo* scanInfo, NVME_Context* context) {
         entry->nsid = context->first_nsid;
 
         context->submission_tail++;
-        write_submission_tail(context, 0, context->submission_tail);
-        // @NOCHECKIN Is this correct?
         if (context->submission_tail == context->asq.size + 1) {
             context->submission_tail = 0;
         }
+        write_submission_tail(context, 0, context->submission_tail);
 
         NVME_CompletionQueueEntry* completion = (void*)(context->acq.address + context->completion_head * sizeof(NVME_CompletionQueueEntry));
 
         // printf("Waiting for nvme cqe phase bit...\n");
         while (1) {
-            int phaseBit = NVME_HAS_PHASE_BIT(completion->status);
+            int phaseBit = NVME_COMPARE_PHASE_BIT(completion->status, context->admin_currentPhase);
             if (!phaseBit) {
                 continue;
             }
@@ -658,10 +674,11 @@ bool send_identify(Disk_ScanInfo* scanInfo, NVME_Context* context) {
             // printf("  status 0x%x\n", completion->status);
 
             context->completion_head++;
-            write_completion_head(context, 0, context->completion_head);
             if (context->completion_head == context->asq.size + 1) {
                 context->completion_head = 0;
+                context->admin_currentPhase = !context->admin_currentPhase;
             }
+            write_completion_head(context, 0, context->completion_head);
 
             break;
         }
@@ -716,8 +733,9 @@ bool send_identify(Disk_ScanInfo* scanInfo, NVME_Context* context) {
             device->type = DISK_TYPE_NONE;
             return true;
         }
-
     }
+
+    context->io_currentPhase = 1;
 
     return true;
 }
@@ -728,14 +746,14 @@ bool init_io_queues(NVME_Context* context) {
 		return false;
     memset((void*)context->io_cq.address, 0, PAGE_SIZE);
 	// context->io_cq.size = (PAGE_SIZE / sizeof(NVME_CompletionQueueEntry)) - 1;
-	context->io_cq.size = 63;
+	context->io_cq.size = 3;
 
 	context->io_sq.address = (uint64_t)PMEM_alloc(PAGE_SIZE);
 	if (context->io_sq.address == 0)
 		return false;
     memset((void*)context->io_sq.address, 0, PAGE_SIZE);
 	// context->io_sq.size = (PAGE_SIZE / sizeof(NVME_SubmissionQueueEntry)) - 1;
-	context->io_sq.size = 63;
+	context->io_sq.size = 3;
 
     u32 io_queue_id_first = 1;
 
@@ -754,17 +772,16 @@ bool init_io_queues(NVME_Context* context) {
         entry->body[1] = QUEUE_FLAG_PHYSICALLY_CONTIGUOUS;
         
         context->submission_tail++;
-        write_submission_tail(context, 0, context->submission_tail);
-        // @NOCHECKIN Is this correct?
         if (context->submission_tail == context->asq.size + 1) {
             context->submission_tail = 0;
         }
+        write_submission_tail(context, 0, context->submission_tail);
 
         NVME_CompletionQueueEntry* completion = (void*)(context->acq.address + context->completion_head * sizeof(NVME_CompletionQueueEntry));
 
         // printf("Waiting for nvme cqe phase bit...\n");
         while (1) {
-            int phaseBit = NVME_HAS_PHASE_BIT(completion->status);
+            int phaseBit = NVME_COMPARE_PHASE_BIT(completion->status, context->admin_currentPhase);
             if (!phaseBit) {
                 continue;
             }
@@ -786,10 +803,11 @@ bool init_io_queues(NVME_Context* context) {
 
 
             context->completion_head++;
-            write_completion_head(context, 0, context->completion_head);
             if (context->completion_head == context->asq.size + 1) {
                 context->completion_head = 0;
+                context->admin_currentPhase = !context->admin_currentPhase;
             }
+            write_completion_head(context, 0, context->completion_head);
 
             break;
         }
@@ -805,17 +823,16 @@ bool init_io_queues(NVME_Context* context) {
         entry->body[1] = QUEUE_FLAG_PHYSICALLY_CONTIGUOUS | (io_queue_id_first << 16);
 
         context->submission_tail++;
-        write_submission_tail(context, 0, context->submission_tail);
-        // @NOCHECKIN Is this correct?
         if (context->submission_tail == context->asq.size + 1) {
             context->submission_tail = 0;
         }
+        write_submission_tail(context, 0, context->submission_tail);
 
         NVME_CompletionQueueEntry* completion = (void*)(context->acq.address + context->completion_head * sizeof(NVME_CompletionQueueEntry));
 
         // printf("Waiting for nvme cqe phase bit...\n");
         while (1) {
-            int phaseBit = NVME_HAS_PHASE_BIT(completion->status);
+            int phaseBit = NVME_COMPARE_PHASE_BIT(completion->status, context->admin_currentPhase);
             if (!phaseBit) {
                 continue;
             }
@@ -837,14 +854,59 @@ bool init_io_queues(NVME_Context* context) {
 
 
             context->completion_head++;
-            write_completion_head(context, 0, context->completion_head);
             if (context->completion_head == context->asq.size + 1) {
                 context->completion_head = 0;
+                context->admin_currentPhase = !context->admin_currentPhase;
             }
+            write_completion_head(context, 0, context->completion_head);
 
             break;
         }
     }
 
 	return true;
+}
+
+bool check_errors(NVME_Context* context) {
+    return false;
+    // NVME_CompletionQueueEntry* completion = (void*)(context->acq.address + context->completion_head * sizeof(NVME_CompletionQueueEntry));
+
+    // bool anyErrors = false;
+
+    // while (1) {
+    //     int phaseBit = NVME_COMPARE_PHASE_BIT(completion->status, context->admin_currentPhase);
+    //     if (!phaseBit) {
+    //         break;
+    //     }
+
+    //     int status = completion->status >> 1;
+
+    //     if (status == 0) {
+    //         printf("nvme: Completed valid command, not error?\n");
+    //         printf("  command 0x%x\n", completion->command);
+    //         printf("  submission_q_head %d\n", completion->submission_queue_head_pointer);
+    //         printf("  submission_q_id %d\n", completion->submission_queue_identifier);
+    //         printf("  command_id %d\n", completion->command_identifier);
+    //         printf("  status 0x%x\n", completion->status);
+    //         break;
+    //     }
+
+    //     printf("nvme: Got error?\n");
+    //     printf("  command 0x%x\n", completion->command);
+    //     printf("  submission_q_head %d\n", completion->submission_queue_head_pointer);
+    //     printf("  submission_q_id %d\n", completion->submission_queue_identifier);
+    //     printf("  command_id %d\n", completion->command_identifier);
+    //     printf("  status 0x%x\n", completion->status);
+
+    //     context->completion_head++;
+    //     if (context->completion_head == context->asq.size + 1) {
+    //         context->completion_head = 0;
+    //         context->admin_currentPhase = !context->admin_currentPhase;
+    //     }
+    //     write_completion_head(context, 0, context->completion_head);
+
+    //     anyErrors = true;
+    // }
+
+    // return anyErrors;
 }
