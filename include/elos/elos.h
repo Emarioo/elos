@@ -416,7 +416,7 @@ ELOS_ThreadID SYS_thread_id(ELOS_ThreadHandle handle);
     @param data     Data to pass to the executable. Process should parse flags from it. ()
     @param data_len Size of the data.
 */
-ELOS_Error SYS_spawn_process(const char* path, const char* data, uint32_t data_len, ELOS_ProcessHandle* handle);
+ELOS_Error SYS_spawn_process(const char* path, const char* data, uint32_t data_size, ELOS_ProcessHandle* handle);
 
 ELOS_Error SYS_kill_process(ELOS_ProcessHandle handle);
 ELOS_Error SYS_kill_process_by_name(const char* name);

@@ -12,10 +12,12 @@
               This implementation uses little endian byte order.
 
 COPIED FROM https://github.com/B-Con/crypto-algorithms
+Some slight modifications see @NEW
 *********************************************************************/
 
 /*************************** HEADER FILES ***************************/
 #include <stdlib.h>
+#include <stdint.h>
 // #include <memory.h>
 #include <string.h>
 #include "sha256.h"
@@ -161,4 +163,21 @@ void sha256_final(SHA256_CTX *ctx, BYTE hash[])
 		hash[i + 24] = (ctx->state[6] >> (24 - i * 8)) & 0x000000ff;
 		hash[i + 28] = (ctx->state[7] >> (24 - i * 8)) & 0x000000ff;
 	}
+}
+
+// @NEW
+int sha256_compare(const void* a, const void* b) {
+	// @TODO Optimize
+	// This method behaves differently on big endian.
+	const uint32_t* left = (const uint32_t*)a;
+	const uint32_t* right = (const uint32_t*)b;
+	return  ((left[0] - right[0]) << 7) +
+			((left[1] - right[1]) << 6) +
+			((left[2] - right[2]) << 5) +
+			((left[3] - right[3]) << 4) +
+			((left[4] - right[4]) << 3) +
+			((left[5] - right[5]) << 2) +
+			((left[6] - right[6]) << 1) +
+			((left[7] - right[7]) << 0)
+	;
 }

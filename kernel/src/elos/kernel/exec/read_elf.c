@@ -4,6 +4,7 @@
 #include "vendor/elf.h"
 
 #include "elos/common/string.h"
+#include "elos/common/sha256.h"
 
 #include "elos/vfs.h"
 #include "elos/physical_memory.h"
@@ -17,6 +18,7 @@
 #include "elos/kernel/driver/acpi.h" // acpi_lapic_address
 
 #include "elos/frame_buffer.h"
+#include "elos/permission.h"
 
 
 
@@ -68,6 +70,29 @@ bool read_elf(const char* path, ElfObject* object) {
         debug("read_elf: Only read %d bytes, not %d\n", info.fileSize);
         goto exit;
     }
+
+    // @TODO Optimize elf loading by only reading ELF header from disk at first.
+    //    Find out the sections of interest and load those directly into the allocated
+    //    user pages for the respective sections. We avoid a memcopy.
+    //    We still need to read whole file to hash the checksum.
+
+    // @TODO Is it possible and secure to cache the result and 
+    SHA256 hash;
+    SHA256_CTX sha_ctx;
+    sha256_init(&sha_ctx);
+    sha256_update(&sha_ctx, fileData, info.fileSize);
+    sha256_final(&sha_ctx, hash.bytes);
+
+    Permissions* permissions = PERM_get_or_create_perms(&hash);
+    // @TODO From the moment we check this to creating the process we need
+    //   A lock to ensure no other processes are being created for that program.
+    //   Otherwise two processes can be created at the same time and be accepted
+    //   and we end up over the process limit.
+    if (PERM_check(permissions, ELOS_PERM_PROCESS_SPAWN)) {
+        goto exit;
+    }
+
+    object->permissions = permissions;
 
     ParseContext context = {
         .path = path,
@@ -156,7 +181,7 @@ bool parse_elf(ParseContext* ctx) {
     #define VADDR_STRIDE 0x1000000
 
     if (image_size > VADDR_STRIDE) {
-        printf("REFUSE TO LOAD 1MB LARGE IMAGE (%d MB)\n", image_size/0x100000);
+        printf("KERNEL REFUSED TO LOAD 1MB LARGE IMAGE (%d MB)\n", image_size/0x100000);
         goto exit;
     }
 

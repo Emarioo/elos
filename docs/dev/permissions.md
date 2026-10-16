@@ -71,6 +71,15 @@ You can edit permission settings to change it.
 
 A granted permission cannot be removed while application is running (it would be complicated to implement).
 
+## Clearing permissions
+
+A permission that has been granted cannot be taken away. Each permission associated with a program (based on hash of ELF file) can be altered when that program has zero process instances running. We enter a lock state on the permission when
+you start tweaking it so we don't get race condition. Permissions can be deleted as well. Next time program is started
+it will have default permissions and ask for permissions it wants like it did the first time you ran it.
+
+Taking away networking permissions while a process is using it does not have a clear action. Do all calls return permission
+denied. Do we close all sockets made by process. What if kernel is already in the process of send/receiving it. What it we are waiting for a message. We need to queue the remove permission action until kernel is done whenever that is. It gets complicated so we just don't allow it.
+
 
 ## Developer permissions
 

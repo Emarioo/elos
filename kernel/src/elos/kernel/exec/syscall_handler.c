@@ -18,6 +18,7 @@
 #include "elos/user_event.h"
 #include "elos/async.h"
 #include "elos/audio.h"
+#include "elos/execution.h"
 
 #include "elos/cpu.h"
 
@@ -266,7 +267,7 @@ exit_default_monitor:
 }
 
 #define SET_ADDRESS_SIZE_TYPE(VAR, VAL) \
-    ( thread->compatMode ? (*(u32*)(VAR) = (u32)(size_t)(VAL)) : (*(size_t*)(VAR) = (size_t)VAL) )
+    ( activeThread->compatMode ? (*(u32*)(VAR) = (u32)(size_t)(VAL)) : (*(size_t*)(VAR) = (size_t)VAL) )
 
 u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 arg5) {
     u64 returnValue = ELOS_ERR_INVALID_SYSCALL;
@@ -287,8 +288,8 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
     int coreIndex = CPU_get_core_index();
     EXEC_Core* core = &cores[coreIndex];
-    EXEC_Thread* thread = &core->threads[core->active_thread];
-    EXEC_Process* process = thread->process;
+    EXEC_Thread* activeThread = EXEC_get_active_thread();
+    EXEC_Process* activeProcess = activeThread->process;
 
     PageTable* userPageTable = PMEM_get_page_table();
 
@@ -524,9 +525,6 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             u64 nowTick = rdtsc();
             u64 sleepTick = nowTick + (sleepTime_ns * CPU_ticks_per_second()/100) / 10000000;
 
-            int coreIndex = CPU_get_core_index();
-            EXEC_Core* core = &cores[coreIndex];
-            EXEC_Thread* activeThread = &core->threads[core->active_thread];
             activeThread->sleepUntilTick = sleepTick;
 
             core->rescheduleSyscall = true;
@@ -876,10 +874,6 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             // @TODO Validate completion ring pointer
 
             // @TODO Handle timeout
-            
-            int coreIndex = CPU_get_core_index();
-            EXEC_Core* core = &cores[coreIndex];
-            EXEC_Thread* activeThread = &core->threads[core->active_thread];
 
             core->rescheduleSyscall = true;
             activeThread->waitingForIO = true;
@@ -906,14 +900,10 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         case _SYS_EXIT: {
             int exitCode = arg0;
 
-            int coreIndex = CPU_get_core_index();
-            EXEC_Core* core = &cores[coreIndex];
-            EXEC_Thread* activeThread = &core->threads[core->active_thread];
-
             // @TODO Free resources.
 
+            EXEC_kill_process(activeProcess);
             core->rescheduleSyscall = true;
-            activeThread->used = false;
             
             returnValue = ELOS_OK;
             
@@ -924,14 +914,10 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
 
             // @TODO Implement exit thread.
 
-            int coreIndex = CPU_get_core_index();
-            EXEC_Core* core = &cores[coreIndex];
-            EXEC_Thread* activeThread = &core->threads[core->active_thread];
-
             // @TODO Free resources.
 
             core->rescheduleSyscall = true;
-            activeThread->used = false;
+            activeThread->killed = true;
             
             returnValue = ELOS_OK;
             
@@ -961,39 +947,52 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         } break;
         
         case _SYS_SPAWN_PROCESS: {
-            int exitCode = arg0;
-            
-            // PMEM_set_page_table(g_kernelPageTable);
+            const char*         path      = (const char*)arg0;
+            const char*         data      = (const char*)arg1;
+            u32                 data_size = (u32)arg2;
+            ELOS_ProcessHandle* handle    = (void*)arg3;
+
+            // @TODO @SECURITY If path extends to the next page then we must convert that to virtual to and check if it's mapped.
+            const char* phys_path = PMEM_virt_to_phys(userPageTable, (void*)path);
+            if (!phys_path) {
+                returnValue = ELOS_ERR_INVALID_PARAM;
+                break;
+            }
+            const char* kern_path = PMEM_phys_to_kernel((void*)phys_path);
 
             // check current process's permission to spawn processes
-            // bool canSpawn = PERM_check(process->permissions, ELOS_PERM_PROCESS_SPAWN);
+            bool canSpawn = PERM_check(activeProcess->permissions, ELOS_PERM_PROCESS_SPAWN);
             
-            // if () {
-            //     returnValue = ;
-            //     break;
-            // }
+            if (!canSpawn) {
+                returnValue = ELOS_ERR_PERMISSION_DENIED;
+                break;
+            }
 
             // open the elf file and hash it
             // check process limit
+            // @TODO Add parameters to get back handle and pass data.
+            returnValue = EXEC_create_user_process(kern_path);
+            if (returnValue != ELOS_OK) {
+                break;
+            }
 
-            // load file
-
-
-            // @TODO Implement spawn thread.
+            // @TODO Check that handle is mapped.
+            if (handle) {
+                *handle = NULL;
+            }
             
-            returnValue = ELOS_ERR_UNKNOWN;
+            returnValue = ELOS_OK;
             
         } break;
         
         case _SYS_PROCESS_ID: {
-            // @TODO Implement process id.
-            returnValue = core->active_thread + 1;
+            returnValue = activeProcess->processID;
         } break;
 
         case _SYS_KILL_PROCESS: {
             int exitCode = arg0;
 
-            // @TODO Implement spawn thread.
+            // @TODO Implement kill process
             
             returnValue = ELOS_ERR_UNKNOWN;
         } break;
@@ -1001,7 +1000,7 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
         case _SYS_KILL_PROCESS_BY_NAME: {
             int exitCode = arg0;
 
-            // @TODO Implement spawn thread.
+            // @TODO Implement process by name
             
             returnValue = ELOS_ERR_UNKNOWN;
         } break;

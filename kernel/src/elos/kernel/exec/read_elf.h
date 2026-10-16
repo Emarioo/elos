@@ -3,6 +3,7 @@
 #include "elos/common/types.h"
 
 #include "elos/physical_memory.h"
+#include "elos/permission.h"
 
 typedef struct ElfObject ElfObject;
 
@@ -15,6 +16,7 @@ struct ElfObject {
     bool compatibilityMode;
 
     PageTable* pageTable;
+    Permissions* permissions;
 
     // void* text;
     // u64   text_size;

@@ -1,3 +1,7 @@
+/*
+    @TODO Deprecate
+*/
+
 #pragma once
 
 #include "elos/boot_api.h"

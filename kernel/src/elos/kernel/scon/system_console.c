@@ -384,27 +384,27 @@ void send_command(cstring text) {
     } else if (!strcmp(text.ptr, "prism")) {
         // Kill prism if it exists
         EXEC_kill("prism");
-        EXEC_create_user_thread("/pkg/prism/prism.elf", -1);
+        EXEC_create_user_process("/pkg/prism/prism.elf");
     } else if (!strcmp(text.ptr, "slate")) {
         // Kill slate if it exists
         EXEC_kill("slate");
-        EXEC_create_user_thread("/pkg/slate/slate.elf", -1);
+        EXEC_create_user_process("/pkg/slate/slate.elf");
     } else if (!strcmp(text.ptr, "doom")) {
         // Kill doom if it exists
         EXEC_kill("doom");
-        bool create_doom = EXEC_create_user_thread("/pkg/doom/doom.elf", -1);
+        bool create_doom = EXEC_create_user_process("/pkg/doom/doom.elf");
         if (!create_doom) {
             printf("Failed spawning doom\n");
         }
     } else if (!strcmp(text.ptr, "supper")) {
         EXEC_kill("supper");
-        EXEC_create_user_thread("/pkg/supper/supper.elf", -1);
+        EXEC_create_user_process("/pkg/supper/supper.elf");
     } else if (!strncmp(text.ptr, "kill ", 5)) {
         const char* program = text.ptr + 5;
         EXEC_kill(program);
     } else if (!strncmp(text.ptr, "start ", 6)) {
         const char* program = text.ptr + 6;
-        EXEC_create_user_thread(program, -1);
+        EXEC_create_user_process(program);
     } else if (!strcmp(text.ptr, "mount")) {
         VFS_dump_mounts(printCallback, NULL);
     } else if (!strcmp(text.ptr, "sound")) {

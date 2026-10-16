@@ -28,7 +28,7 @@ typedef struct {
     u32 ringMask;
     ELOS_AsyncCreateFlag flags;
     bool used;
-    EXEC_Thread* thread; // refer to ID instead?
+    EXEC_Process*  process;
 } AsyncRing;
 
 
@@ -151,8 +151,8 @@ int ASYNC_create_async_rings(u32 maxEntries, ELOS_AsyncCreateFlag flags, ELOS_As
 
     int coreIndex = CPU_get_core_index();
     EXEC_Core* core = &cores[coreIndex];
-    EXEC_Thread* activeThread = &core->threads[core->active_thread];
-    ring->thread = activeThread;
+    EXEC_Thread* activeThread = EXEC_get_active_thread();
+    ring->process = activeThread->process;
 
     *requestRing = ring->user_requestRing;
     *completionRing = ring->user_completionRing;
@@ -369,7 +369,7 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
     */
 
     #define GET_SANITIZED_PATH(out_PATH, PATH) \
-        _temp_mapped = map_user_path(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), (const char**)out_PATH, PATH); \
+        _temp_mapped = map_user_path(ring->process->pageTable, (const char**)out_PATH, PATH); \
         if (!_temp_mapped)  break;
 
     #define GET_SANITIZED_FILE(out_FILE, FILE) \
@@ -380,15 +380,15 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
 
     #define GET_SANITIZED_BUFFER(out_BUFFER, out_SIZE, BUFFER, SIZE) \
         *out_SIZE = SIZE; \
-        _temp_mapped = map_user_buffer(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), (const void**)out_BUFFER, BUFFER, SIZE); \
+        _temp_mapped = map_user_buffer(ring->process->pageTable, (const void**)out_BUFFER, BUFFER, SIZE); \
         if (!_temp_mapped)  break;
 
     #define GET_SANITIZED_STRUCT(out_STRUCT_PTR, STRUCT_PTR) \
-        _temp_mapped = map_user_buffer(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), (const void**)out_STRUCT_PTR, STRUCT_PTR, sizeof(*STRUCT_PTR)); \
+        _temp_mapped = map_user_buffer(ring->process->pageTable, (const void**)out_STRUCT_PTR, STRUCT_PTR, sizeof(*STRUCT_PTR)); \
         if (!_temp_mapped)  break;
 
     #define GET_SANITIZED_CSTRUCT(out_STRUCT_PTR, STRUCT_PTR) \
-        _temp_mapped = map_user_buffer(PMEM_phys_to_kernel((void*)ring->thread->frame.cr3), (const void**)out_STRUCT_PTR, STRUCT_PTR, sizeof(*STRUCT_PTR)); \
+        _temp_mapped = map_user_buffer(ring->process->pageTable, (const void**)out_STRUCT_PTR, STRUCT_PTR, sizeof(*STRUCT_PTR)); \
         if (!_temp_mapped)  break;
 
     // printf("Request 0x%x 0x%p 0x%x\n", request->operation, request->open.path, request->open.flags);
@@ -608,8 +608,8 @@ void ASYNC_request_handler(AsyncRing* ring, ELOS_AsyncRequest* request) {
     __atomic_thread_fence(__ATOMIC_ACQUIRE);
     __atomic_fetch_add(&ring->completionRing->head, 1, __ATOMIC_SEQ_CST);
     __atomic_thread_fence(__ATOMIC_RELEASE);
+
     // @TODO Notify all threads that called 'wait_async_ring'.
-    //    We only have one thread per process at the moment.
-    //    We don't have processes yet.
-    ring->thread->waitingForIO = false;
+    //   This wakes up all threads.
+    EXEC_wake_up_threads(ring->process);
 }

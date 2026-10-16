@@ -37,4 +37,6 @@ void sha256_init(SHA256_CTX *ctx);
 void sha256_update(SHA256_CTX *ctx, const BYTE data[], size_t len);
 void sha256_final(SHA256_CTX *ctx, BYTE hash[]);
 
+int sha256_compare(const void* a, const void* b);
+
 #endif   // SHA256_H
