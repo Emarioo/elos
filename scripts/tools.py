@@ -94,6 +94,7 @@ def default_package(release_dir: str) -> PackageOS:
 
     package.items = [
             PackageItem(f"{APP_DIR}/prism"),
+            PackageItem(f"{ROOT}/res/3d-abstract-neon-glow-teal-digital-art-shapes-ga-1920x1080.png", "PKG/PRISM/back.png"),
             PackageItem(f"{APP_DIR}/terminal", "PKG/TERM/TERM.ELF"),
             PackageItem(f"{APP_DIR}/slate"),
             PackageItem(f"{ROOT}/res/Lat2-Terminus16.psf", "PKG/SLATE/STDFONT.PSF"),

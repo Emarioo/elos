@@ -69,6 +69,11 @@ typedef enum {
     ELOS_ERR_BUFFER_SIZE_TOO_SMALL,
     ELOS_ERR_NO_AUDIO_DEVICE,
     
+    // Currently only used for internal results in kernel,
+    // this indicates that permission is already accepted
+    // while ELOS_OK means request has been queued.
+    ELOS_ERR_PERMISSION_ACCEPTED,
+
 } ELOS_Error;
 
 typedef enum {
@@ -85,6 +90,7 @@ typedef enum {
     //   itself infintelty and get infinite storage and memory quota.
     //   Hence: ELOS_PERM_PROCESS_SPAWN IS NOT ALLOWED AS DEFAULT PERMISSION.
     ELOS_PERM_PROCESS_SPAWN, 
+    ELOS_PERM_PROCESS_LIMIT, 
     ELOS_PERM_PROCESS_KILL,
 
     ELOS_PERM_DISK,
@@ -99,7 +105,9 @@ typedef enum {
     ELOS_PERM_NETWORK,
     ELOS_PERM_NETWORK_FULL_ACCESS,
 
+    // These are powerful permissions.
     ELOS_PERM_DEBUG,
+    ELOS_PERM_GRANT,
 
 } ELOS_PermissionType;
 
@@ -202,11 +210,13 @@ const char* elos_error(ELOS_Error err);
 
 
 /*
-    Returns permissions of process.
+    Asks OS whether the process has the permission.
 
-    @param permissions Filled with information.
+    @param type The permission.
+    
+    @return True if process has permission.
 */
-void SYS_permissions(ELOS_Permissions* permissions);
+bool SYS_has_permission(ELOS_PermissionType type);
 
 
 /*
@@ -217,7 +227,7 @@ void SYS_permissions(ELOS_Permissions* permissions);
     @param permissions Zero all but the permissions you want to request.
     On return the accepted permissions remain non-zero and denied ones become zero.
 */
-void SYS_request_permissions(ELOS_Permissions* permissions);
+ELOS_Error SYS_request_permission(ELOS_PermissionType type);
 
 
 /*

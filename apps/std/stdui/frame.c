@@ -620,53 +620,53 @@ void draw_glyphs_from_text_bcolor(int x, int y, int height, const cstring text, 
 
 
 
-// Texture* load_texture(const char* path) {
+Texture* load_texture(const char* path) {
 
-//     // @TODO Handle cleanup of allocations if a later one fails.
+    // @TODO Handle cleanup of allocations if a later one fails.
 
-//     FILE* handle = fopen(path, "rb");
-//     if (!handle) {
-//         printf("Couldn't open %s\n", path);
-//         return NULL;
-//     }
+    FILE* handle = fopen(path, "rb");
+    if (!handle) {
+        printf("Couldn't open %s\n", path);
+        return NULL;
+    }
 
-//     fseek(handle, 0, SEEK_END);
-//     int fileSize = ftell(handle);
-//     fseek(handle, 0, SEEK_SET);
+    fseek(handle, 0, SEEK_END);
+    int fileSize = ftell(handle);
+    fseek(handle, 0, SEEK_SET);
 
-//     u8* data = malloc(fileSize);
-//     if (!data) {
-//         printf("Couldn't allocate %d\n", fileSize);
-//         return NULL;
-//     }
+    u8* data = malloc(fileSize);
+    if (!data) {
+        printf("Couldn't allocate %d\n", fileSize);
+        return NULL;
+    }
 
-//     Texture* texture = malloc(sizeof(Texture));
-//     if (!texture)
-//         return NULL;
-//     memset(texture, 0, sizeof(*texture));
+    Texture* texture = malloc(sizeof(Texture));
+    if (!texture)
+        return NULL;
+    memset(texture, 0, sizeof(*texture));
 
-//     int readBytes = fread(data, 1, fileSize, handle);
-//     if (readBytes != fileSize) {
-//         printf("Could not load texture, (read %d bytes, texture is %d bytes)\n", readBytes, fileSize);
-//         return NULL;
-//     }
+    int readBytes = fread(data, 1, fileSize, handle);
+    if (readBytes != fileSize) {
+        printf("Could not load texture, (read %d bytes, texture is %d bytes)\n", readBytes, fileSize);
+        return NULL;
+    }
 
-//     printf("STBI parse\n");
-//     int width, height, channels;
-//     stbi_uc* rawData = stbi_load_from_memory((stbi_uc*)data, readBytes, &width, &height, &channels, 4); 
-//     if (!rawData) {
-//         printf("Could not parse PNG\n");
-//         return NULL;
-//     }
+    printf("STBI parse, %d KiB\n", (int)fileSize/1024);
+    int width, height, channels;
+    stbi_uc* rawData = stbi_load_from_memory((stbi_uc*)data, readBytes, &width, &height, &channels, 4); 
+    if (!rawData) {
+        printf("Could not parse PNG '%s'\n", stbi_failure_reason());
+        return NULL;
+    }
 
-//     texture->data = (u32*)rawData;
-//     texture->width = width;
-//     texture->height = height;
+    texture->data = (u32*)rawData;
+    texture->width = width;
+    texture->height = height;
 
-//     // @TODO Free unused buffers.
+    // @TODO Free unused buffers.
 
-//     return texture;
-// }
+    return texture;
+}
 
 void draw_texture(int x, int y, int w, int h, int sub_x, int sub_y, int sub_w, int sub_h, Texture* texture) {
     if (x < 0) {

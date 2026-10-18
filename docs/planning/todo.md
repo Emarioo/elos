@@ -19,6 +19,8 @@ The categories are:
 Tasks related to kernel and operating system
 
 ## @current
+- [ ] Permissions and processes.
+- [ ] Wallpaper in compositor. OS can come with '3d-abstract-neon-glow-teal-digital-art-shapes' by default? (probably copyright problems so maybe not)
 - [ ] Audio server.
 - [ ] Networking ASYNC operations. classic berkley sockets API?
 - [ ] My laptop has 3-4 unknown PCI audio devices. Check if we still detect HDA and if playing sound works.

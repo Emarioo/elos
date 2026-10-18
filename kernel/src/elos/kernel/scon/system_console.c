@@ -520,3 +520,24 @@ void play_sound(const char* path) {
 
 }
 
+
+
+
+
+
+void render_perm() {
+
+    // check for any permissions in queue
+
+    // check if permissions enabled or not
+
+    // render notification in system console
+
+    
+
+}
+
+
+
+
+

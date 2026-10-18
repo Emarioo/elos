@@ -37,3 +37,14 @@ written and expected to be called from kernel internals but also kernel modules.
 Option 2. Special API for the module. PCI and USB functions for example since it may require some synchronization between multiple modules so they don't write
 to the same PCI device. This could go into option one where we provide USB and PCI components which we don't have currently.
 
+
+# Screen sharing and playing games
+
+You have two people on different computers. One runs the game and screen share program. The other just runs screen share program.
+
+Between the computers display frames and keyboard input is sent.
+The screen share program wants to capture the screen (from compositor) and replay keys sent by the other program.
+
+Is all builtin to the compositor, do we need something extra in the kernel.
+
+

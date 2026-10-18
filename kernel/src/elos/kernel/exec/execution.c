@@ -66,6 +66,7 @@ EXEC_Thread* create_thread(EXEC_Process* process) {
         process->threads_cap = 4;
         process->threads = PMEM_alloc(sizeof(EXEC_Thread) * process->threads_cap);
         KERNEL_PANIC(process->threads, "Could not allocate thread array for process");
+        memset(process->threads, 0, sizeof(EXEC_Thread) * process->threads_cap);
         process->threads_len = 0;
     }
 
@@ -166,7 +167,7 @@ void EXEC_timer_handler(ContextFrame* frame) {
             break;
         }
 
-        core->active_thread = 1 + (core->active_thread) % THREAD_LIMIT;
+        core->active_thread = 1 + (core->active_thread) % (core->threads_len-1);
         EXEC_Thread* thread = core->threads[core->active_thread];
         // if (thread->used) {
         //     printf("Try reschedule %d io=%d now=%zu sleep=%zu\n", core->active_thread, thread->waitingForIO, (nowTick/1000), (thread->sleepUntilTick/1000));
@@ -191,7 +192,7 @@ void EXEC_timer_handler(ContextFrame* frame) {
             continue;
         }
 
-        if (!thread->waitingForIO && nowTick > thread->sleepUntilTick) {
+        if (!thread->waitingForIO && 0 == thread->waitingForMask && nowTick > thread->sleepUntilTick) {
             nextThread = thread;
             thread->sleepUntilTick = 0;
             break;
@@ -247,6 +248,7 @@ void EXEC_init() {
     core->threads_cap = PAGE_SIZE/sizeof(void*);
     core->threads_len = 1;
     core->threads = PMEM_alloc(core->threads_cap * sizeof(void*));
+    memset(core->threads, 0, core->threads_cap * sizeof(void*));
 
     {
         EXEC_Thread* idle_thread = &core->idle_thread;
@@ -426,6 +428,27 @@ void EXEC_wake_up_threads(EXEC_Process* process) {
     UNLOCK_INT(&g_process_lock);
 }
 
+bool pattern_match(const char* haystack, const char* needle) {
+    int lena = strlen(haystack);
+    int lenb = strlen(needle);
+
+    int correct = 0;
+    int index = 0;
+    while (index + lenb <= lena) {
+        char chr = haystack[index];
+        char echr = needle[correct];
+        // case-insensitive matching
+        if (chr == echr || ((chr|32) == (echr|32) && (chr|32) >= 'a' && (chr|32) <= 'z' && (echr|32) >= 'a' && (echr|32) <= 'z')) {
+            correct++;
+            if (correct == lenb) {
+                return true;
+            }
+        }
+        index++;
+    }
+    return false;
+}
+
 bool EXEC_kill(const char* pattern) {
     bool foundAny = false;
     for (int i=0;i<CORE_LIMIT;i++) {
@@ -437,20 +460,24 @@ bool EXEC_kill(const char* pattern) {
 
     for (int pi=0;pi<g_processes_len;pi++) {
         EXEC_Process* process = &g_processes[pi];
-            
-        char* res = strstr(process->elfBaseName, pattern);
+        if (process->killed) {
+            continue;
+        }
+
+        bool res = pattern_match(process->elfBaseName, pattern);
         if (res) {
             foundAny = true;
             // @TODO If the process called SYS_setup_callback(SIGNAL, signal_handler) then
             //    we call it first and let process do some termination logic then 500ms (or less)
             //    we kill all threads in the process.
+            process->killed = true;
             for (int ti=0;ti<process->threads_len;ti++) {
                 EXEC_Thread* thread = &process->threads[ti];
                 thread->killed = true;
             }
 
             // Resources are freed when scheduler detects processes with zero threads.
-            printf("Killed %s, process=%u\n", process->elfBaseName, process->processID);
+            printf("Killed #%u %s \n", process->processID, process->elfBaseName);
         }
     }
     
@@ -465,6 +492,10 @@ bool EXEC_kill(const char* pattern) {
 }
 
 void EXEC_kill_process(EXEC_Process* process) {
+    if(process->killed) {
+        // Already killed
+        return;
+    }
     bool foundAny = false;
     for (int i=0;i<CORE_LIMIT;i++) {
         EXEC_Core* core = &cores[i];
@@ -509,6 +540,7 @@ ELOS_Error EXEC_create_user_process(const char* path) {
 
     EXEC_Process* process = create_process();
     if (!process) {
+        printf("Could not create user process\n");
         // @TODO Free resources
         goto exit;
     }
@@ -516,6 +548,7 @@ ELOS_Error EXEC_create_user_process(const char* path) {
     
     EXEC_Thread* found_thread = create_thread(process);
     if (!found_thread) {
+        printf("Could not create user thread\n");
         // @TODO Free resources
         goto exit;
     }
@@ -533,6 +566,7 @@ ELOS_Error EXEC_create_user_process(const char* path) {
     void* phys_stack = PMEM_alloc_phys(stack_size);
     if (!phys_stack) {
         // @TODO Free resources
+        printf("Could not alloc user thread stack\n");
         goto exit;
     }
     void* virt_stack = (void*)(u64)0xF0000000;
@@ -583,6 +617,7 @@ ELOS_Error EXEC_create_user_process(const char* path) {
     
     int free_index = reserve_free_core_thread_index();
     if (free_index == -1) {
+        printf("No free core thread index\n");
         // @TODO Free resources
         goto exit;
     }

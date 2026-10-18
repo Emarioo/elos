@@ -29,4 +29,4 @@ struct ElfObject {
 
 
 
-bool read_elf(const char* path, ElfObject* object);
+ELOS_Error read_elf(const char* path, ElfObject* object);

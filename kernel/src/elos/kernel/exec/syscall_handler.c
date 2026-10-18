@@ -297,23 +297,33 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
     //   access each others ELF image or HEAP or frame buffers.
 
     switch (syscall_id) {
-        case _SYS_PERMISSIONS: {
-            ELOS_Permissions* cap = (ELOS_Permissions*)arg0;
+        case _SYS_HAS_PERMISSION: {
+            ELOS_PermissionType permissionType = (ELOS_PermissionType)arg0;
 
-            // @TODO Get current process capabilities.
-            memset(cap, 0, sizeof(ELOS_Permissions));
-
-            returnValue = ELOS_OK;
+            bool has_permission = PERM_check(activeProcess->permissions, permissionType);
+            if (has_permission) {
+                returnValue = ELOS_OK;
+            } else {
+                returnValue = ELOS_ERR_PERMISSION_DENIED;
+            }
 
         } break;
-        case _SYS_REQUEST_PERMISSIONS: {
-            ELOS_Permissions* cap = (ELOS_Permissions*)arg0;
+        case _SYS_REQUEST_PERMISSION: {
+            ELOS_PermissionType permissionType = (ELOS_PermissionType)arg0;
 
-            // @TODO Get current process capabilities.
-            memset(cap, 0, sizeof(ELOS_Permissions));
+            // Add permission to queue of permissions user should review.
+            
+            ELOS_Error err = PERM_request(activeProcess->permissions, permissionType, activeThread);
+            if (err == ELOS_ERR_PERMISSION_ACCEPTED) {
+                // Already has permission
+                returnValue = ELOS_OK;
+            } else {
+                core->rescheduleSyscall = true;
+                activeThread->waitingForMask |= EXEC_WAITFOR_PERM_REQUEST;
 
-            returnValue = ELOS_OK;
-
+                // We set this later when permission request completes.
+                returnValue = ELOS_ERR_UNKNOWN;
+            }
         } break;
         case _SYS_DEBUG_LOG: {
             const char* text = (const char*)arg0;
@@ -364,9 +374,9 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             
             // @TODO Check capability
             
-            PMEM_set_page_table(g_kernelPageTable);
+            // PMEM_set_page_table(g_kernelPageTable);
             update_heap_entry(oldAddress, NULL, NULL, 0);
-            PMEM_set_page_table(userPageTable);
+            // PMEM_set_page_table(userPageTable);
             
             PMEM_free(oldAddress);
             returnValue = ELOS_OK;
@@ -378,50 +388,54 @@ u64 EXEC_syscall_handler(u64 arg0, u64 arg1, u64 arg2, u64 arg3, u64 arg4, u64 a
             size_t    size = arg1;
             void*  oldAddress = (void*)arg2;
             
+            size_t size_pageAligned = (size + PAGE_SIZE-1) & ~(size_t)(PAGE_SIZE-1);
+            
             // @TODO Check capability and heap limit
             
-            PMEM_set_page_table(g_kernelPageTable);
+            // PMEM_set_page_table(g_kernelPageTable);
 
             HeapEntry* heapEntry = oldAddress == NULL ? NULL : get_heap_entry(oldAddress);
             if (!heapEntry) {
-                
-                void* phys_address = PMEM_alloc_phys(size);
+
+                void* phys_address = PMEM_alloc_phys(size_pageAligned);
                 if (!phys_address) {
-                    PMEM_set_page_table(userPageTable);
+                    // PMEM_set_page_table(userPageTable);
                     SET_ADDRESS_SIZE_TYPE(newAddress, NULL);
                     returnValue = ELOS_ERR_UNKNOWN;
                     break;
                 }
                 void* kern_address = PMEM_phys_to_kernel(phys_address);
                     
-                update_heap_entry(NULL, phys_address, phys_address, size);
-                PMEM_map_memory(userPageTable, phys_address, phys_address, size, PMEM_FLAG_USER_SPACE);
+                update_heap_entry(NULL, phys_address, phys_address, size_pageAligned);
+                PMEM_map_memory(userPageTable, phys_address, phys_address, size_pageAligned, PMEM_FLAG_USER_SPACE);
                 
-                PMEM_set_page_table(userPageTable);
-                memset(kern_address, 0x9A, size);
+                // PMEM_set_page_table(userPageTable);
+                memset(kern_address, 0x9A, size_pageAligned);
                 SET_ADDRESS_SIZE_TYPE(newAddress, phys_address);
                 returnValue = ELOS_OK;
                 break;
             }
-            u64 oldSize = heapEntry->size;
+            size_t oldSize = heapEntry->size;
+            void* phys_oldAddress = heapEntry->physAddress;
             
-            void* phys_address = PMEM_alloc_phys(size);
+            void* phys_address = PMEM_alloc_phys(size_pageAligned);
             
             if (phys_address) {
-                void* kern_oldAddress = PMEM_phys_to_kernel(phys_address);
+                void* kern_oldAddress = PMEM_phys_to_kernel(phys_oldAddress);
                 void* kern_address = PMEM_phys_to_kernel(phys_address);
-                update_heap_entry(oldAddress, phys_address, phys_address, size);
-                PMEM_map_memory(userPageTable, phys_address, phys_address, size, PMEM_FLAG_USER_SPACE);
-                PMEM_set_page_table(userPageTable);
+
+                update_heap_entry(oldAddress, phys_address, phys_address, size_pageAligned);
+                PMEM_map_memory(userPageTable, phys_address, phys_address, size_pageAligned, PMEM_FLAG_USER_SPACE);
+                // PMEM_set_page_table(userPageTable);
                 memcpy(kern_address, kern_oldAddress, oldSize);
-                memset(kern_address + oldSize, 0x9A, size - oldSize);
+                memset(kern_address + oldSize, 0x9A, size_pageAligned - oldSize);
                 // @TODO Unmap the old memory
                 //    Free might do it already?
                 PMEM_free(kern_oldAddress);
                 SET_ADDRESS_SIZE_TYPE(newAddress, phys_address);
                 returnValue = ELOS_OK;
             } else {
-                PMEM_set_page_table(userPageTable);
+                // PMEM_set_page_table(userPageTable);
                 SET_ADDRESS_SIZE_TYPE(newAddress, NULL);
                 returnValue = ELOS_ERR_UNKNOWN;
             }

@@ -18,6 +18,7 @@ struct EXEC_Process {
 
     const char*     elfBaseName;
     ELOS_ProcessID  processID;
+    volatile bool   killed;
 
     void*        pageTable;
 
@@ -26,6 +27,10 @@ struct EXEC_Process {
     EXEC_Thread* threads;
 };
 
+typedef enum {
+    EXEC_WAITFOR_ASYNC = 0x1,
+    EXEC_WAITFOR_PERM_REQUEST = 0x2,
+} EXEC_WaitForMask;
 
 struct EXEC_Thread {
     ContextFrame    frame;
@@ -34,8 +39,9 @@ struct EXEC_Thread {
     FN_ThreadEntry  entry;
     u32             stack_size;
     bool            userSpace;
-    bool            killed;
-    bool            waitingForIO;
+    volatile bool   killed;
+    volatile u32    waitingForMask;
+    volatile bool   waitingForIO;
     bool            compatMode;
     u64             sleepUntilTick;
 
@@ -46,7 +52,6 @@ struct EXEC_Thread {
 };
 
 #define CORE_LIMIT 32
-#define THREAD_LIMIT 32
 #define IDLE_THREAD_INDEX 0
 #define INITIAL_THREAD_INDEX 1
 

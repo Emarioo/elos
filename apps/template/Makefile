@@ -23,7 +23,7 @@ TOOLCHAIN :=
 # TOOLCHAIN := x86_64-elf-
 CC := $(TOOLCHAIN)gcc
 
-CFLAGS += -g -fno-stack-protector -fno-plt
+CFLAGS += -g -fno-stack-protector -fno-plt -ffreestanding
 # CFLAGS += $(OFLAG)
 CFLAGS += -O0
 CFLAGS += -Wall -Werror -fshort-wchar  -nostdlib -nostartfiles -nodefaultlibs -Werror=implicit-function-declaration

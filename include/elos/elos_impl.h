@@ -12,8 +12,8 @@
 #define ELOS_SYSCALL_IDS_INCLUDE
 typedef enum ELOS_SyscallID ELOS_SyscallID;
 enum ELOS_SyscallID {
-    _SYS_PERMISSIONS = 0,
-    _SYS_REQUEST_PERMISSIONS = 1,
+    _SYS_HAS_PERMISSION = 0,
+    _SYS_REQUEST_PERMISSION = 1,
     _SYS_DEBUG_LOG = 2,
     _SYS_SYSTEM_OPERATION = 3,
     _SYS_HEAP_ALLOCATE = 4,
@@ -52,52 +52,54 @@ enum ELOS_SyscallID {
 
 #ifdef ELOS_SYSCALL_IMPL
 #undef ELOS_SYSCALL_IMPL
-    void SYS_permissions(ELOS_Permissions* permissions)
+    bool SYS_has_permission(ELOS_PermissionType type)
 {
-    int retv;
+    bool retv;
 #if defined(__x86_64__)
-register size_t _arg0 asm ("rdi") = (size_t)permissions;
+register size_t _arg0 asm ("rdi") = (size_t)type;
 
             asm volatile (
                 "syscall"
                 : "=a" (retv)
-                : "a" (_SYS_PERMISSIONS), "r" (_arg0)
+                : "a" (_SYS_HAS_PERMISSION), "r" (_arg0)
                 : "rcx", "r11", "memory"
             );
         #else
-register size_t _arg0 asm ("ebx") = (size_t)permissions;
+register size_t _arg0 asm ("ebx") = (size_t)type;
 
             asm volatile (
                 "int $0x80"
                 : "=a" (retv)
-                : "a" (_SYS_PERMISSIONS), "r" (_arg0)
+                : "a" (_SYS_HAS_PERMISSION), "r" (_arg0)
                 : "memory"
             );
         #endif
+    return retv;
 }
 
-void SYS_request_permissions(ELOS_Permissions* permissions)
+ELOS_Error SYS_request_permission(ELOS_PermissionType type)
 {
-    int retv;
+    ELOS_Error retv;
 #if defined(__x86_64__)
-register size_t _arg0 asm ("rdi") = (size_t)permissions;
+register size_t _arg0 asm ("rdi") = (size_t)type;
 
             asm volatile (
                 "syscall"
                 : "=a" (retv)
-                : "a" (_SYS_REQUEST_PERMISSIONS), "r" (_arg0)
+                : "a" (_SYS_REQUEST_PERMISSION), "r" (_arg0)
                 : "rcx", "r11", "memory"
             );
         #else
-register size_t _arg0 asm ("ebx") = (size_t)permissions;
+register size_t _arg0 asm ("ebx") = (size_t)type;
 
             asm volatile (
                 "int $0x80"
                 : "=a" (retv)
-                : "a" (_SYS_REQUEST_PERMISSIONS), "r" (_arg0)
+                : "a" (_SYS_REQUEST_PERMISSION), "r" (_arg0)
                 : "memory"
             );
         #endif
+    return retv;
 }
 
 void SYS_debug_log(const char* text, uint32_t length)
@@ -947,6 +949,7 @@ register size_t _arg1 asm ("ecx") = (size_t)timeout_ns;
         case ELOS_ERR_BUFFER_SIZE_TOO_BIG: return "ELOS_ERR_BUFFER_SIZE_TOO_BIG";
         case ELOS_ERR_BUFFER_SIZE_TOO_SMALL: return "ELOS_ERR_BUFFER_SIZE_TOO_SMALL";
         case ELOS_ERR_NO_AUDIO_DEVICE: return "ELOS_ERR_NO_AUDIO_DEVICE";
+        case ELOS_ERR_PERMISSION_ACCEPTED: return "ELOS_ERR_PERMISSION_ACCEPTED";
         default: return "ELOS_UNKNOWN_ERROR";
     }
 }

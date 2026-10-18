@@ -14,6 +14,7 @@
 
 #include "elos/kernel/config.h"
 
+#include "elos/elos.h"
 #include "elos/execution.h"
 #include "elos/kernel/driver/acpi.h" // acpi_lapic_address
 
@@ -36,8 +37,8 @@ typedef struct {
 
 bool parse_elf(ParseContext* ctx);
 
-bool read_elf(const char* path, ElfObject* object) {
-    bool returnValue = false;
+ELOS_Error read_elf(const char* path, ElfObject* object) {
+    ELOS_Error returnValue = ELOS_ERR_UNKNOWN;
     VFS_Handle handle = VFS_NULL_HANDLE;
     void* fileData = NULL;
 
@@ -88,7 +89,7 @@ bool read_elf(const char* path, ElfObject* object) {
     //   A lock to ensure no other processes are being created for that program.
     //   Otherwise two processes can be created at the same time and be accepted
     //   and we end up over the process limit.
-    if (PERM_check(permissions, ELOS_PERM_PROCESS_SPAWN)) {
+    if (!PERM_check(permissions, ELOS_PERM_PROCESS_LIMIT)) {
         goto exit;
     }
 
@@ -103,7 +104,7 @@ bool read_elf(const char* path, ElfObject* object) {
 
     bool result = parse_elf(&context);
 
-    returnValue = result;
+    returnValue = result ? ELOS_OK : ELOS_ERR_UNKNOWN;
 
 exit:
     if (handle) {

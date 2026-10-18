@@ -11,6 +11,10 @@
 #include "stdio.h"
 #include "stdnet.h"
 
+#include "stdui.h"
+
+#include "vendor/stb_image.h"
+
 
 typedef struct {
     int   surfaceId;
@@ -38,6 +42,35 @@ ELOS_FrameBuffer monitorFrameBuffer;
 
 ELOS_Net_Handle netHandle;
 
+Texture* wallpaper;
+
+PrismSurfaceInfo fake_surface;
+
+
+void init_fake_surface() {
+    fake_surface.width = monitorFrameBuffer.width;
+    fake_surface.height = monitorFrameBuffer.height;
+    fake_surface.stride = monitorFrameBuffer.pixels_per_scan_line;
+    fake_surface.buffer = monitorFrameBuffer.pixels;
+    stdui_set_surface(&fake_surface);
+}
+
+
+void load_wallpaper() {
+    const char* path = "/pkg/prism/back.png";
+    wallpaper = load_texture(path);
+
+    if (!wallpaper) {
+        printf("prism: Could not read %s\n", path);
+    }
+
+    printf("Wallapper size: %d/%d KiB\n", (int)wallpaper->width, (int)wallpaper->height);
+
+    // load pixels with stb_image
+
+
+
+}
 
 void _start() {
     ELOS_Error error;
@@ -59,6 +92,19 @@ void _start() {
         printf("prism: Could not get default monitor frame buffer\n");
         exit(1);
     }
+
+    init_fake_surface();
+
+    load_wallpaper();
+
+
+
+    // ELOS_ProcessHandle handle;
+    // error = SYS_spawn_process("/pkg/supper/supper.elf", NULL, 0, &handle);
+    // if (error != ELOS_OK) {
+    //     printf("prism: Could not spawn supper, %s\n", elos_error(error));
+    //     exit(1);
+    // }
 
     prism_loop();
 
@@ -170,6 +216,10 @@ void prism_loop() {
                     printf("prism: Could not present\n");
                     break;
                 }
+
+                // @TODO Move elsewhere.
+                draw_texture(0, 0, monitorFrameBuffer.width, monitorFrameBuffer.height, 0, 0, wallpaper->width, wallpaper->height, wallpaper);
+
                 present_surface(surface->surfaceId);
             } break;
             case PRISM_MOVE_SURFACE: {
@@ -261,7 +311,6 @@ void present_surface(int surfaceID) {
 
     // @TODO Implement levels for each surface. The order which to draw them.
     // @TODO Implement double buffering to prevent tearing. 
-
     
     u32* src = surface->buffer;
     int x = surface->x;

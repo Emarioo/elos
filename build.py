@@ -186,8 +186,7 @@ def main():
         HAS_AUDIO = False
         # HAS_AUDIO = True
 
-        # @TODO Try 2 cores
-        core_count = 2
+        core_count = 1
         qemu_flags = f'''
             -enable-kvm -cpu host
             -bios {OVMF_FD}
@@ -250,7 +249,10 @@ def main():
             if len(flag) > 0:
                 qemu_flags += flag + " "
 
-        cmd(f"qemu-system-x86_64 {qemu_flags}")
+        try:
+            subprocess.run(shlex.split('qemu-system-x86_64 ' + qemu_flags), start_new_session=True)
+        except KeyboardInterrupt as ex:
+            pass
 
         parse_fault()
 
@@ -261,38 +263,64 @@ def parse_fault():
     with open(path, "r") as f:
         text = f.read()
 
-    m = re.search(r'rip=0x([0-9a-f]+)', text, re.IGNORECASE)
+    trace_pattern = re.compile(r'trace ([0-9a-fA-F]+)')
+
+
+    matches = re.findall(trace_pattern, text)
+    for addr in matches:
+
+        proc = subprocess.run(['addr2line', '-e', 'bin/kernel.elf', addr], text=True, stdout=subprocess.PIPE)
+        new_addr = proc.stdout.strip()
+        new_addr = new_addr.replace(ROOT+"/", '')
+
+        text = re.sub(addr, f'{addr} {new_addr}', text)
+
+    with open(path, "w") as f:
+        f.write(text)
+
+    m = re.search(r'rip=([0-9a-f]+)', text, re.IGNORECASE)
     if m is not None and len(m.groups()) > 0:
-        rip_addr = int(m.groups()[0], base = 16)
+        rip_addr = m.groups()[0]
+        rip_addr_num = int(m.groups()[0], base = 16)
 
         stride = 0x1000000
-        app_index = math.floor((rip_addr - 0xC0000000) / stride)
+        app_index = math.floor((rip_addr_num - 0xC0000000) / stride)
         apps = [
             "prism.dis",
             "doom.dis",
             # "slate.dis",
         ]
 
+        
+
+
         if app_index >= 0 and app_index < len(apps):
             base = 0xC0000000 + app_index * stride
             app_dis = apps[app_index]
+
+            with open(app_dis, "r") as f:
+                disas = f.read()
+
+            word = hex(rip_addr_num - base)[2:]
+
+            print(f"rip={hex(rip_addr_num)}  {word} {app_dis}")
+            # ser = re.search(word, disas)
+            at = disas.find(word)
+            if at != -1:
+                linenr = disas.count('\n', 0, at)
+                location = f"{app_dis}:{linenr}"
+                print(location)
+                cmd(f"echo {location} >> {path}")
         else:
             base = 0
             app_dis = "bin/kernel.dis"
 
-        with open(app_dis, "r") as f:
-            disas = f.read()
+            proc = subprocess.run(['addr2line', '-e', 'bin/kernel.elf', rip_addr], text=True, stdout=subprocess.PIPE)
+            new_addr = proc.stdout.strip()
+            new_addr = new_addr.replace(ROOT+"/", '')
 
-        word = hex(rip_addr - base)[2:]
+            print(f"rip={rip_addr} {new_addr}")
 
-        print(f"rip={hex(rip_addr)}  {word} {app_dis}")
-        # ser = re.search(word, disas)
-        at = disas.find(word)
-        if at != -1:
-            linenr = disas.count('\n', 0, at)
-            location = f"{app_dis}:{linenr}"
-            print(location)
-            cmd(f"echo {location} >> {path}")
 
 
 def install_deps():

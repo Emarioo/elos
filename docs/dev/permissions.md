@@ -140,3 +140,65 @@ The code to check/verify the identity should be a user process, not kernel code.
 The publisher note section can't provide it's own database address to check against since it can maliciously marking all exe hashes as okay.
 
 Publisher verification is just an idea to consider.
+
+
+# The permission API
+
+
+
+## Code example
+
+```c
+
+void main() {
+
+    SYS_request_permission(ELOS_PERM_SPAWN_PROCESS)
+
+
+    // In the most basic form the requests below are synchronous
+    
+    // Requesting one at a time and the user having to accept one at a time is annoying.
+
+    request_permission(NETWORK, mydomain.com)
+    request_permission(HEAP, 1GB)
+    request_permission(FILESYSTEM, $PWD)
+
+    // If we request in batches then that's nicer. User can request all necessary ones in one go
+    request_permissions([
+        { NETWORK, mydomain.com },
+        { HEAP, 1GB },
+        { FILESYSTEM, $PWD }
+    ])
+
+    // Above is still synchronous. program cannot do anything until the request as been answered.
+
+    // Asynchronous would be this
+
+    set_request_callback(perm_callback)
+    
+    _ = request_permission(NETWORK, mydomain.com)
+    heap_perm = request_permission(HEAP, 1GB)
+    fs_perm = request_permission(FILESYSTEM, $PWD)
+
+    // Wait for the required permissions for the application to function
+
+    wait_for_permissions([heap_perm, fs_perm])
+
+    // Do app stuff, and use callback to detect the network permission.
+    // if accepted we can start communicating with server and provide
+    // global official servers and total players online in the multiplayer tab.
+
+
+    // Above we use asynchronous for heap and file system which we don't need. synchronous is fine.
+    // So we want to support all of the above.
+
+}
+
+void perm_callback(perm, accepted) {
+    if (perm == NETWORK) {
+        if (accepted ) {
+            network_perm_accepted()
+        }
+    }
+}
+```

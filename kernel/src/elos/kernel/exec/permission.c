@@ -161,8 +161,10 @@ exit:
 bool PERM_check(Permissions* permissions, ELOS_PermissionType type) {
     switch (type) {
         case ELOS_PERM_PROCESS_SPAWN: {
-            return (permissions->permission_map & (1 << ELOS_PERM_PROCESS_SPAWN))
-                && permissions->process.currentProcessCount + 1 >= permissions->process.processLimit;
+            return permissions->permission_map & (1 << ELOS_PERM_PROCESS_SPAWN);
+        } break;
+        case ELOS_PERM_PROCESS_LIMIT: {
+            return permissions->process.currentProcessCount < permissions->process.processLimit;
         } break;
         case ELOS_PERM_DISK:
         case ELOS_PERM_USER_EVENT:
@@ -174,4 +176,47 @@ bool PERM_check(Permissions* permissions, ELOS_PermissionType type) {
         default:
     }
     return false;
+}
+
+
+u32 g_perm_requests_max;
+u32 g_perm_requests_len;
+QueuedPermissionRequest* g_perm_requests;
+
+
+void perm_init() {
+    g_perm_requests_max = 200;
+    g_perm_requests_len = 0;
+    g_perm_requests = PMEM_alloc(sizeof(QueuedPermissionRequest) * g_perm_requests_max);
+}
+
+ELOS_Error PERM_request(Permissions* permissions, ELOS_PermissionType type, EXEC_Thread* thread) {
+    bool has_perm = PERM_check(permissions, type);
+    if (has_perm) {
+        return ELOS_ERR_PERMISSION_ACCEPTED;
+    }
+
+    ELOS_Error returnValue = ELOS_ERR_UNKNOWN;
+    LOCK_INT(&g_permission_lock);
+
+    if (!g_perm_requests) {
+        perm_init();
+    }
+
+    if (g_perm_requests_len < g_perm_requests_max) {
+        returnValue = ELOS_ERR_UNKNOWN;
+        goto exit;
+    }
+
+    QueuedPermissionRequest* request = &g_perm_requests[g_perm_requests_len];
+    g_perm_requests_len++;
+    request->permissions = permissions;
+    request->type = type;
+    request->thread = thread;
+
+    returnValue = ELOS_OK; 
+
+exit:
+    UNLOCK_INT(&g_permission_lock);
+    return returnValue;
 }

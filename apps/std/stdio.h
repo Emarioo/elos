@@ -12,6 +12,8 @@ typedef uint32_t mode_t;
 #define SEEK_CUR	1	/* Seek from current position.  */
 #define SEEK_END	2	/* Seek from end of file.  */
 
+#define EOF (-1)
+
 extern FILE* stdin;
 extern FILE* stderr;
 extern FILE* stdout;
