@@ -605,6 +605,7 @@ void* PMEM_alloc_phys(size_t size) {
     }
 
     if (found_free_index == -1) {
+        printf("PMEM_alloc_phys: No free index\n");
         returnValue = NULL;
         goto cleanup;
     }
@@ -620,6 +621,7 @@ void* PMEM_alloc_phys(size_t size) {
     }
 
     if (found_used_index == -1) {
+        printf("PMEM_alloc_phys: No used index\n");
         returnValue = NULL;
         goto cleanup;
     }

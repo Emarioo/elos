@@ -392,8 +392,8 @@ void send_command(cstring text) {
     } else if (!strcmp(text.ptr, "doom")) {
         // Kill doom if it exists
         EXEC_kill("doom");
-        bool create_doom = EXEC_create_user_process("/pkg/doom/doom.elf");
-        if (!create_doom) {
+        ELOS_Error err = EXEC_create_user_process("/pkg/doom/doom.elf");
+        if (err != ELOS_OK) {
             printf("Failed spawning doom\n");
         }
     } else if (!strcmp(text.ptr, "supper")) {
@@ -533,7 +533,7 @@ void render_perm() {
 
     // render notification in system console
 
-    
+
 
 }
 

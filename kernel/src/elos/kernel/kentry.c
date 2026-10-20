@@ -390,7 +390,7 @@ void os_entry() {
     // }
 
     EXEC_create_user_process("/pkg/prism/prism.elf");
-    // EXEC_create_user_process("/pkg/SLATE/SLATE.ELF");
+    EXEC_create_user_process("/pkg/SLATE/SLATE.ELF");
     // EXEC_create_user_process("/pkg/doom/doom.ELF");
     // EXEC_create_user_process("/pkg/supper/supper.elf");
 

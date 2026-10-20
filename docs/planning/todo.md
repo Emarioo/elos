@@ -19,6 +19,9 @@ The categories are:
 Tasks related to kernel and operating system
 
 ## @current
+- [ ] We run out of memory fast. Time to reclaim memory from processes. shared memory etc. Memory logging might be useful.
+- [ ] First time starting doom a blank screen is shown for some reason.
+- [ ] When surface is killed it should render wallpaper but isn't (and surfaces behind the killed surface).
 - [ ] Permissions and processes.
 - [ ] Wallpaper in compositor. OS can come with '3d-abstract-neon-glow-teal-digital-art-shapes' by default? (probably copyright problems so maybe not)
 - [ ] Audio server.
