@@ -22,10 +22,9 @@
 #include "elos/kernel/video/frame.h"
 
 #include "elos/kernel/net/protocol.h"
-
 #include "elos/kernel/pmem/paging.h"
-
 #include "elos/system_console.h"
+#include "elos/trace.h"
 
 #define printf(...) KCON_printf(__VA_ARGS__)
 
@@ -145,11 +144,14 @@ void kernel_entry(BootAPI* in_boot_api) {
         // No display.
     }
 
+    CPU_calibrate_ticks();
+
+    init_trace();
+
     // Initialize physical memory component with:
     //  - Memory regions we can access and how much RAM we have.
     //  - Virtual Paging.
 
-    // KCON_printf("Initializing physical memory regions\n");
     PMEM_init(boot_api);
     
     MON_init(boot_api);
@@ -157,7 +159,6 @@ void kernel_entry(BootAPI* in_boot_api) {
     MonitorDevice monDevices[1];
     int monCount = ARRAY_LENGTH(monDevices);
     MON_scan_devices(monDevices, &monCount);
-
 
     // Initialize GDT, IDT, interrupt tables, vectors
     // Timer interrupt, parse ACPI tables for IOAPIC, APIC, HPET
@@ -390,8 +391,8 @@ void os_entry() {
     // }
 
     EXEC_create_user_process("/pkg/prism/prism.elf");
+    EXEC_create_user_process("/pkg/doom/doom.ELF");
     EXEC_create_user_process("/pkg/SLATE/SLATE.ELF");
-    // EXEC_create_user_process("/pkg/doom/doom.ELF");
     // EXEC_create_user_process("/pkg/supper/supper.elf");
 
 

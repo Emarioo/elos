@@ -38,7 +38,7 @@ void prism_loop();
 Surface* create_surface(int width, int height);
 void destroy_surface(int surfaceID);
 Surface* get_surface(int surfaceID);
-void present_surface(int surfaceID);
+void present_surface(int surfaceID, int extra_x, int extra_y, int extra_w, int extra_h);
 
 
 void init_rendered_surfaces();
@@ -100,6 +100,8 @@ void load_wallpaper() {
 
 }
 
+void present_back_frame(int x, int y, int w, int h);
+
 void _start() {
     SYS_ticks_per_second(&ticks_per_second);
 
@@ -131,19 +133,18 @@ void _start() {
     load_wallpaper();
 
 
-    // @TODO Move elsewhere.
-    // draw_texture(0, 0, monitorFrameBuffer.width, monitorFrameBuffer.height, 0, 0, wallpaper->width, wallpaper->height, wallpaper);
+    if (wallpaper) {
+        // @TODO Do we want to render wallpaper here?
+        draw_texture(0, 0, monitorFrameBuffer.width, monitorFrameBuffer.height, 0, 0, wallpaper->width, wallpaper->height, wallpaper);
+    
+        // Test sub texture drawing
+        // draw_texture(0, 0, monitorFrameBuffer.width / 2 - 50, monitorFrameBuffer.height, 0, 0, wallpaper->width/2, wallpaper->height, wallpaper);
+        // draw_texture(monitorFrameBuffer.width / 2 + 50, 0, monitorFrameBuffer.width / 2 - 50, monitorFrameBuffer.height, wallpaper->width / 2, 0, wallpaper->width/2, wallpaper->height, wallpaper);
 
-    // ELOS_ProcessHandle handle;
-    // error = SYS_spawn_process("/pkg/supper/supper.elf", NULL, 0, &handle);
-    // if (error != ELOS_OK) {
-    //     printf("prism: Could not spawn supper, %s\n", elos_error(error));
-    //     exit(1);
-    // }
+        present_back_frame(0, 0, monitorFrameBuffer.width, monitorFrameBuffer.height);
+    }
 
     prism_loop();
-
-    // printf("prism quit\n");
 
     exit(1);
 }
@@ -175,7 +176,7 @@ void prism_loop() {
         // @TODO Add magic number to message. To prevent accidental messages from doing stuff.
         //    In theory it should be fine, prism should be sturdy and not allow super large surface width but still.
 
-        printf("prism: %d %d %d %d\n", message->type, message->moveSurface.surfaceID);
+        // printf("prism: %d %d %d %d\n", message->type, message->moveSurface.surfaceID);
         
         switch (message->type) {
             case PRISM_INVALID: break;
@@ -199,6 +200,8 @@ void prism_loop() {
                 }
                 rendered_surfaces[rendered_surfaces_len] = surface;
                 rendered_surfaces_len++;
+
+                // printf("surf %p, %d\n", surface, rendered_surfaces_len);
 
                 surface->order = nextOrder++;
 
@@ -243,6 +246,8 @@ void prism_loop() {
                     destroy_surface(surface->surfaceId);
                     break;
                 }
+
+                // printf("Surface %d %dx%d\n", surface->surfaceId, surface->width, surface->height);
             } break;
             case PRISM_DESTROY_SURFACE: {
                 Surface* surface = get_surface(message->destroySurface.surfaceID);
@@ -267,7 +272,7 @@ void prism_loop() {
                 // NOW we sort.
                 sort_surfaces();
 
-                present_surface(surface->surfaceId);
+                present_surface(surface->surfaceId, 0, 0, 0, 0);
             } break;
             case PRISM_MOVE_SURFACE: {
                 Surface* surface = get_surface(message->moveSurface.surfaceID);
@@ -275,11 +280,27 @@ void prism_loop() {
                     printf("prism: Bad surface %d\n", message->moveSurface.surfaceID);
                     break;
                 }
+                int min_x = min(surface->x, message->moveSurface.x);
+                int min_y = min(surface->y, message->moveSurface.y);
+                int extra_w = max(surface->x, message->moveSurface.x) + surface->width - min_x;
+                int extra_h = max(surface->y, message->moveSurface.y) + surface->height - min_y;
+
                 surface->x = message->moveSurface.x;
                 surface->y = message->moveSurface.y;
+                
+                surface->mtime = rdtsc();
+
+                // Kill surfaces first, because render list may be unordered afterwards.
+                kill_inactive_surfaces();
+                // NOW we sort.
+                sort_surfaces();
+
+                present_surface(surface->surfaceId, min_x, min_y, extra_w, extra_h);
+
+                // printf("Move %d %dx%d\n", surface->surfaceId, surface->x, surface->y);
             } break;
         }
-        printf("prism: msg done\n");
+        // printf("prism: msg done\n");
     }
 
 }
@@ -310,7 +331,7 @@ int partition(Surface** arr, int low, int high)
     // i are smaller after every iteration
     for (int j = low; j <= high - 1; j++)
     {
-        if (arr[j]->order < pivot->order)
+        if (arr[j]->order > pivot->order)
         {
             i++;
             Surface* temp = arr[i];
@@ -369,7 +390,7 @@ Surface* create_surface(int width, int height) {
         return NULL;
     }
     
-    int surfaceID;
+    int surfaceID = -1;
     Surface* surface = NULL;
     for (int i=0;i<ARRAY_LENGTH(surfaces);i++) {
         Surface* surf = &surfaces[i];
@@ -419,15 +440,17 @@ void kill_inactive_surfaces() {
 
         u64 elapsed_ms = (1000 * (now - surface->mtime)) / ticks_per_second;
         // printf("Age %d (%d ms)\n", si, (int)elapsed_ms);
-        if (elapsed_ms > 700) {
-            // @TODO Make a list of killed surfaces then update canvas at the end.
+        if (elapsed_ms > 5000) {
+            // I would love to kill surfaces quickly but some apps like doom sets some stuff up
+            // before presenting frames.
 
+            // @TODO Make a list of killed surfaces then update canvas at the end.
             printf("Killed inactive surface %d (%d ms)\n", si, (int)elapsed_ms);
             rendered_surfaces[si] = rendered_surfaces[rendered_surfaces_len-1];
             rendered_surfaces_len--;
             si--;
 
-            present_surface(surface->surfaceId);
+            present_surface(surface->surfaceId, 0, 0, 0, 0);
         }
     }
 }
@@ -435,49 +458,47 @@ void kill_inactive_surfaces() {
 
 void render_partial_surface(Surface* surface, int screen_x, int screen_y, int screen_w, int screen_h) {
     
+    int left   = surface->x > screen_x ? surface->x : screen_x;
+    int top    = surface->y > screen_y ? surface->y : screen_y;
+
+    int right1  = surface->x + surface->width;
+    int right2  = screen_x + screen_w;
+    int right   = right1 < right2 ? right1 : right2;
+
+    int bottom1 = surface->y + surface->height;
+    int bottom2 = screen_y + screen_h;
+    int bottom  = bottom1 < bottom2 ? bottom1 : bottom2;
+
+    // Nothing to render if the rectangles don't overlap.
+    if (right <= left || bottom <= top) {
+        return;
+    }
+
+    // Calculate source offsets and visible dimensions.
+    int sub_x = left - surface->x;
+    int sub_y = top - surface->y;
+    int sub_w = right - left;
+    int sub_h = bottom - top;
+
     u32* src = surface->buffer;
-    int x = surface->x;
-    int y = surface->y;
-    int w = surface->width;
-    int h = surface->height;
     int src_stride = surface->stride;
 
-    if (x < screen_x) {
-        w += x;
-        x = screen_x;
-    }
-    if (y < screen_y) {
-        h += y;
-        y = screen_y;
-    }
+    uint32_t* const dst = monitor_backFrameBuffer;
+    uint32_t const dst_stride =
+        monitorFrameBuffer.pixels_per_scan_line;
 
-    if (x + w > screen_x + screen_w)
-        w = (screen_x + screen_w) - x;
-    if (y + h > screen_y + screen_h)
-        h = (screen_y + screen_h) - y;
+    for (int iy = 0; iy < sub_h; iy++) {
+        uint32_t* dst_line =
+            &dst[left + (top + iy) * dst_stride];
 
+        u32* src_line =
+            &src[sub_x + (sub_y + iy) * src_stride];
 
-    uint32_t* const dst  = monitor_backFrameBuffer;
-    uint32_t  const dst_stride  = monitorFrameBuffer.pixels_per_scan_line;
-
-    // printf("x=%d y=%d w=%d h=%d dst_stride=%d src_stride=%d dst=%x src=%x\n", x, y, w, h, dst_stride, src_stride, dst, src);
-
-
-    for (int iy = y; iy < y + h; iy++) {
-        void* begin = &dst[x + iy * dst_stride];
-        void* from = &src[(iy-y) * src_stride];
-        int size = 4 * w;
-        memcpy(begin, from, size);
-        
-        // for (int ix = x; ix < x + w; ix++) {
-        //     // printf("%d %d\n", ix, iy);
-        //     dst[ix + iy * dst_stride] = src[(ix-x) + (iy-y) * src_stride];
-        // }
+        memcpy(dst_line, src_line, (size_t)sub_w * sizeof(uint32_t));
     }
 }
 
-
-void present_surface(int surfaceID) {
+void present_surface(int surfaceID, int extra_x, int extra_y, int extra_w, int extra_h) {
     Surface* surface = get_surface(surfaceID);
     if (!surface) {
         return;
@@ -494,6 +515,13 @@ void present_surface(int surfaceID) {
     int y = surface->y;
     int w = surface->width;
     int h = surface->height;
+    
+    if (extra_w && extra_h) {
+        x = extra_x;
+        y = extra_y;
+        w = extra_w;
+        h = extra_h;
+    }
 
     // printf("Present %d %d %d %d\n", x, y, w, h);
     
@@ -513,13 +541,25 @@ void present_surface(int surfaceID) {
     if (y + h > dst_height)
         h = dst_height - y;
 
-    // draw_texture(x, y, w, h, x * wallpaper->width / dst_width, y * wallpaper->height / dst_height, w * wallpaper->width / dst_width, h * wallpaper->height / dst_height, wallpaper);
+    int sub_x = (x * wallpaper->width) / dst_width;
+    int sub_y = (y * wallpaper->height) / dst_height;
+    int sub_w = (w * wallpaper->width) / dst_width;
+    int sub_h = (h * wallpaper->height) / dst_height;
+    // printf("prism: %d %d %d %d\n", sub_x, sub_y, sub_w, sub_h);
+    draw_texture(x, y, w, h, sub_x, sub_y, sub_w, sub_h, wallpaper);
+
+    // printf("prism: %d %d %d %d\n", x, y, w, h);
 
     for (int si=0;si<rendered_surfaces_len;si++) {
-        Surface* other_surface = rendered_surfaces[si]; 
+        Surface* other_surface = rendered_surfaces[si];
+        // printf("prism: %d %d, %d %d %d %d\n", si, other_surface->x, other_surface->y, other_surface->width, other_surface->height);
         render_partial_surface(other_surface, x, y, w, h);
     }
 
+    present_back_frame(x, y, w, h);
+}
+
+void present_back_frame(int x, int y, int w, int h) {
     uint32_t* const dst  = monitorFrameBuffer.pixels;
     uint32_t  const dst_stride  = monitorFrameBuffer.pixels_per_scan_line;
 
@@ -532,6 +572,4 @@ void present_surface(int surfaceID) {
         int size = 4 * w;
         memcpy(begin, from, size);
     }
-
 }
-

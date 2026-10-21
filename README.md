@@ -16,6 +16,8 @@ When building ELOS run `scripts/install_doom.sh` to clone and prepare DOOM repos
 **Software rendered cubes and networking**
 ![](docs/img/cube_net.png)
 
+**Wallpaper and PRISM compositor**
+![](docs/img/wallpaper_doom_slate.png)
 
 # Building
 

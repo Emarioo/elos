@@ -19,7 +19,7 @@ The categories are:
 Tasks related to kernel and operating system
 
 ## @current
-- [ ] We run out of memory fast. Time to reclaim memory from processes. shared memory etc. Memory logging might be useful.
+- [ ] Reclaim memory from processes.
 - [ ] First time starting doom a blank screen is shown for some reason.
 - [ ] When surface is killed it should render wallpaper but isn't (and surfaces behind the killed surface).
 - [ ] Permissions and processes.
@@ -32,6 +32,7 @@ Tasks related to kernel and operating system
 - [ ] Process manager. If process exits gets terminated then free resources. Memory, created services, rings, buffers.
 - [ ] Text editor. Try to port https://github.com/martanne/vis?
 - [ ] Terminal.
+- [ ] Test the OS with little memory 40 MB and see how it behaves.
 - [ ] PRISM Compositor, moving and resizing windows, double buffering, transparent windows, input passthrough. Keyboard and mouse input.
 - [ ] NVMe driver. Functional but doesn't use interrupts or multiple IO queues. (SATA driver doesn't either)
 - [ ] Kernel mouse syscalls. (maybe generic input syscalls for keyboard, controller, mouse?)
@@ -39,8 +40,6 @@ Tasks related to kernel and operating system
       And ensures the device isn't used or mounted by anyone else.
 - [ ] [Kernel Modules](./problems.md#kernel-modules).
 - [ ] Debugger syscall API. And a small debugger to test it.
-- [ ] Plants VS Zombies port. A lot of working, implementing win32 wrappers, directsound, COM api eugh...
-      - [ ] 32-bit user mode. GDT, syscalls, structures need to be updated.
 - [x] Fix NetBoot for QEMU. It's broken? Also it waits 1-2 seconds to start in QEMU which is too long.
 - [x] Add 'start \<path\>' and 'kill \<name\>' to system console.
 - [x] DOOM port.
@@ -85,4 +84,11 @@ Tasks related to kernel and operating system
 
 - [ ] Safety mode which turns off auto-start apps, internet access.
 - [ ] An emergency key binding to freeze all processes except for system console. You can then terminate processes, enter safety mode or restart the system.
+
+
+
+# Probably won't do but would be interesting
+
+- [ ] Plants VS Zombies port. A lot of working, implementing win32 wrappers, directsound, COM api eugh...
+
 

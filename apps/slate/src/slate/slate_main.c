@@ -88,6 +88,9 @@ bool get_event(ELOS_UserEvent* event) {
 void play_sound(const char* path);
 void dumpdir(const char* path, int depth);
 
+int surface_pos_x = 0;
+int surface_pos_y = 0;
+
 void _start() {
     
 
@@ -110,7 +113,9 @@ void _start() {
 
     prism_surfaceInfo(g_surface, &g_surfaceInfo);
 
-    prism_moveSurface(g_surface, 200, 200);
+    surface_pos_x = 200;
+    surface_pos_y = 200;
+    prism_moveSurface(g_surface, surface_pos_x, surface_pos_y);
 
     ELOS_Error error;
     error = SYS_request_user_event_buffer(100, &userEvents);
@@ -227,6 +232,18 @@ void editor_loop() {
                 session->command = CMD_OPEN_FILE;
             } else if (key.keycode == ELOSKEY_S && (key.mods & ELOSKEY_MOD_CTRL)) {
                 session->command = CMD_SAVE_FILE;
+            } else if (key.keycode == ELOSKEY_LEFT_ARROW && (key.mods & ELOSKEY_MOD_CTRL)) {
+                surface_pos_x -= 8;
+                prism_moveSurface(g_surface, surface_pos_x, surface_pos_y);
+            } else if (key.keycode == ELOSKEY_RIGHT_ARROW && (key.mods & ELOSKEY_MOD_CTRL)) {
+                surface_pos_x += 8;
+                prism_moveSurface(g_surface, surface_pos_x, surface_pos_y);
+            } else if (key.keycode == ELOSKEY_UP_ARROW && (key.mods & ELOSKEY_MOD_CTRL)) {
+                surface_pos_y -= 8;
+                prism_moveSurface(g_surface, surface_pos_x, surface_pos_y);
+            } else if (key.keycode == ELOSKEY_DOWN_ARROW && (key.mods & ELOSKEY_MOD_CTRL)) {
+                surface_pos_y += 8;
+                prism_moveSurface(g_surface, surface_pos_x, surface_pos_y);
             } else {
                 if (session->command == CMD_OPEN_FILE || session->command == CMD_SAVE_FILE) {
                     if (key.keycode == ELOSKEY_LEFT_ARROW) {

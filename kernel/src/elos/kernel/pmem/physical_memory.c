@@ -12,6 +12,7 @@
 #include "elos/kernel/config.h"
 
 #include "elos/cpu.h"
+#include "elos/trace.h"
 
 #define MAX_REGIONS 1000
 
@@ -84,6 +85,8 @@ void* PMEM_reserve_virtual_mmio(void* physical_address, size_t size) {
     return mmio_address;
 }
 
+size_t g_total_memory;
+
 void PMEM_init(BootAPI* boot_api) {
     typedef struct Range {
         size_t address;
@@ -117,6 +120,7 @@ void PMEM_init(BootAPI* boot_api) {
     //   where first array is buffer from statics data and the rest
     //   allocated as they are needed.
 
+
     int check_index = 0;
 
     for (int i = 0; i < boot_api->regions_len; i++) {
@@ -134,6 +138,8 @@ void PMEM_init(BootAPI* boot_api) {
         alloc->pageCount = reg->page_count;
         alloc->physicalStart = reg->physical_address;
         alloc->virtualStart = 0;
+
+        g_total_memory += alloc->pageCount * PAGE_SIZE;
 
         while (check_index < g_num_free_regions) {
             PhysicalMemoryRegion* region = &g_free_regions[check_index];
@@ -198,12 +204,20 @@ void PMEM_init(BootAPI* boot_api) {
         }
     }
 
+    TRACEF(TRACE_MEMORY, "Total memory %u MiB\n", g_total_memory / 0x100000);
+
     // Must be called after physical regions have been created.
     init_paging(boot_api);
 }
 
 
 u32 allocate_spinlock;
+
+u64 g_total_allocated_memory;
+
+#define USAGE_ADD(BYTES) __atomic_fetch_add(&g_total_allocated_memory, (BYTES), __ATOMIC_SEQ_CST)
+#define USAGE_SUB(BYTES) __atomic_fetch_sub(&g_total_allocated_memory, (BYTES), __ATOMIC_SEQ_CST)
+#define USAGE_TRACE() TRACEF(TRACE_MEMORY, "Usage %u KiB (%u%%)\n", (u32)(g_total_allocated_memory / 1024), (u32)((100 * g_total_allocated_memory) / g_total_memory))
 
 void* PMEM_allocate(u64 size, void* ptr) {
     void* returnValue = NULL;
@@ -262,6 +276,9 @@ void* PMEM_allocate(u64 size, void* ptr) {
         //   We'll want to use a different memory allocation implementation
         //   so no point in improving this now.
         PMEM_allocate(0, old_aligned_ptr);
+
+        USAGE_ADD(requested_aligned_size - old_aligned_size);
+        USAGE_TRACE();
 
         returnValue = new_ptr;
         goto cleanup;
@@ -327,6 +344,9 @@ void* PMEM_allocate(u64 size, void* ptr) {
         //     // Bug in kernel if this doesn't work
         //     goto cleanup;
         // }
+        
+        USAGE_SUB(free_alloc->pageCount * PAGE_SIZE);
+        USAGE_TRACE();
 
         // we return NULL on success when freeing
         goto cleanup;
@@ -398,6 +418,9 @@ void* PMEM_allocate(u64 size, void* ptr) {
 
         // Initialize to non-zero. Easier to debug when i see 9D and now it's uninitialized and came from PMEM_allocate.
         memset(new_ptr, 0x9D, aligned_size);
+
+        USAGE_ADD(aligned_size);
+        USAGE_TRACE();
 
         returnValue = new_ptr;
         goto cleanup;
@@ -575,6 +598,9 @@ void PMEM_free_phys(void* paddr) {
     if (found_free_index >= g_num_free_regions) {
         g_num_free_regions = found_free_index + 1;
     }
+    
+    USAGE_SUB(free_alloc->pageCount * PAGE_SIZE);
+    USAGE_TRACE();
 
 cleanup:
     UNLOCK_INT(&allocate_spinlock);
@@ -584,8 +610,9 @@ cleanup:
 void* PMEM_alloc_phys(size_t size) {
     void* returnValue;
     
-    if (size <= 0)
+    if (size <= 0) {
         return NULL;
+    }
 
     LOCK_INT(&allocate_spinlock);
 
@@ -646,6 +673,9 @@ void* PMEM_alloc_phys(size_t size) {
     }
     
     void* new_ptr = (void*)(used_alloc->physicalStart);
+    
+    USAGE_ADD(requested_pages * PAGE_SIZE);
+    USAGE_TRACE();
 
     returnValue = new_ptr;
 

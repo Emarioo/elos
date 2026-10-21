@@ -87,7 +87,7 @@ typedef void(*FN_interrupt_handler)(u32 vector, InterruptFrame* frame);
 //#####################
 
 
-
+void CPU_calibrate_ticks();
 void CPU_init(BootAPI* boot_api);
 void CPU_reset();
 

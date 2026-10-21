@@ -195,6 +195,8 @@ def main():
             {"-s -S " if gdb else ""}
             -smp {core_count}
 
+            -m 1G
+
             -device ahci,id=ahci
 
             # -M q35

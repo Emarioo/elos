@@ -329,22 +329,37 @@ void draw_texture(int x, int y, int w, int h, int sub_x, int sub_y, int sub_w, i
     if (x < 0) {
         w += x;
         x += -x;
-        sub_w += (x * sub_w) / w;
-        sub_x += (-x * sub_w) / w;
+        sub_w += (x * sub_w) / g_frame_buffer.width;
+        sub_x += (-x * sub_w) / g_frame_buffer.width;
     }
     if (y < 0) {
         h += y;
         y += -y;
-        sub_h += (y * sub_h) / h;
-        sub_y += (-y * sub_h) / h;
+        sub_h += (y * sub_h) / g_frame_buffer.height;
+        sub_y += (-y * sub_h) / g_frame_buffer.height;
     }
     if (x + w > g_frame_buffer.width) {
         w += -w + g_frame_buffer.width - x;
-        sub_w += ((-w + g_frame_buffer.width - x) * sub_w) / w;
+        sub_w += ((-w + g_frame_buffer.width - x) * sub_w) / g_frame_buffer.width;
     }
     if (y + h > g_frame_buffer.height) {
         h += -h + g_frame_buffer.height - y;
-        sub_h += ((-h + g_frame_buffer.height - y) * sub_h) / h;
+        sub_h += ((-h + g_frame_buffer.height - y) * sub_h) / g_frame_buffer.height;
+    }
+
+    if (sub_x < 0) {
+        sub_w += sub_x;
+        sub_x += -sub_x;
+    }
+    if (sub_y < 0) {
+        sub_h += sub_y;
+        sub_y += -sub_y;
+    }
+    if (sub_x + sub_w > texture->width) {
+        sub_w += -sub_w + texture->width - sub_x;
+    }
+    if (sub_y + sub_h > texture->height) {
+        sub_h += -sub_h + texture->height - sub_y;
     }
 
     switch(0) {
@@ -361,9 +376,12 @@ void draw_texture(int x, int y, int w, int h, int sub_x, int sub_y, int sub_w, i
             u32  const pixels_per_line  = g_frame_buffer.pixels_per_scan_line;
             for (int iy = y; iy < y + h; iy++) {
                 for (int ix = x; ix < x + w; ix++) {
-                    int sx = ((ix - x) * sub_w) / w;
-                    int sy = ((iy - y) * sub_h) / h;
-                    u32 color_rgba = texture->data[sx + sy * texture->width];
+                    int sx = sub_x + ((ix - x) * sub_w) / w;
+                    int sy = sub_y + ((iy - y) * sub_h) / h;
+                    u32 color_rgba = 0xFF000000;
+                    // if (sx + sy * texture->width < texture->width * texture->height) {
+                        color_rgba = texture->data[sx + sy * texture->width];
+                    // }
                     u32 color = ((color_rgba >> 16) & 0xFF)
                         | ((color_rgba << 16) & 0xFF0000)
                         | (color_rgba & 0xFF00FF00);

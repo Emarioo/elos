@@ -189,6 +189,10 @@ static void disable_pit() {
 
 void pit_sleep_us(u32 us);
 
+void CPU_calibrate_ticks() {
+    calibrate_tsc_with_pit();
+}
+
 void CPU_init(BootAPI* boot_api) {
     enable_extensions();
     
@@ -213,7 +217,7 @@ void CPU_init(BootAPI* boot_api) {
 
     u32 coreIndex = CPU_get_core_index();
 
-    calibrate_tsc_with_pit();
+    // calibrate_tsc_with_pit();
     // calibrate_tsc_with_hpet();
 
     // @TODO Calibration per core
